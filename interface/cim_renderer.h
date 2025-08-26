@@ -69,17 +69,22 @@ typedef struct cim_cmd_buffer
 } cim_command_buffer;
 
 // V-Table
-typedef void    DrawUI      (cim_i32 Width, cim_i32 Height);
-typedef void    draw_glyph  (stbrp_rect Rect, ui_font Font);
-typedef ui_font load_font   (const char *FontName, cim_f32 FontSize);
+typedef void DrawUI (cim_i32 Width, cim_i32 Height);
+
+// Text
+typedef void    draw_glyph    (stbrp_rect Rect, ui_font Font);
+typedef ui_font load_font     (const char *FontName, cim_f32 FontSize);
+typedef void    release_font  (ui_font *Font);
 
 typedef struct cim_renderer 
 {
-	DrawUI     *Draw;
-    draw_glyph *TransferGlyph;
-    load_font  *LoadFont;
+	DrawUI *Draw;
+    
+    // Text
+    draw_glyph   *TransferGlyph;
+    load_font    *LoadFont;
+    release_font *ReleaseFont;
 } cim_renderer;
 
-// Proxies
-static void    TransferGlyph  (stbrp_rect Rect, ui_font Font);
-static ui_font LoadFont       (const char *FileName, cim_f32 FontSize);
+// NOTE: This is an internal proxy only, unsure how to build the interface.
+static void TransferGlyph  (stbrp_rect Rect, ui_font Font);

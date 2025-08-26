@@ -3,6 +3,7 @@ static bool    D3DInitialize     (void *UserDevice, void *UserContext);
 static void    D3DDrawUI         (cim_i32 ClientWidth, cim_i32 ClientHeight);
 static void    D3DTransferGlyph  (stbrp_rect Rect, ui_font Font);
 static ui_font D3DLoadFont       (const char *FontName, cim_f32 FontSize);
+static void    D3DReleaseFont    (ui_font *Font);
 
 static bool 
 InitializeRenderer(CimRenderer_Backend Backend, void *Param1, void *Param2) // WARN: This is a bit goofy.
@@ -20,9 +21,13 @@ InitializeRenderer(CimRenderer_Backend Backend, void *Param1, void *Param2) // W
         Initialized = D3DInitialize(Param1, Param2);
         if (Initialized)
         {
-            Renderer->Draw          = D3DDrawUI;
-            Renderer->TransferGlyph = D3DTransferGlyph;
-            Renderer->LoadFont      = D3DLoadFont;
+            Renderer->Draw = D3DDrawUI;
+
+            // Text
+            Renderer->TransferGlyph = D3DTransferGlyph; // Internal
+            Renderer->LoadFont      = D3DLoadFont;      // Public
+            Renderer->ReleaseFont   = D3DReleaseFont;   // Public
+           
         }
     } break;
 
@@ -33,7 +38,9 @@ InitializeRenderer(CimRenderer_Backend Backend, void *Param1, void *Param2) // W
     return Initialized;
 }
 
-// TODO: Check if this is inlined.
+// TODO: Check if these are inlined.
+
+// WARN: This is internal only, unsure where to put this.
 static void
 TransferGlyph(stbrp_rect Rect, ui_font Font)
 {
@@ -41,16 +48,54 @@ TransferGlyph(stbrp_rect Rect, ui_font Font)
     CimCurrent->Renderer.TransferGlyph(Rect, Font);
 }
 
+// [Font Public API]
+
 // TODO: Check if this is inlined.
 static ui_font
-LoadFont(const char *FileName, cim_f32 FontSize)
+UILoadFont(const char *FileName, cim_f32 FontSize)
 {
     Cim_Assert(CimCurrent);
     ui_font Result = CimCurrent->Renderer.LoadFont(FileName, FontSize);
     return Result;
 }
 
-// [Agnostic Helpers]
+static void
+UIUnloadFont(ui_font *Font)
+{
+    Cim_Assert(CimCurrent);
+    CimCurrent->Renderer.ReleaseFont(Font);
+
+    if (Font->HeapBase)
+    {
+        free(Font->HeapBase);
+        Font->HeapBase = NULL;
+    }
+
+    Font->Table        = NULL;
+    Font->AtlasNodes   = NULL;
+    Font->AtlasWidth   = 0;
+    Font->AtlasHeight  = 0;
+    Font->LineHeight   = 0;
+    Font->IsValid      = false;
+    Font->AtlasContext = {};
+}
+
+static void
+UISetFont(ui_font Font)
+{
+    Cim_Assert(CimCurrent);
+
+    if (Font.IsValid)
+    {
+        CimCurrent->CurrentFont = Font;
+    }
+    else
+    {
+        // TODO: Set a default font?
+    }
+}
+
+// [Agnostic Code]
 
 static cim_draw_command *
 GetDrawCommand(cim_cmd_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type PipelineType)
@@ -822,6 +867,22 @@ ReleaseD3DGlyphTransfer(renderer_font_objects *Objects)
 
 // [D3D Public Implementation]
 
+static void
+D3DReleaseFont(ui_font *Font)
+{
+    if (Font->FontObjects)
+    {
+        ReleaseD3DGlyphCache(Font->FontObjects);
+        ReleaseD3DGlyphTransfer(Font->FontObjects);
+    }
+
+    if (Font->OSFontObjects)
+    {
+        ReleaseFontObjects(Font->OSFontObjects);
+    }
+}
+
+// TODO: Clenaup this function.
 static ui_font
 D3DLoadFont(const char *FontName, cim_f32 FontSize)
 {
@@ -895,7 +956,7 @@ D3DLoadFont(const char *FontName, cim_f32 FontSize)
     // Seems to crash if there is a mistake.
     stbrp_init_target(&Font.AtlasContext, Font.AtlasWidth, Font.AtlasHeight, Font.AtlasNodes, Font.AtlasWidth);
 
-    Font.Valid = true;
+    Font.IsValid = true;
     return Font;
 }
 

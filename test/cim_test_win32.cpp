@@ -166,17 +166,15 @@ int main()
     dx11_context Dx11  = Dx11_Initialize(Win32);
 
     cim_context *UIContext = (cim_context *)malloc(sizeof(cim_context));
-    InitUIContext(UIContext);
+    UIInitializeContext(UIContext);
 
     PlatformInit("D:/Work/CIM/styles");
     InitializeRenderer(CimRenderer_D3D, Dx11.Device, Dx11.DeviceContext);
 
-    ui_font MyFont = LoadFont("Consolas", 20);
-    if (!MyFont.Valid)
-    {
-        return 0;
-    }
+    ui_font MyFont = UILoadFont("Consolas", 20);
+    Cim_Assert(MyFont.IsValid);
 
+    // TODO: Fix the window closing bug.
     while(Win32_ProcessMessages())
     {
         Dx11.DeviceContext->OMSetRenderTargets(1, &Dx11.RenderView, nullptr);
@@ -186,32 +184,36 @@ int main()
 
         // ==========================================================================
 
-        BeginUIFrame();
+        UIBeginFrame();
 
-        UIWindow("MyWindow", "MainWindow", CimWindow_AllowDrag)
+        UIBeginContext()
         {
-            UIButton("MyButton", "MainButton", && UI_STATE == CimContext_Interaction)
+            UIWindow("MyWindow", "MainWindow", CimWindow_AllowDrag)
             {
-                CimLog_Info("Button Is Clicked");
+                // NOTE: The user only wants the interaction state. And no component can be under this.
+                // So with that in mind, the macro should be correct? Unless I am wrong about my assumptions.
+                UIButton("MyButton", "MainButton")
+                {
+                    CimLog_Info("Button Is Clicked");
+                }
+
+                UISetFont(MyFont);
+                UIText("Hello.");
             }
 
-            UIButton("MyOtherButton", "MainButton", && UI_STATE == CimContext_Interaction)
-            {
-                CimLog_Info("Button Is Clicked");
-            }
-
-            char TestText[64];
-            memcpy(TestText, "Hello :)", sizeof("Hello :)"));
-            UIText(TestText, MyFont);
+            UIEndContext()
         }
 
         Win32_GetClientSize(Win32.Handle, &Win32.Width, &Win32.Height);
         UI_RENDERER.Draw(Win32.Width, Win32.Height);
 
-        EndUIFrame();
+        UIEndFrame();
 
         // ==========================================================================
 
         Dx11.SwapChain->Present(1, 0);
     }
+
+    // NOTE: This is not necessary.
+    UIUnloadFont(&MyFont);
 }

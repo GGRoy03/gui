@@ -3,36 +3,22 @@ typedef enum CimWindow_Flags
     CimWindow_AllowDrag = 1 << 0,
 } CimWindow_Flags;
 
-// TODO: Simplify these macros.
+#define UIBeginContext() for (UIPass_Type Pass = UIPass_Layout; Pass !=  UIPass_Ended;)
+#define UIEndContext()   UIEndContextInternal(&Pass);
 
-#define _UI_CONCAT2(a,b) a##b
-#define _UI_CONCAT(a,b) _UI_CONCAT2(a,b)
-#define _UI_UNIQUE(name) _UI_CONCAT(name, __LINE__)
-
-#define UIWindow(Id, ThemeId, Flags)                                                     \
-    for (int _UI_UNIQUE(_ui_iter) = 0; _UI_UNIQUE(_ui_iter) < 2; ++_UI_UNIQUE(_ui_iter)) \
-        if (Cim_Window(Id, ThemeId, Flags))                                              \
-            for (int _UI_UNIQUE(_ui_once) = 1; _UI_UNIQUE(_ui_once);                     \
-                 (Cim_EndWindow(), _UI_UNIQUE(_ui_once) = 0))
-
-
-#define UIButton(Id, ThemeId, ...)                                \
-    for (struct { bool _clicked; int _once; } _UI_UNIQUE(_ui) = { \
-              ._clicked = Cim_Button(Id, ThemeId), ._once = 1 };  \
-         _UI_UNIQUE(_ui)._once;                                   \
-         (_UI_UNIQUE(_ui)._once = 0)                              \
-        )                                                         \
-        if (_UI_UNIQUE(_ui)._clicked __VA_ARGS__)
-
-#define UIText(Text, Font) Cim_Text(Text, Font)
+// WARN: But this makes it so that if the user wants to log when the window is opened or now, there's a weird thing
+// where they have to check the state themselves? I have no idea. Uhm, this is important. Still unsure if we want
+// these macros, but it still is better than what we had, so let's stick with that for now.
+#define UIWindow(Id, ThemeId, Flags) if(UIWindowInternal(Id, ThemeId, Flags, Pass))
+#define UIButton(Id, ThemeId, ...)   if(UIButtonInternal(Id, ThemeId, Pass) __VA_ARGS__)
+#define UIText(Text) UITextInternal(Text, Pass)
 
 static bool
-Cim_Window(const char *Id, const char *ThemeId, cim_bit_field Flags)
+UIWindowInternal(const char *Id, const char *ThemeId, cim_bit_field Flags, UIPass_Type Pass)
 {
-    Cim_Assert(CimCurrent);
-    CimContext_State State = UI_STATE;
+    Cim_Assert(CimCurrent && Id && ThemeId);
 
-    if (State == CimContext_Layout)
+    if (Pass == UIPass_Layout)
     {
         cim_component *Component = FindComponent(Id);
         cim_window    *Window    = &Component->For.Window;
@@ -48,6 +34,7 @@ Cim_Window(const char *Id, const char *ThemeId, cim_bit_field Flags)
         cim_layout_node *Node  = PushLayoutNode(true, &Component->LayoutNodeIndex);
         theme           *Theme = GetTheme(ThemeId, &Component->ThemeId);
 
+        // NOTE: This is a weird check.
         if (!Theme || !Node)
         {
             return false;
@@ -65,10 +52,13 @@ Cim_Window(const char *Id, const char *ThemeId, cim_bit_field Flags)
         // I guess we still use this for now, so hardcode it.
         Node->Order = Layout_Horizontal;
 
-        return true; // Need to find a way to cache some state. E.g. closed and not hovering
+        return true; // Need to find a way to cache some state. E.g. closed and not hovering to return false and save some time :)
     }
-    else if (State == CimContext_Interaction)
+    else if (Pass == UIPass_User)
     {
+        // WARN: Then most of this code, has nothing to do on this pass. Which means we now
+        // need 3 pass. Sounds fine to me.
+
         cim_component   *Component = FindComponent(Id);                            // This is the second access to the hashmap.
         cim_layout_node *Node      = GetNodeFromIndex(Component->LayoutNodeIndex); // Can't we just call get next node since it's the same order? Same for hashmap?
         theme           *Theme     = GetTheme(ThemeId, &Component->ThemeId);       // And then another access to the theme for the same frame...
@@ -112,12 +102,11 @@ Cim_Window(const char *Id, const char *ThemeId, cim_bit_field Flags)
 }
 
 static bool
-Cim_Button(const char *Id, const char *ThemeId)
+UIButtonInternal(const char *Id, const char *ThemeId, UIPass_Type Pass)
 {
-    Cim_Assert(CimCurrent);
-    CimContext_State State = UI_STATE;
+    Cim_Assert(CimCurrent && Id && ThemeId);
 
-    if (State == CimContext_Layout)
+    if (Pass == UIPass_Layout)
     {
         cim_component   *Component = FindComponent(Id);
         cim_layout_node *Node      = PushLayoutNode(false, &Component->LayoutNodeIndex);
@@ -128,8 +117,11 @@ Cim_Button(const char *Id, const char *ThemeId)
 
         return IsMouseDown(CimMouse_Left, UIP_INPUT); // NOTE: Can we check for hovers?
     }
-    else if (State == CimContext_Interaction) // Maybe rename this state then?
+    else if (Pass == UIPass_User)
     {
+        // WARN: Then most of this code, has nothing to do on this pass. Which means we now
+        // need 3 pass. Sounds fine to me.
+
         cim_layout_tree *Tree      = UIP_LAYOUT.Tree;                              // Another global access.
         cim_component   *Component = FindComponent(Id);                            // This is the second access to the hashmap.
         cim_layout_node *Node      = GetNodeFromIndex(Component->LayoutNodeIndex); // Can't we just call get next node since it's the same order? Same for hashmap?
@@ -171,15 +163,16 @@ Cim_Button(const char *Id, const char *ThemeId)
 
 // NOTE: We probably don't want to take this as an argument. Something like UISetFont.
 static void
-Cim_Text(char *TextToRender, ui_font Font)
+UITextInternal(const char *TextToRender, UIPass_Type Pass)
 {
-    Cim_Assert(CimCurrent);
-    CimContext_State State = UI_STATE;
+    Cim_Assert(CimCurrent && CimCurrent->CurrentFont.IsValid && TextToRender);
 
-    // Faking it.
+    ui_font Font = CimCurrent->CurrentFont;
+
+    // TODO: Figure this out, because this limits us to one component.
     static cim_component Component;
 
-    if (State == CimContext_Layout)
+    if (Pass == UIPass_Layout)
     {
         cim_text *Text = &Component.For.Text;
 
@@ -190,11 +183,10 @@ Cim_Text(char *TextToRender, ui_font Font)
         Node->ContentWidth  = 100;
         Node->ContentHeight = 50;
 
-        // NOTE: This is weird, because we can simply check if the layout is valid.
-        // Maybe add a boolean flag or something. We should probably also have a dirty flag.
+        // WARN: I don't know about this.
         if (!Text->LayoutInfo.BackendLayout)
         {
-            Text->LayoutInfo = CreateTextLayout(TextToRender, Node->ContentWidth, Node->ContentHeight, Font);
+            Text->LayoutInfo = CreateTextLayout((char*)TextToRender, Node->ContentWidth, Node->ContentHeight, Font);
         }
 
         // NOTE: Let's do the most naive thing and iterate the string without checking dirty states.
@@ -205,7 +197,7 @@ Cim_Text(char *TextToRender, ui_font Font)
 
             if (!Glyph.IsInAtlas)
             {
-                glyph_size GlyphSize = GetGlyphExtent(&TextToRender[Idx], 1, Font);
+                glyph_size GlyphSize = GetGlyphExtent((char*) & TextToRender[Idx], 1, Font);
 
                 stbrp_rect Rect;
                 Rect.id = 0;
@@ -236,8 +228,11 @@ Cim_Text(char *TextToRender, ui_font Font)
         }
 
     }
-    else if (State == CimContext_Interaction) // NOTE: This name is really misleading, but idk what to call it.
+    else if (Pass == UIPass_User)
     {
+        // WARN: Then most of this code, has nothing to do on this pass. Which means we now
+        // need 3 pass. Sounds fine to me.
+
         typedef struct local_vertex
         {
             cim_f32 PosX, PosY;
@@ -303,15 +298,17 @@ Cim_Text(char *TextToRender, ui_font Font)
 }
 
 static void
-Cim_EndWindow()
+UIEndContextInternal(UIPass_Type *Pass)
 {
-    Cim_Assert(CimCurrent);
+    Cim_Assert(CimCurrent && Pass);
     cim_layout_tree *Tree = UIP_LAYOUT.Tree;
-    CimContext_State State = UI_STATE;
 
-    if (State == CimContext_Layout)
+    if (*Pass == UIPass_Layout)
     {
-        // Why?
+        // Why? Anyways this is kind of garbage. Still unsure what I want to do with this whole
+        // layout thing. We are close to a rework anyways since there are too many things I do
+        // not like.
+
         Tree->DragTransformX = 0;
         Tree->DragTransformY = 0;
 
@@ -459,9 +456,11 @@ Cim_EndWindow()
             }
         }
 
-        UI_STATE = CimContext_Interaction;
-        PopParent();
+        *Pass = UIPass_User;
 
+        PopParent(); // So we can go back to the "root", unsure.
+
+        // NOTE: This is the deep hit-test. Maybe abstract it when reworking?
         bool MouseClicked = IsMouseClicked(CimMouse_Left, UIP_INPUT);
         bool MouseDown = IsMouseDown(CimMouse_Left, UIP_INPUT);
 
@@ -490,9 +489,11 @@ Cim_EndWindow()
             }
         }
     }
-    else if (State == CimContext_Interaction)
+    else if (*Pass == UIPass_User)
     {
         // NOTE: What can we even do here?
+
+        *Pass = UIPass_Ended;
     }
     else
     {

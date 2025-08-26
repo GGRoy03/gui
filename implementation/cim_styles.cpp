@@ -12,7 +12,7 @@ static void                HandleThemeError        (theme_parsing_error *Error, 
 
 // [Macros]
 
-// TODO: Think about making those functions.
+// TODO: Make these functions?
 
 #define CimTheme_MaxVectorSize 4
 #define CimTheme_ArrayToVec2(Array)  {Array[0], Array[1]}
@@ -22,8 +22,9 @@ static void                HandleThemeError        (theme_parsing_error *Error, 
 
 // [Globals]
 
-// WARN: Probably do not store this as a global like this.
-
+// TODO: Figure out where we want to store this.
+// I do not think this is the correct data-structure simply
+// because of bad cache behavior?
 static theme_table ThemeTable;
 
 // [Public API Implementation]
@@ -228,14 +229,12 @@ GetNextTokenBuffer(buffer *FileContent, theme_parser *Parser)
         case '0' ... '9':
         {
             theme_token *Token = CreateThemeToken(ThemeToken_Number, Parser->AtLine, &Parser->TokenBuffer);
-            Token->UInt32 = Char - '0';
 
-            // BUG: Wrong
-            Char = FileContent->Data[++At];
+            Char = FileContent->Data[At];
             while (IsValidBuffer(FileContent) && IsNumberCharacter(Char))
             {
                 Token->UInt32 = (Token->UInt32 * 10) + (Char - '0');
-                Char          = FileContent->Data[At++];
+                Char          = FileContent->Data[++At];
             }
         } break;
 

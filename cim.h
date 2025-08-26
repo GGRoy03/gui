@@ -49,12 +49,12 @@ typedef struct cim_rect
     cim_u32 MaxY;
 } cim_rect;
 
-typedef enum CimContext_State
+typedef enum UIPass_Type
 {
-    CimContext_Invalid     = 0,
-    CimContext_Layout      = 1,
-    CimContext_Interaction = 2,
-} CimContext_State;
+    UIPass_Layout = 0,
+    UIPass_User   = 1,
+    UIPass_Ended  = 2,
+} UIPass_Type;
 
 // Header files
 #include "interface/cim_text.h"     // Depends on nothing type-wise.
@@ -66,12 +66,14 @@ typedef enum CimContext_State
 
 typedef struct cim_context
 {
-    CimContext_State State;
-
+    // Global Systems
     cim_layout     Layout;
     cim_renderer   Renderer;
     cim_inputs     Inputs;
     cim_cmd_buffer Commands;
+
+    // Current State
+    ui_font CurrentFont;
 
     void *Backend;
 } cim_context;
@@ -99,22 +101,29 @@ static cim_context *CimCurrent;
 #include "implementation/cim_renderer.cpp"
 #include "implementation/cim_component.cpp"
 
-// WARN: Not sure where to put these / if we need them.
+// [PUBLIC CIM API]
 
+// Components
+
+// Text
+static ui_font UILoadFont    (const char *FileName, cim_f32 FontSize);
+static void    UIUnloadFont  (ui_font *Font);
+static void    UISetFont     (ui_font Font);
+
+// TODO: Figure out what to do with these 3.
 static void
-BeginUIFrame()
+UIBeginFrame()
 {
     // Obviously wouldn't really do this but prototyping.
     cim_layout *Layout = UIP_LAYOUT;
-    Layout->Tree.NodeCount = 0;
-    Layout->Tree.AtParent = 0;
+    Layout->Tree.NodeCount      = 0;
+    Layout->Tree.AtParent       = 0;
     Layout->Tree.ParentStack[0] = CimLayout_InvalidNode; // Temp.
-
-    UI_STATE = CimContext_Layout;
 }
 
+// TODO: Make this call the renderer draw function.
 static void
-EndUIFrame()
+UIEndFrame()
 {
     cim_inputs *Inputs = UIP_INPUT;
     Inputs->ScrollDelta = 0;
@@ -133,7 +142,7 @@ EndUIFrame()
 }
 
 static bool
-InitUIContext(cim_context *UserContext)
+UIInitializeContext(cim_context *UserContext)
 {
     if (!UserContext)
     {

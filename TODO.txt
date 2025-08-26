@@ -1,21 +1,12 @@
 TASK:
-x) Think about how we actually want to allocate our memory.
 x) Replace STD functions.
 x) Add more styling/components.
-x) Think about the threading thing we do badly.
 x) Animation API.
-x) Text rendering
+x) FIX: Weird issues when dragging.
+x) Default themes
 
 BUGS:
 -VSync causes a lot of problems with the inputs. For example, when dragging the
 |graphics can run {-NumOfBackBuffers} frames behind the mouse causing a weird thing
 |where the object being dragged doesn't feel good. Disabling V-Sync fixes all of this,
 |but it's not a good solution to force on the user.
-
-THOUGHTS:
-Text rendering is kicking my ass. I need to start simple. Just look at how I did it for JANI and start simple.
-I don't think we use D2D? It forces some weird dependency between the platform and the renderer and doesn't seem
-that useful. Just use DWrite on windows. Go for the texture atlas method. I don't know. It seems like DWrite
-uses Direct2D so I might be forced? I know ImGui doesn't handle complex texts, but I want to. It feels a bit overwhelming.
-Not sure what to do. So what? We are forced to use DirectWrite on Windows -> Which uses D2D and then creates that dependency.
-Feels overwhelming. Maybe need more research. It seems so simple. Maybe I drop refterm code for now? Idk.

@@ -60,7 +60,7 @@ typedef struct glyph_table_params
 // scheme? Not really sure. I need to think about it more, but it's good to note it.
 typedef struct ui_font
 {
-    bool Valid;
+    bool IsValid;
 
     // Layout data
     cim_f32 LineHeight;

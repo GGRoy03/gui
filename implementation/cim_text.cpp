@@ -125,7 +125,6 @@ static void
 RecycleLRU(glyph_table *Table)
 {
 	glyph_entry *Sentinel = GetSentinel(Table);
-
 	Cim_Assert(Sentinel->PrevLRU);
 
 	cim_u32      EntryIndex = Sentinel->PrevLRU;
@@ -188,11 +187,11 @@ FindGlyphEntryByHash(glyph_table *Table, glyph_hash Hash)
 {
     glyph_entry *Result = 0;
 
-    cim_u32*Slot       = GetSlotPointer(Table, Hash);
-    cim_u32 EntryIndex = *Slot;
+    cim_u32 *Slot       = GetSlotPointer(Table, Hash);
+    cim_u32  EntryIndex = *Slot;
     while (EntryIndex)
     {
-		// Hash collisions are fatal. I mean we do 128 bits hashes. Surely it's fine.
+		// NOTE: Hash collisions are fatal. I mean we do 128 bits hashes. Surely it's fine.
 		// But at the same time, I don't know enough about hashing to produce something decent.
 		// that has such a low risk of collisions that this is fine. Need to think more about it.
 		// Shouldn't it be named NextWithSameSlot?
@@ -231,6 +230,7 @@ FindGlyphEntryByHash(glyph_table *Table, glyph_hash Hash)
 
         Result->NextWithSameHash = *Slot;
         Result->HashValue        = Hash;
+
         *Slot = EntryIndex;
 
         ++Table->Stats.MissCount;

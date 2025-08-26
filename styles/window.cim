@@ -11,7 +11,7 @@ theme "MainWindow" for Window
 theme "MainButton" for Button
 {
     Color       := [150, 0, 150, 255];
-    BorderWidth := 10;
+    BorderWidth := 3;
     BorderColor := [83, 52, 235, 255];
     
     Size := [50, 30];

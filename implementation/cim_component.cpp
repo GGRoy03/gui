@@ -6,296 +6,184 @@ typedef enum CimWindow_Flags
 #define UIBeginContext() for (UIPass_Type Pass = UIPass_Layout; Pass !=  UIPass_Ended; Pass = (UIPass_Type)((cim_u32)Pass + 1))
 #define UIEndContext()   if (Pass == UIPass_Layout) {UIEndLayout();} else if (Pass == UIPass_Draw) {UIEndDraw(UIP_LAYOUT.Tree.DrawList);}
 
+static ui_component *
+FindComponent(const char *Key)
+{
+    Cim_Assert(CimCurrent);
+    ui_component_hashmap *Hashmap = &UI_LAYOUT.Components;
+
+    if (!Hashmap->IsInitialized)
+    {
+        Hashmap->GroupCount = 32;
+
+        cim_u32 BucketCount = Hashmap->GroupCount * CimBucketGroupSize;
+        size_t  BucketSize = BucketCount * sizeof(ui_component_entry);
+        size_t  MetadataSize = BucketCount * sizeof(cim_u8);
+
+        Hashmap->Buckets = (ui_component_entry *)malloc(BucketSize);
+        Hashmap->Metadata = (cim_u8 *)malloc(MetadataSize);
+
+        if (!Hashmap->Buckets || !Hashmap->Metadata)
+        {
+            return NULL;
+        }
+
+        memset(Hashmap->Buckets, 0, BucketSize);
+        memset(Hashmap->Metadata, CimEmptyBucketTag, MetadataSize);
+
+        Hashmap->IsInitialized = true;
+    }
+
+    cim_u32 ProbeCount = 0;
+    cim_u32 Hashed = CimHash_String32(Key);
+    cim_u32 GroupIdx = Hashed & (Hashmap->GroupCount - 1);
+
+    while (true)
+    {
+        cim_u8 *Meta = Hashmap->Metadata + GroupIdx * CimBucketGroupSize;
+        cim_u8  Tag = (Hashed & 0x7F);
+
+        __m128i Mv = _mm_loadu_si128((__m128i *)Meta);
+        __m128i Tv = _mm_set1_epi8(Tag);
+
+        cim_i32 TagMask = _mm_movemask_epi8(_mm_cmpeq_epi8(Mv, Tv));
+        while (TagMask)
+        {
+            cim_u32 Lane = CimHash_FindFirstBit32(TagMask);
+            cim_u32 Idx = (GroupIdx * CimBucketGroupSize) + Lane;
+
+            ui_component_entry *E = Hashmap->Buckets + Idx;
+            if (strcmp(E->Key, Key) == 0)
+            {
+                return &E->Value;
+            }
+
+            TagMask &= TagMask - 1;
+        }
+
+        __m128i Ev = _mm_set1_epi8(CimEmptyBucketTag);
+        cim_i32 EmptyMask = _mm_movemask_epi8(_mm_cmpeq_epi8(Mv, Ev));
+        if (EmptyMask)
+        {
+            cim_u32 Lane = CimHash_FindFirstBit32(EmptyMask);
+            cim_u32 Idx = (GroupIdx * CimBucketGroupSize) + Lane;
+
+            Meta[Lane] = Tag;
+
+            ui_component_entry *E = Hashmap->Buckets + Idx;
+            strcpy_s(E->Key, sizeof(E->Key), Key);
+            E->Key[sizeof(E->Key) - 1] = 0;
+
+            return &E->Value;
+        }
+
+        ProbeCount++;
+        GroupIdx = (GroupIdx + ProbeCount * ProbeCount) & (Hashmap->GroupCount - 1);
+    }
+
+    return NULL;
+}
+
+static void
+UILayoutRow(bool DrawEdges)
+{
+    DrawEdges = false; // Because unused, but this would be used for debugging for example.
+
+    ui_layout_node *LayoutNode = PushLayoutNode(true, NULL); Cim_Assert(LayoutNode);
+    LayoutNode->Padding       = {5, 5, 5, 5};
+    LayoutNode->Spacing       = {20, 0};
+    LayoutNode->ContainerType = UIContainer_Row;
+}
+
+static void
+UIEndLayoutRow()
+{
+    PopParent();
+}
+
 static bool
 UILayoutWindow(const char *Id, const char *ThemeId, ui_component_state *State)
 {
-    // TODO: Think about early exits.
-    Cim_Assert(CimCurrent && Id && ThemeId && State);
+    Cim_Assert(CimCurrent && Id && ThemeId);
 
-    ui_layout_node *LayoutNode = PushLayoutNode(true, State);
-    Cim_Assert(LayoutNode);
-
-    ui_component *Component = FindComponent(Id);
-    Cim_Assert(Component);
+    ui_layout_node *LayoutNode = PushLayoutNode(true, State); Cim_Assert(LayoutNode);
+    ui_component   *Component  = FindComponent(Id);           Cim_Assert(Component);
 
     ui_window_theme Theme = GetWindowTheme(ThemeId, Component->ThemeId);
-    Cim_Assert(Theme.ThemeId.Value);
+    if (Theme.ThemeId.Value)
+    {
+        // NOTE: As far as I understand, we don't even need to specify a size if it tries to fit its content.
+        // Only in that case though, so we might as well specify it?
 
-    LayoutNode->PrefWidth  = Theme.Size.x;
-    LayoutNode->PrefHeight = Theme.Size.y;
-    LayoutNode->Padding    = Theme.Padding;
-    LayoutNode->Spacing    = Theme.Spacing;
+        LayoutNode->Padding       = Theme.Padding;
+        LayoutNode->Spacing       = Theme.Spacing;
+        LayoutNode->ContainerType = UIContainer_Column;
 
-    // TODO: Get the X,Y from somewhere else and do a better job for the layout.
-    LayoutNode->X     = 500.0f;
-    LayoutNode->Y     = 400.0f;
-    LayoutNode->Order = Layout_Horizontal;
+        // TODO: Get the X,Y from somewhere else and do a better job for the layout.
+        LayoutNode->X = 500.0f;
+        LayoutNode->Y = 400.0f;
+    }
 
-    // TODO: Helper?
-    ui_draw_info DrawInfo = {};
-    DrawInfo.Type         = UICommand_Window;
-    DrawInfo.Pipeline     = UIPipeline_Default;
-    DrawInfo.ClippingRect = {};
-    DrawInfo.LayoutNodeId = LayoutNode->Id;
+    // NOTE: Draw commands needs: Layout Node (Position/Size) && Theme (Colors, Others)
+    ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+    if (Command)
+    {
+        Command->Type         = UICommand_Window;  // NOTE: I believe this is wrong. Must be more general?
+        Command->Pipeline     = UIPipeline_Default;
+        Command->ClippingRect = {};
+        Command->LayoutNodeId = LayoutNode->Id;
+        Command->ThemeId      = Theme.ThemeId;
+    }
 
     Component->ThemeId = Theme.ThemeId;
-    DrawInfo.ThemeId   = Theme.ThemeId;
-
-    // TODO: Helper?
-    ui_layout_tree *Tree = UIP_LAYOUT.Tree;
-    if (Tree->DrawList.CommandCount < Cim_ArrayCount(Tree->DrawList.Commands)) 
-    {
-        Tree->DrawList.Commands[Tree->DrawList.CommandCount++] = DrawInfo;
-    }
-    else 
-    {
-        CimLog_Warn("DrawList overflow while laying out window '%s'", Id);
-        return false;
-    }
 
     return true;
 }
 
-
 static void
 UILayoutButton(const char *Id, const char *ThemeId, ui_component_state *State)
 {
-    Cim_Assert(CimCurrent && Id && ThemeId && State);
+    Cim_Assert(CimCurrent && Id && ThemeId);
 
-    ui_layout_node *LayoutNode = PushLayoutNode(false, State);
-    Cim_Assert(LayoutNode);
-
-    ui_component *Component = FindComponent(Id);
-    Cim_Assert(Component);
+    ui_layout_node *LayoutNode = PushLayoutNode(false, State); Cim_Assert(LayoutNode);
+    ui_component   *Component  = FindComponent(Id);            Cim_Assert(Component);
 
     ui_button_theme Theme = GetButtonTheme(ThemeId, Component->ThemeId);
-    Cim_Assert(Theme.ThemeId.Value);
-
-    LayoutNode->ContentWidth  = Theme.Size.x;
-    LayoutNode->ContentHeight = Theme.Size.y;
-
-    // TODO: Helper?
-    ui_draw_info DrawInfo;
-    DrawInfo.Type         = UICommand_Button;
-    DrawInfo.Pipeline     = UIPipeline_Default;
-    DrawInfo.ClippingRect = {};
-    DrawInfo.LayoutNodeId = LayoutNode->Id;
-    DrawInfo.ThemeId      = Component->ThemeId = Theme.ThemeId;
-
-    // TODO: Helper?
-    ui_layout_tree *Tree = UIP_LAYOUT.Tree;
-    if (Tree->DrawList.CommandCount < Cim_ArrayCount(Tree->DrawList.Commands))
+    if (Theme.ThemeId.Value)
     {
-        Tree->DrawList.Commands[Tree->DrawList.CommandCount++] = DrawInfo;
-    }
-    else
-    {
-        CimLog_Warn("DrawList overflow while laying out window '%s'", Id);
-    }
-}
-
-static void
-UIEndLayout()
-{
-    Cim_Assert(CimCurrent);
-    ui_layout_tree *Tree = UIP_LAYOUT.Tree;
-
-    Tree->DragTransformX = 0;
-    Tree->DragTransformY = 0;
-
-    cim_u32 DownUpStack[1024] = {};
-    cim_u32 StackAt = 0;
-    cim_u32 NodeCount = 0;
-    char    Visited[512] = {};
-
-    DownUpStack[StackAt++] = 0;
-
-    while (StackAt > 0)
-    {
-        cim_u32 Current = DownUpStack[StackAt - 1];
-
-        if (!Visited[Current])
-        {
-            Visited[Current] = 1;
-
-            cim_u32 Child = Tree->Nodes[Current].FirstChild;
-            while (Child != CimLayout_InvalidNode)
-            {
-                DownUpStack[StackAt++] = Child;
-                Child = Tree->Nodes[Child].NextSibling;
-            }
-        }
-        else
-        {
-            StackAt--;
-            NodeCount++;
-
-            ui_layout_node *Node = Tree->Nodes + Current;
-            if (Node->FirstChild == CimLayout_InvalidNode)
-            {
-                // Can we set a special flag such that one's width depend on it's 
-                // container size? Okay, but then the container's size depends on
-                // the content itself.
-                Node->PrefWidth = Node->ContentWidth;
-                Node->PrefHeight = Node->ContentHeight;
-            }
-            else
-            {
-                cim_u32 ChildCount = 0;
-
-                if (Node->Order == Layout_Horizontal)
-                {
-                    cim_f32 MaximumHeight = 0;
-                    cim_f32 TotalWidth = 0;
-
-                    cim_u32 Child = Tree->Nodes[Current].FirstChild;
-                    while (Child != CimLayout_InvalidNode)
-                    {
-                        if (Tree->Nodes[Child].PrefHeight > MaximumHeight)
-                        {
-                            MaximumHeight = Tree->Nodes[Child].PrefHeight;
-                        }
-
-                        TotalWidth += Tree->Nodes[Child].PrefWidth;
-                        ChildCount += 1;
-
-                        Child = Tree->Nodes[Child].NextSibling;
-                    }
-
-                    cim_f32 Spacing = (ChildCount > 1) ? Node->Spacing.x * (ChildCount - 1) : 0.0f;
-
-                    Node->PrefWidth = TotalWidth + (Node->Padding.x + Node->Padding.z) + Spacing;
-                    Node->PrefHeight = MaximumHeight + (Node->Padding.y + Node->Padding.w);
-                }
-                else if (Node->Order == Layout_Vertical)
-                {
-                    cim_f32 MaximumWidth = 0;
-                    cim_f32 TotalHeight = 0;
-
-                    cim_u32 Child = Tree->Nodes[Current].FirstChild;
-                    while (Child != CimLayout_InvalidNode)
-                    {
-                        if (Tree->Nodes[Child].PrefWidth > MaximumWidth)
-                        {
-                            MaximumWidth = Tree->Nodes[Child].PrefWidth;
-                        }
-
-                        TotalHeight += Tree->Nodes[Child].PrefHeight;
-                        ChildCount += 1;
-
-                        Child = Tree->Nodes[Child].NextSibling;
-                    }
-
-                    cim_f32 Spacing = (ChildCount > 1) ? Node->Spacing.y * (ChildCount - 1) : 0.0f;
-
-                    Node->PrefWidth = MaximumWidth + (Node->Padding.x + Node->Padding.z);
-                    Node->PrefHeight = TotalHeight + (Node->Padding.y + Node->Padding.w) + Spacing;
-                }
-            }
-
-        }
+        LayoutNode->Width  = Theme.Size.x;
+        LayoutNode->Height = Theme.Size.y;
     }
 
-    cim_u32 UpDownStack[1024] = {};
-    StackAt = 0;
-    UpDownStack[StackAt++] = 0;
-
-    // How to place the window is still an issue.
-    Tree->Nodes[0].Width = Tree->Nodes[0].PrefWidth;
-    Tree->Nodes[0].Height = Tree->Nodes[0].PrefHeight;
-
-    cim_f32 ClientX;
-    cim_f32 ClientY;
-
-    while (StackAt > 0)
+    // NOTE: Draw commands needs: Layout Node (Position/Size) && Theme (Colors, Others)
+    ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+    if (Command)
     {
-        cim_u32          Current = UpDownStack[--StackAt];
-        ui_layout_node *Node = Tree->Nodes + Current;
-
-        ClientX = Node->X + Node->Padding.x;
-        ClientY = Node->Y + Node->Padding.y;
-
-        // TODO: Change how we iterate this.
-        cim_u32 Child = Node->FirstChild;
-        cim_u32 Temp[256] = {};
-        cim_u32 Idx = 0;
-        while (Child != CimLayout_InvalidNode)
-        {
-            ui_layout_node *CNode = Tree->Nodes + Child;
-
-            CNode->X = ClientX;
-            CNode->Y = ClientY;
-            CNode->Width = CNode->PrefWidth;  // Weird.
-            CNode->Height = CNode->PrefHeight; // Weird.
-
-            if (Node->Order == Layout_Horizontal)
-            {
-                ClientX += CNode->Width + Node->Spacing.x;
-            }
-            else if (Node->Order == Layout_Vertical)
-            {
-                ClientY += CNode->Height + Node->Spacing.y;
-            }
-
-            Temp[Idx++] = Child;
-            Child = CNode->NextSibling;
-        }
-
-        for (cim_i32 TempIdx = (cim_i32)Idx - 1; TempIdx >= 0; --TempIdx)
-        {
-            UpDownStack[StackAt++] = Temp[TempIdx];
-        }
+        Command->Type         = UICommand_Button;
+        Command->Pipeline     = UIPipeline_Default;
+        Command->ClippingRect = {};
+        Command->LayoutNodeId = LayoutNode->Id;
+        Command->ThemeId      = Component->ThemeId = Theme.ThemeId;
     }
-
-    PopParent(); // So we can go back to the "root", unsure.
-
-    // NOTE: This is the deep hit-test. Maybe abstract it when reworking?
-    bool MouseClicked = IsMouseClicked(CimMouse_Left, UIP_INPUT);
-
-    if (MouseClicked)
-    {
-        ui_layout_node *Root = Tree->Nodes;
-        cim_rect        WindowHitBox = MakeRectFromNode(Root);
-
-        if (IsInsideRect(WindowHitBox))
-        {
-            for (cim_u32 StackIdx = NodeCount - 1; StackIdx > 0; StackIdx--)
-            {
-                ui_layout_node *Node = Tree->Nodes + DownUpStack[StackIdx];
-                cim_rect        HitBox = MakeRectFromNode(Node);
-
-                if (IsInsideRect(HitBox))
-                {
-                    Node->State->Clicked = MouseClicked;
-                    Node->State->Hovered = true;
-                    return;
-                }
-            }
-
-            Root->State->Hovered = true;
-            Root->State->Clicked = MouseClicked;
-        }
-    }
-
 }
 
 static void
 UIEndDraw(ui_draw_list *DrawList)
 {
-    // WARN: Obviously a lot of duplicate code. Keep this for now.
+    // TODO: Can we make this better? With less access to other parts of the code?
 
     for (cim_u32 CommandIdx = 0; CommandIdx < DrawList->CommandCount; CommandIdx++)
     {
-        ui_draw_info    *DrawInfo   = DrawList->Commands + CommandIdx;
-        ui_layout_node  *LayoutNode = GetUILayoutNode(DrawInfo->LayoutNodeId);
-        ui_draw_command *Command    = GetDrawCommand(UIP_COMMANDS, DrawInfo->ClippingRect, DrawInfo->Pipeline);
+        ui_draw_command *Command    = DrawList->Commands + CommandIdx;
+        ui_layout_node  *LayoutNode = GetUILayoutNode(Command->LayoutNodeId);
+        ui_draw_batch   *Batch      = GetDrawBatch(UIP_BATCHES, Command->ClippingRect, Command->Pipeline);
 
-        switch (DrawInfo->Type)
+        switch (Command->Type)
         {
 
         case UICommand_Window:
         {
-            ui_window_theme Theme = GetWindowTheme(NULL, DrawInfo->ThemeId);
+            ui_window_theme Theme = GetWindowTheme(NULL, Command->ThemeId);
 
             if (Theme.BorderWidth > 0)
             {
@@ -311,18 +199,18 @@ UIEndDraw(ui_draw_list *DrawList)
                 Borders[3] = {X1, Y1, 1.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
 
                 cim_u32 Indices[6];
-                Indices[0] = Command->VtxCount + 0;
-                Indices[1] = Command->VtxCount + 2;
-                Indices[2] = Command->VtxCount + 1;
-                Indices[3] = Command->VtxCount + 2;
-                Indices[4] = Command->VtxCount + 3;
-                Indices[5] = Command->VtxCount + 1;
+                Indices[0] = Batch->VtxCount + 0;
+                Indices[1] = Batch->VtxCount + 2;
+                Indices[2] = Batch->VtxCount + 1;
+                Indices[3] = Batch->VtxCount + 2;
+                Indices[4] = Batch->VtxCount + 3;
+                Indices[5] = Batch->VtxCount + 1;
 
-                WriteToArena(Borders, sizeof(Borders), UIP_COMMANDS.FrameVtx);
-                WriteToArena(Indices, sizeof(Indices), UIP_COMMANDS.FrameIdx);;
+                WriteToArena(Borders, sizeof(Borders), UIP_BATCHES.FrameVtx);
+                WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
 
-                Command->VtxCount += 4;
-                Command->IdxCount += 6;
+                Batch->VtxCount += 4;
+                Batch->IdxCount += 6;
             }
 
             cim_f32 X0 = LayoutNode->X;
@@ -337,52 +225,51 @@ UIEndDraw(ui_draw_list *DrawList)
             Body[3] = {X1, Y1, 1.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
 
             cim_u32 Indices[6];
-            Indices[0] = Command->VtxCount + 0;
-            Indices[1] = Command->VtxCount + 2;
-            Indices[2] = Command->VtxCount + 1;
-            Indices[3] = Command->VtxCount + 2;
-            Indices[4] = Command->VtxCount + 3;
-            Indices[5] = Command->VtxCount + 1;
+            Indices[0] = Batch->VtxCount + 0;
+            Indices[1] = Batch->VtxCount + 2;
+            Indices[2] = Batch->VtxCount + 1;
+            Indices[3] = Batch->VtxCount + 2;
+            Indices[4] = Batch->VtxCount + 3;
+            Indices[5] = Batch->VtxCount + 1;
 
-            WriteToArena(Body   , sizeof(Body)   , UIP_COMMANDS.FrameVtx);
-            WriteToArena(Indices, sizeof(Indices), UIP_COMMANDS.FrameIdx);;
+            WriteToArena(Body   , sizeof(Body)   , UIP_BATCHES.FrameVtx);
+            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
 
-            Command->VtxCount += 4;
-            Command->IdxCount += 6;
-
+            Batch->VtxCount += 4;
+            Batch->IdxCount += 6;
 
         } break;
 
         case UICommand_Button:
         {
-            ui_button_theme Theme = GetButtonTheme(NULL, DrawInfo->ThemeId);
+            ui_button_theme Theme = GetButtonTheme(NULL, Command->ThemeId);
 
             if (Theme.BorderWidth > 0)
             {
                 cim_f32 X0 = LayoutNode->X - Theme.BorderWidth;
                 cim_f32 Y0 = LayoutNode->Y - Theme.BorderWidth;
-                cim_f32 X1 = LayoutNode->X + LayoutNode->Width  + Theme.BorderWidth;
+                cim_f32 X1 = LayoutNode->X + LayoutNode->Width + Theme.BorderWidth;
                 cim_f32 Y1 = LayoutNode->Y + LayoutNode->Height + Theme.BorderWidth;
 
                 ui_vertex Borders[4];
-                Borders[0] = {X0, Y0, 0.0f, 1.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
-                Borders[1] = {X0, Y1, 0.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
-                Borders[2] = {X1, Y0, 1.0f, 1.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
-                Borders[3] = {X1, Y1, 1.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
+                Borders[0] = { X0, Y0, 0.0f, 1.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w };
+                Borders[1] = { X0, Y1, 0.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w };
+                Borders[2] = { X1, Y0, 1.0f, 1.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w };
+                Borders[3] = { X1, Y1, 1.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w };
 
                 cim_u32 Indices[6];
-                Indices[0] = Command->VtxCount + 0;
-                Indices[1] = Command->VtxCount + 2;
-                Indices[2] = Command->VtxCount + 1;
-                Indices[3] = Command->VtxCount + 2;
-                Indices[4] = Command->VtxCount + 3;
-                Indices[5] = Command->VtxCount + 1;
+                Indices[0] = Batch->VtxCount + 0;
+                Indices[1] = Batch->VtxCount + 2;
+                Indices[2] = Batch->VtxCount + 1;
+                Indices[3] = Batch->VtxCount + 2;
+                Indices[4] = Batch->VtxCount + 3;
+                Indices[5] = Batch->VtxCount + 1;
 
-                WriteToArena(Borders, sizeof(Borders), UIP_COMMANDS.FrameVtx);
-                WriteToArena(Indices, sizeof(Indices), UIP_COMMANDS.FrameIdx);;
+                WriteToArena(Borders, sizeof(Borders), UIP_BATCHES.FrameVtx);
+                WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
 
-                Command->VtxCount += 4;
-                Command->IdxCount += 6;
+                Batch->VtxCount += 4;
+                Batch->IdxCount += 6;
             }
 
             cim_f32 X0 = LayoutNode->X;
@@ -391,24 +278,25 @@ UIEndDraw(ui_draw_list *DrawList)
             cim_f32 Y1 = LayoutNode->Y + LayoutNode->Height;
 
             ui_vertex Body[4];
-            Body[0] = {X0, Y0, 0.0f, 1.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
-            Body[1] = {X0, Y1, 0.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
-            Body[2] = {X1, Y0, 1.0f, 1.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
-            Body[3] = {X1, Y1, 1.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
+            Body[0] = { X0, Y0, 0.0f, 1.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w };
+            Body[1] = { X0, Y1, 0.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w };
+            Body[2] = { X1, Y0, 1.0f, 1.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w };
+            Body[3] = { X1, Y1, 1.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w };
 
             cim_u32 Indices[6];
-            Indices[0] = Command->VtxCount + 0;
-            Indices[1] = Command->VtxCount + 2;
-            Indices[2] = Command->VtxCount + 1;
-            Indices[3] = Command->VtxCount + 2;
-            Indices[4] = Command->VtxCount + 3;
-            Indices[5] = Command->VtxCount + 1;
+            Indices[0] = Batch->VtxCount + 0;
+            Indices[1] = Batch->VtxCount + 2;
+            Indices[2] = Batch->VtxCount + 1;
+            Indices[3] = Batch->VtxCount + 2;
+            Indices[4] = Batch->VtxCount + 3;
+            Indices[5] = Batch->VtxCount + 1;
 
-            WriteToArena(Body   , sizeof(Body)   , UIP_COMMANDS.FrameVtx);
-            WriteToArena(Indices, sizeof(Indices), UIP_COMMANDS.FrameIdx);;
+            WriteToArena(Body   , sizeof(Body)   , UIP_BATCHES.FrameVtx);
+            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
 
-            Command->VtxCount += 4;
-            Command->IdxCount += 6;
+            Batch->VtxCount += 4;
+            Batch->IdxCount += 6;
+
         } break;
 
         }

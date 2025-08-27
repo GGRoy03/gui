@@ -68,10 +68,10 @@ typedef enum UIPass_Type
 typedef struct cim_context
 {
     // Global Systems
-    cim_layout     Layout;
-    cim_renderer   Renderer;
-    cim_inputs     Inputs;
-    cim_cmd_buffer Commands;
+    cim_layout           Layout;
+    cim_renderer         Renderer;
+    cim_inputs           Inputs;
+    ui_draw_batch_buffer Batches;
 
     // Current State
     ui_font CurrentFont;
@@ -86,8 +86,8 @@ static cim_context *CimCurrent;
 #define UIP_LAYOUT   &(CimCurrent->Layout)
 #define UI_INPUT      (CimCurrent->Inputs)
 #define UIP_INPUT    &(CimCurrent->Inputs)
-#define UI_COMMANDS   (CimCurrent->Commands)
-#define UIP_COMMANDS &(CimCurrent->Commands)
+#define UI_BATCHES    (CimCurrent->Batches)
+#define UIP_BATCHES  &(CimCurrent->Batches)
 #define UI_RENDERER   (CimCurrent->Renderer)
 #define UIP_RENDERER &(CimCurrent->Renderer)
 

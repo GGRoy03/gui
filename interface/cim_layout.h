@@ -13,21 +13,18 @@ typedef enum CimComponent_Flag
     CimComponent_Text    = 1 << 2,
 } CimComponent_Flag;
 
-typedef enum Layout_Order
+typedef enum UIContainer_Type
 {
-    Layout_Horizontal = 0,
-    Layout_Vertical = 1,
-} Layout_Order;
+    UIContainer_None   = 0,
+    UIContainer_Row    = 1,
+    UIContainer_Column = 2,
+} UIContainer_Type;
 
 typedef struct cim_window
 {
-    cim_i32 LastFrameScreenX;
-    cim_i32 LastFrameScreenY;
-
-    bool IsInitialized;
+    cim_u32 Nothing;
 } cim_window;
 
-// NOTE: This is weird. What is the button state?
 typedef struct cim_button
 {
     cim_u32 Nothing;
@@ -57,7 +54,7 @@ typedef struct ui_component
 typedef struct ui_component_entry
 {
     ui_component Value;
-    char          Key[64];
+    char         Key[64];
 } ui_component_entry;
 
 typedef struct ui_component_hashmap
@@ -68,10 +65,8 @@ typedef struct ui_component_hashmap
     bool                IsInitialized;
 } ui_component_hashmap;
 
-// NOTE: Trying something new...
 typedef struct ui_component_state
 {
-    // State
     bool Clicked;
     bool Hovered;
 } ui_component_state;
@@ -84,24 +79,20 @@ typedef struct ui_layout_node
     cim_u32 FirstChild;
     cim_u32 LastChild;
     cim_u32 NextSibling;
+    cim_u32 ChildCount;
 
-    // Layout Intent
-    cim_f32 ContentWidth;
-    cim_f32 ContentHeight;
-    cim_f32 PrefWidth;
-    cim_f32 PrefHeight;
+    // Layout
+    UIContainer_Type ContainerType;
+    cim_vector2      Spacing;
+    cim_vector4      Padding;
 
-    // Arrange Result
+    // This is weird. It's used by both the drawer and the layout code.
     cim_f32 X;
     cim_f32 Y;
     cim_f32 Width;
     cim_f32 Height;
 
-    // Layout..
-    cim_vector2  Spacing;
-    cim_vector4  Padding;
-    Layout_Order Order;
-
+    // We mutate the state when hit-testing.
     ui_component_state *State;
 } ui_layout_node;
 
@@ -118,13 +109,22 @@ typedef struct ui_layout_tree
 
     // Tree-State
     ui_draw_list DrawList;
-
-    // Garbage drag code, needs to be removed.
-    cim_u32 FirstDragNode;  // Set transforms to 0 when we pop that node.
-    cim_i32 DragTransformX;
-    cim_i32 DragTransformY;
 } ui_layout_tree;
 
+typedef struct ui_tree_stats
+{
+    cim_u32 VisitedNodes;
+    cim_u32 LeafCount;
+    cim_u32 Depth;
+} ui_tree_stats;
+
+typedef struct ui_tree_sizing_result
+{
+    cim_u32 Stack[256];
+    cim_u32 Top;
+} ui_tree_sizing_result;
+
+// TODO: I don't know about this. It depends on if we cache trees or not.
 typedef struct cim_layout
 {
     ui_layout_tree       Tree;       // WARN: Forced to 1 tree for now.

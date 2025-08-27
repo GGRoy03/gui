@@ -188,21 +188,32 @@ int main()
 
         // NOTE: This run directly into the one frame of lag problem. I don't know. Maybe I just accept it?
         // Still need to figure out conditional UI layouts.
+
+        // TODO: Add flags for which behavior we want to track? Maybe we don't care about hovering/clicking
+        // so if we detect that none of the other actions were performed in the frame we can skip hit-testing
+        // on that component. So a behavior mask.
+
         UIBeginContext()
         {
             static ui_component_state CloseButton;
-            static ui_component_state SaveButton;
-            static ui_component_state WindowState;
+            static ui_component_state CloseButton2;
 
             switch (Pass)
             {
 
             case UIPass_Layout:
             {
-                if (UILayoutWindow("Window", "MainWindow", &WindowState))
+                if (UILayoutWindow("Window", "MainWindow", NULL))
                 {
+                    UILayoutRow(false);
                     UILayoutButton("Button1", "Buttons", &CloseButton);
-                    UILayoutButton("Button2", "Buttons", &SaveButton );
+                    UILayoutButton("Button2", "Buttons", NULL);
+                    UIEndLayoutRow();
+
+                    UILayoutRow(false);
+                    UILayoutButton("Button3", "Buttons", &CloseButton2);
+                    UILayoutButton("Button4", "Buttons", NULL);
+                    UIEndLayoutRow();
                 }
             } break;
 
@@ -210,6 +221,7 @@ int main()
             {
                 if (CloseButton.Clicked)
                 {
+                    // NOTE: We could add a helper: UIConsumeEvent(&State)
                     CimLog_Info("Close button clicked.");
                     CloseButton.Clicked = false;
                     CloseButton.Hovered = false;

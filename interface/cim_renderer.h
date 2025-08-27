@@ -19,56 +19,19 @@ typedef enum UIPipeline_Type
     UIPipeline_Count   = 3,
 } UIPipeline_Type;
 
+// NOTE: This probably changes
+typedef enum UICommand_Type
+{
+    UICommand_None   = 0,
+    UICommand_Window = 1,
+    UICommand_Button = 2,
+} UICommand_Type;
+
 typedef struct ui_shader_desc
 {
     char         *SourceCode;
     UIShader_Type Type;
 } ui_shader_desc;
-
-// NOTE: I don't really know if we want that.
-typedef enum CimFeature_Type
-{
-    CimFeature_None        = 0,
-	CimFeature_AlbedoMap   = 1 << 0,
-	CimFeature_MetallicMap = 1 << 1,
-    CimFeature_Text        = 1 << 2,
-	CimFeature_Count       = 3,
-} CimFeature_Type;
-
-typedef struct ui_draw_command
-{
-    size_t VertexByteOffset;
-    size_t BaseVertexOffset;
-    size_t StartIndexRead;
-
-    cim_u32 IdxCount;
-    cim_u32 VtxCount;
-
-    cim_rect        ClippingRect;
-    cim_bit_field   Features;
-    UIPipeline_Type PipelineType;
-
-    // EXTREMELY TEMPORARY TETS
-    ui_font Font;
-} ui_draw_command;
-
-typedef struct cim_cmd_buffer
-{
-    cim_u32   GlobalVtxOffset;
-    cim_u32   GlobalIdxOffset;
-
-    cim_arena FrameVtx;
-    cim_arena FrameIdx;
-
-    ui_draw_command *Commands;
-    cim_u32           CommandCount;
-    cim_u32           CommandSize;
-
-    cim_rect        CurrentClipRect;
-    UIPipeline_Type CurrentPipelineType;
-} cim_command_buffer;
-
-// NOTE: Trying something new.
 
 typedef struct ui_vertex
 {
@@ -77,14 +40,36 @@ typedef struct ui_vertex
     cim_f32 R, G, B, A;
 } ui_vertex;
 
-typedef enum UICommand_Type
+typedef struct ui_draw_batch
 {
-    UICommand_None   = 0,
-    UICommand_Window = 1,
-    UICommand_Button = 2,
-} UICommand_Type;
+    size_t VertexByteOffset;
+    size_t BaseVertexOffset;
+    size_t StartIndexRead;
 
-typedef struct ui_draw_info
+    cim_u32 IdxCount;
+    cim_u32 VtxCount;
+
+    cim_rect      ClippingRect;
+    cim_bit_field Features;
+    UIPipeline_Type PipelineType;
+} ui_draw_batch;
+
+typedef struct ui_draw_batch_buffer
+{
+    cim_u32   GlobalVtxOffset;
+    cim_u32   GlobalIdxOffset;
+    cim_arena FrameVtx;
+    cim_arena FrameIdx;
+
+    ui_draw_batch *Batches;
+    cim_u32        BatchCount;
+    cim_u32        BatchSize;
+
+    cim_rect        CurrentClipRect;
+    UIPipeline_Type CurrentPipelineType;
+} ui_draw_batch_buffer;
+
+typedef struct ui_draw_command
 {
     UICommand_Type Type;
 
@@ -94,11 +79,11 @@ typedef struct ui_draw_info
 
     cim_rect        ClippingRect;
     UIPipeline_Type Pipeline;
-} ui_draw_info;
+} ui_draw_command;
 
 typedef struct ui_draw_list
 {
-    ui_draw_info Commands[16];
+    ui_draw_command Commands[16];
     cim_u32         CommandCount;
 } ui_draw_list;
 

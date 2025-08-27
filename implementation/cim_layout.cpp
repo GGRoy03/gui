@@ -3,17 +3,12 @@ PopParent()
 {
     Cim_Assert(CimCurrent);
 
-    cim_layout      *Layout = UIP_LAYOUT;
+    cim_layout     *Layout = UIP_LAYOUT;
     ui_layout_tree *Tree   = &Layout->Tree; // This would access the current tree.
 
     if (Tree->AtParent > 0)
     {
-        cim_u32 IdToPop = Tree->Nodes[Tree->ParentStack[Tree->AtParent--]].Id;
-        if (IdToPop == Tree->FirstDragNode)
-        {
-            Tree->DragTransformX = 0;
-            Tree->DragTransformY = 0;
-        }
+        Tree->AtParent--;
     }
     else
     {
@@ -88,6 +83,7 @@ PushLayoutNode(bool IsContainer, ui_component_state *State)
     cim_u32         Parent = Tree->ParentStack[Tree->AtParent];
 
     Node->Id          = NodeId;
+    Node->ChildCount  = 0;
     Node->FirstChild  = CimLayout_InvalidNode;
     Node->LastChild   = CimLayout_InvalidNode;
     Node->NextSibling = CimLayout_InvalidNode;
@@ -130,80 +126,215 @@ PushLayoutNode(bool IsContainer, ui_component_state *State)
     return Node;
 }
 
-static ui_component *
-FindComponent(const char *Key)
+static ui_tree_sizing_result
+SizeLayoutTree(ui_layout_tree *Tree, ui_tree_stats *Stats)
 {
-    Cim_Assert(CimCurrent);
-    ui_component_hashmap *Hashmap = &UI_LAYOUT.Components;
+    ui_tree_sizing_result Result         = {};
+    char                  IsVisited[512] = {}; Cim_Assert(Tree->NodeCount < 512);
 
-    if (!Hashmap->IsInitialized)
+    Result.Top = 1;
+
+    while (Result.Top > 0)
     {
-        Hashmap->GroupCount = 32;
+        cim_u32 NodeIndex = Result.Stack[Result.Top - 1];
 
-        cim_u32 BucketCount = Hashmap->GroupCount * CimBucketGroupSize;
-        size_t  BucketSize = BucketCount * sizeof(ui_component_entry);
-        size_t  MetadataSize = BucketCount * sizeof(cim_u8);
-
-        Hashmap->Buckets = (ui_component_entry *)malloc(BucketSize);
-        Hashmap->Metadata = (cim_u8 *)malloc(MetadataSize);
-
-        if (!Hashmap->Buckets || !Hashmap->Metadata)
+        if (!IsVisited[NodeIndex])
         {
-            return NULL;
-        }
+            IsVisited[NodeIndex] = 1;
 
-        memset(Hashmap->Buckets, 0, BucketSize);
-        memset(Hashmap->Metadata, CimEmptyBucketTag, MetadataSize);
-
-        Hashmap->IsInitialized = true;
-    }
-
-    cim_u32 ProbeCount = 0;
-    cim_u32 Hashed = CimHash_String32(Key);
-    cim_u32 GroupIdx = Hashed & (Hashmap->GroupCount - 1);
-
-    while (true)
-    {
-        cim_u8 *Meta = Hashmap->Metadata + GroupIdx * CimBucketGroupSize;
-        cim_u8  Tag = (Hashed & 0x7F);
-
-        __m128i Mv = _mm_loadu_si128((__m128i *)Meta);
-        __m128i Tv = _mm_set1_epi8(Tag);
-
-        cim_i32 TagMask = _mm_movemask_epi8(_mm_cmpeq_epi8(Mv, Tv));
-        while (TagMask)
-        {
-            cim_u32 Lane = CimHash_FindFirstBit32(TagMask);
-            cim_u32 Idx = (GroupIdx * CimBucketGroupSize) + Lane;
-
-            ui_component_entry *E = Hashmap->Buckets + Idx;
-            if (strcmp(E->Key, Key) == 0)
+            cim_u32 ChildIndex = Tree->Nodes[NodeIndex].FirstChild;
+            while (ChildIndex != CimLayout_InvalidNode)
             {
-                return &E->Value;
+                Result.Stack[Result.Top++] = ChildIndex;
+                ChildIndex = Tree->Nodes[ChildIndex].NextSibling;
             }
 
-            TagMask &= TagMask - 1;
+            Stats->VisitedNodes += 1;
         }
-
-        __m128i Ev = _mm_set1_epi8(CimEmptyBucketTag);
-        cim_i32 EmptyMask = _mm_movemask_epi8(_mm_cmpeq_epi8(Mv, Ev));
-        if (EmptyMask)
+        else
         {
-            cim_u32 Lane = CimHash_FindFirstBit32(EmptyMask);
-            cim_u32 Idx = (GroupIdx * CimBucketGroupSize) + Lane;
+            ui_layout_node *Node = Tree->Nodes + NodeIndex;
 
-            Meta[Lane] = Tag;
+            switch (Node->ContainerType)
+            {
 
-            ui_component_entry *E = Hashmap->Buckets + Idx;
-            strcpy_s(E->Key, sizeof(E->Key), Key);
-            E->Key[sizeof(E->Key) - 1] = 0;
+            case UIContainer_None:
+            {
+                // If we directly set the with, then we don't have to do anything?
+            } break;
 
-            return &E->Value;
+            // NOTE: This code is only correct in the case where we want the container to fit the 
+            // content. Otherwise it is way different. And simpler perhaps? Except that we might need
+            // to clip elements? It seems quite trivial to change the behavior so that's good.
+            case UIContainer_Row:
+            {
+                cim_f32 MaximumHeight = 0;
+                cim_f32 TotalWidth = 0;
+
+                cim_u32 ChildIndex = Tree->Nodes[NodeIndex].FirstChild;
+                while (ChildIndex != CimLayout_InvalidNode)
+                {
+                    ui_layout_node *ChildNode = Tree->Nodes + ChildIndex;
+
+                    if (ChildNode->Height > MaximumHeight)
+                    {
+                        MaximumHeight = ChildNode->Height;
+                    }
+
+                    TotalWidth       += ChildNode->Width;
+                    Node->ChildCount += 1;
+
+                    ChildIndex = ChildNode->NextSibling;
+                }
+
+                cim_f32 TotalSpacing = Node->ChildCount > 1 ? Node->Spacing.x * (Node->ChildCount - 1) : 0.0f;
+
+                Node->Width  = TotalWidth + TotalSpacing + (Node->Padding.x + Node->Padding.z);
+                Node->Height = MaximumHeight + (Node->Padding.y + Node->Padding.w);
+
+            } break;
+
+            // NOTE: This code is only correct in the case where we want the container to fit the 
+            // content. Otherwise it is way different. And simpler perhaps? Except that we might need
+            // to clip elements? It seems quite trivial to change the behavior so that's good.
+            case UIContainer_Column:
+            {
+                cim_f32 MaximumWidth = 0;
+                cim_f32 TotalHeight = 0;
+
+                cim_u32 ChildIndex = Tree->Nodes[NodeIndex].FirstChild;
+                while (ChildIndex != CimLayout_InvalidNode)
+                {
+                    ui_layout_node *ChildNode = Tree->Nodes + ChildIndex;
+
+                    if (ChildNode->Width > MaximumWidth)
+                    {
+                        MaximumWidth = ChildNode->Width;
+                    }
+
+                    TotalHeight      += ChildNode->Height;
+                    Node->ChildCount += 1;
+
+                    ChildIndex = ChildNode->NextSibling;
+                }
+
+                cim_f32 TotalSpacing = (Node->ChildCount > 1) ? Node->Spacing.y * (Node->ChildCount - 1) : 0.0f;
+
+                Node->Width  = MaximumWidth + (Node->Padding.x + Node->Padding.z);
+                Node->Height = TotalHeight + (Node->Padding.y + Node->Padding.w) + TotalSpacing;
+            } break;
+
+            }
+
+            --Result.Top;
         }
-
-        ProbeCount++;
-        GroupIdx = (GroupIdx + ProbeCount * ProbeCount) & (Hashmap->GroupCount - 1);
     }
 
-    return NULL;
+    return Result;
+}
+
+static void
+PlaceLayoutTree(ui_layout_tree *Tree)
+{
+    cim_u32 Stack[1024] = {};
+    cim_u32 Top = 1;
+
+    cim_f32 ClientX, ClientY;
+
+    while (Top > 0)
+    {
+        Cim_Assert(Top < 1024);
+
+        cim_u32         NodeIndex = Stack[--Top];
+        ui_layout_node *Node      = Tree->Nodes + NodeIndex;
+
+        ClientX = Node->X + Node->Padding.x;
+        ClientY = Node->Y + Node->Padding.y;
+
+        cim_u32 StackWrite = Top + Node->ChildCount - 1;
+        cim_u32 ChildIndex = Node->FirstChild;
+        while (ChildIndex != CimLayout_InvalidNode)
+        {
+            ui_layout_node *ChildNode = Tree->Nodes + ChildIndex;
+            ChildNode->X = ClientX;
+            ChildNode->Y = ClientY;
+
+            switch (Node->ContainerType)
+            {
+            case UIContainer_None:
+            {
+                // NOTE: Pretty sure this should return an error.
+            } break;
+
+            case UIContainer_Row:
+            {
+                ClientX += ChildNode->Width + Node->Spacing.x;
+            } break;
+
+            case UIContainer_Column:
+            {
+                ClientY += ChildNode->Height + Node->Spacing.y;
+            } break;
+
+            }
+
+            Stack[StackWrite--] = ChildIndex;
+            ChildIndex          = ChildNode->NextSibling;
+        }
+
+        Top += Node->ChildCount;
+    }
+}
+
+static void
+HitTestLayoutTree(ui_layout_tree *Tree, ui_tree_sizing_result *SizingResult)
+{
+    bool MouseClicked = IsMouseClicked(CimMouse_Left, UIP_INPUT);
+
+    if (MouseClicked)
+    {
+        ui_layout_node *Root = Tree->Nodes;
+        cim_rect        WindowHitBox = MakeRectFromNode(Root);
+
+        if (IsInsideRect(WindowHitBox))
+        {
+            for (cim_u32 StackIdx = Tree->NodeCount - 1; StackIdx > 0; StackIdx--)
+            {
+                ui_layout_node *Node = Tree->Nodes + SizingResult->Stack[StackIdx];
+                cim_rect        HitBox = MakeRectFromNode(Node);
+
+                if (IsInsideRect(HitBox))
+                {
+                    if (Node->State)
+                    {
+                        Node->State->Clicked = MouseClicked;
+                        Node->State->Hovered = true;
+                    }
+
+                    return;
+                }
+            }
+
+            if (Root->State)
+            {
+                Root->State->Hovered = true;
+                Root->State->Clicked = MouseClicked;
+            }
+        }
+    }
+}
+
+static void
+UIEndLayout()
+{
+    Cim_Assert(CimCurrent);
+    ui_layout_tree *Tree = UIP_LAYOUT.Tree;
+
+    ui_tree_stats         Stats        = {};
+    ui_tree_sizing_result SizingResult = {};
+
+    SizingResult = SizeLayoutTree(Tree, &Stats); Cim_Assert(SizingResult.Top == 0);
+
+    PlaceLayoutTree(Tree);
+    HitTestLayoutTree(Tree, &SizingResult);
 }

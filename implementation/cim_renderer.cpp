@@ -98,52 +98,65 @@ UISetFont(ui_font Font)
 // [Agnostic Code]
 
 static ui_draw_command *
-GetDrawCommand(cim_cmd_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type PipelineType)
+AllocateDrawCommand(ui_draw_list *List)
 {
-    ui_draw_command *Command = NULL;
+    ui_draw_command *Result = NULL;
 
-    if (Buffer->CommandCount == Buffer->CommandSize)
+    if (List->CommandCount < Cim_ArrayCount(List->Commands))
     {
-        Buffer->CommandSize = Buffer->CommandSize ? Buffer->CommandSize * 2 : 32;
+        Result = List->Commands + List->CommandCount++;
+    }
 
-        ui_draw_command *New = (ui_draw_command *)malloc(Buffer->CommandSize * sizeof(ui_draw_command));
+    return Result;
+}
+
+static ui_draw_batch *
+GetDrawBatch(ui_draw_batch_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type PipelineType)
+{
+    ui_draw_batch *Batch = NULL;
+
+    if (Buffer->BatchCount == Buffer->BatchSize)
+    {
+        Buffer->BatchSize = Buffer->BatchSize ? Buffer->BatchSize * 2 : 32;
+
+        ui_draw_batch *New = (ui_draw_batch*)malloc(Buffer->BatchSize * sizeof(ui_draw_batch));
         if (!New)
         {
             return NULL;
         }
 
-        if (Buffer->Commands)
+        if (Buffer->Batches)
         {
-            memcpy(New, Buffer->Commands, Buffer->CommandCount * sizeof(ui_draw_command));
-            free(Buffer->Commands);
+            memcpy(New, Buffer->Batches, Buffer->BatchCount * sizeof(ui_draw_command));
+            free(Buffer->Batches);
         }
 
         // NOTE: Why do we memset?
-        memset(New, 0, Buffer->CommandSize * sizeof(ui_draw_command));
-        Buffer->Commands = New;
+        memset(New, 0, Buffer->BatchSize * sizeof(ui_draw_command));
+        Buffer->Batches = New;
     }
 
-    if (Buffer->CommandCount == 0 || !RectAreEqual(Buffer->CurrentClipRect, ClipRect) || Buffer->CurrentPipelineType != PipelineType)
+    if (Buffer->BatchCount == 0 || !RectAreEqual(Buffer->CurrentClipRect, ClipRect) || Buffer->CurrentPipelineType != PipelineType)
     {
-        Command = Buffer->Commands + Buffer->CommandCount++;
+        Batch = Buffer->Batches + Buffer->BatchCount++;
 
-        Command->VertexByteOffset = Buffer->FrameVtx.At;
-        Command->StartIndexRead   = Buffer->FrameIdx.At / sizeof(cim_u32); // Assuming 32 bits indices.
-        Command->BaseVertexOffset = 0;
-        Command->VtxCount         = 0;
-        Command->IdxCount         = 0;
-        Command->PipelineType     = PipelineType;
-        Command->ClippingRect     = ClipRect;
+        Batch->VertexByteOffset = Buffer->FrameVtx.At;
+        Batch->StartIndexRead   = Buffer->FrameIdx.At / sizeof(cim_u32); // Assuming 32 bits indices.
+        Batch->BaseVertexOffset = 0;
+        Batch->VtxCount         = 0;
+        Batch->IdxCount         = 0;
+        Batch->PipelineType     = PipelineType;
+        Batch->ClippingRect     = ClipRect;
 
         Buffer->CurrentPipelineType = PipelineType;
         Buffer->CurrentClipRect     = ClipRect;
     }
     else
     {
-        Command = Buffer->Commands + (Buffer->CommandCount - 1);
+        Batch = Buffer->Batches + (Buffer->BatchCount - 1);
     }
 
-    return Command;
+    return Batch;
 }
 
 // [Uber Shaders]
@@ -998,24 +1011,24 @@ D3DDrawUI(cim_i32 ClientWidth, cim_i32 ClientHeight)
     Cim_Assert(CimCurrent);
     d3d_backend *Backend = (d3d_backend *)CimCurrent->Backend; Cim_Assert(Backend);
 
-    HRESULT              Error     = S_OK;
-    ID3D11Device        *Device    = Backend->Device;        Cim_Assert(Device);
-    ID3D11DeviceContext *DeviceCtx = Backend->DeviceContext; Cim_Assert(DeviceCtx);
-    cim_cmd_buffer      *CmdBuffer = UIP_COMMANDS;
+    HRESULT               Error       = S_OK;
+    ID3D11Device         *Device      = Backend->Device;        Cim_Assert(Device);
+    ID3D11DeviceContext  *DeviceCtx   = Backend->DeviceContext; Cim_Assert(DeviceCtx);
+    ui_draw_batch_buffer *BatchBuffer = UIP_BATCHES;
 
     if (ClientWidth == 0 || ClientHeight == 0)
     {
-        CimArena_Reset(&CmdBuffer->FrameVtx);
-        CimArena_Reset(&CmdBuffer->FrameIdx);
-        CmdBuffer->CommandCount = 0;
+        CimArena_Reset(&BatchBuffer->FrameVtx);
+        CimArena_Reset(&BatchBuffer->FrameIdx);
+        BatchBuffer->BatchCount = 0;
         return;
     }
 
-    if (!Backend->VtxBuffer || CmdBuffer->FrameVtx.At > Backend->VtxBufferSize)
+    if (!Backend->VtxBuffer || BatchBuffer->FrameVtx.At > Backend->VtxBufferSize)
     {
         D3DSafeRelease(Backend->VtxBuffer);
 
-        Backend->VtxBufferSize = CmdBuffer->FrameVtx.At + 1024;
+        Backend->VtxBufferSize = BatchBuffer->FrameVtx.At + 1024;
 
         D3D11_BUFFER_DESC Desc = {};
         Desc.ByteWidth      = Backend->VtxBufferSize;
@@ -1027,11 +1040,11 @@ D3DDrawUI(cim_i32 ClientWidth, cim_i32 ClientHeight)
         D3DReturnVoid(Error);
     }
 
-    if (!Backend->IdxBuffer || CmdBuffer->FrameIdx.At > Backend->IdxBufferSize)
+    if (!Backend->IdxBuffer || BatchBuffer->FrameIdx.At > Backend->IdxBufferSize)
     {
         D3DSafeRelease(Backend->IdxBuffer);
 
-        Backend->IdxBufferSize = CmdBuffer->FrameIdx.At + 1024;
+        Backend->IdxBufferSize = BatchBuffer->FrameIdx.At + 1024;
 
         D3D11_BUFFER_DESC Desc = {};
         Desc.ByteWidth      = Backend->IdxBufferSize;
@@ -1046,22 +1059,22 @@ D3DDrawUI(cim_i32 ClientWidth, cim_i32 ClientHeight)
     D3D11_MAPPED_SUBRESOURCE VtxResource = {};
     Error = DeviceCtx->Map(Backend->VtxBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &VtxResource); 
     D3DReturnVoid(Error)
-    memcpy(VtxResource.pData, CmdBuffer->FrameVtx.Memory, CmdBuffer->FrameVtx.At);
+    memcpy(VtxResource.pData, BatchBuffer->FrameVtx.Memory, BatchBuffer->FrameVtx.At);
     DeviceCtx->Unmap(Backend->VtxBuffer, 0);
 
     D3D11_MAPPED_SUBRESOURCE IdxResource = {};
     Error = DeviceCtx->Map(Backend->IdxBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &IdxResource);
     D3DReturnVoid(Error)
-    memcpy(IdxResource.pData, CmdBuffer->FrameIdx.Memory, CmdBuffer->FrameIdx.At);
+    memcpy(IdxResource.pData, BatchBuffer->FrameIdx.Memory, BatchBuffer->FrameIdx.At);
     DeviceCtx->Unmap(Backend->IdxBuffer, 0);
 
     Error = SetupD3DRenderState(ClientWidth, ClientHeight, Backend);
     D3DReturnVoid(Error)
 
-    for (cim_u32 CmdIdx = 0; CmdIdx < CmdBuffer->CommandCount; CmdIdx++)
+    for (cim_u32 CmdIdx = 0; CmdIdx < BatchBuffer->BatchCount; CmdIdx++)
     {
-        ui_draw_command *Command  = CmdBuffer->Commands + CmdIdx;
-        d3d_pipeline     *Pipeline = &Pipelines[Command->PipelineType];
+        ui_draw_batch *Batch    = BatchBuffer->Batches + CmdIdx;
+        d3d_pipeline  *Pipeline = &Pipelines[Batch->PipelineType];
 
         // BUG: When drawing text we never bind the texture, since we don't even know how.
         // What do we even do then? We need the access to the font associated with the pipeline.
@@ -1069,22 +1082,18 @@ D3DDrawUI(cim_i32 ClientWidth, cim_i32 ClientHeight)
         // renderer?
 
         DeviceCtx->IASetInputLayout(Pipeline->Layout);
-        DeviceCtx->IASetVertexBuffers(0, 1, &Backend->VtxBuffer, &Pipeline->Stride, (UINT *)&Command->VertexByteOffset);
+        DeviceCtx->IASetVertexBuffers(0, 1, &Backend->VtxBuffer, &Pipeline->Stride, (UINT *)&Batch->VertexByteOffset);
 
         DeviceCtx->VSSetShader(Pipeline->VtxShader, NULL, 0);
-        if (Command->PipelineType == UIPipeline_Text)
-        {
-            DeviceCtx->PSSetShaderResources(0, 1, &Command->Font.FontObjects->GlyphCacheView);
-        }
 
         DeviceCtx->PSSetShader(Pipeline->PxlShader, NULL, 0);
 
-        DeviceCtx->DrawIndexed(Command->IdxCount, Command->StartIndexRead, Command->BaseVertexOffset);
+        DeviceCtx->DrawIndexed(Batch->IdxCount, Batch->StartIndexRead, Batch->BaseVertexOffset);
     }
 
-    CimArena_Reset(&CmdBuffer->FrameVtx);
-    CimArena_Reset(&CmdBuffer->FrameIdx);
-    CmdBuffer->CommandCount = 0;
+    CimArena_Reset(&BatchBuffer->FrameVtx);
+    CimArena_Reset(&BatchBuffer->FrameIdx);
+    BatchBuffer->BatchCount = 0;
 }
 
 static void

@@ -28,12 +28,38 @@ MakeRectFromNode(ui_layout_node *Node)
     return Rect;
 }
 
+static ui_layout_node_state
+GetUILayoutNodeState(cim_u32 Index)
+{
+    Cim_Assert(CimCurrent);
+
+    ui_layout_node_state Result = {};
+    cim_layout          *Layout = UIP_LAYOUT;
+    ui_layout_tree      *Tree   = &Layout->Tree; // This would access the current tree.
+
+    if (Index < Tree->NodeCount)
+    {
+        ui_layout_node *Node = Tree->Nodes + Index;
+
+        Result.X      = Node->X;
+        Result.Y      = Node->Y;
+        Result.Height = Node->Height;
+        Result.Width  = Node->Width;
+    }
+    else
+    { 
+        CimLog_Error("Internal Error: Invalid index:%u used to access a layout node.", Index);
+    }
+
+    return Result;
+}
+
 static ui_layout_node *
 GetUILayoutNode(cim_u32 Index)
 {
     Cim_Assert(CimCurrent);
 
-    cim_layout      *Layout = UIP_LAYOUT;
+    cim_layout     *Layout = UIP_LAYOUT;
     ui_layout_tree *Tree   = &Layout->Tree; // This would access the current tree.
 
     if (Index < Tree->NodeCount)

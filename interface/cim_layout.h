@@ -96,6 +96,14 @@ typedef struct ui_layout_node
     ui_component_state *State;
 } ui_layout_node;
 
+typedef struct ui_layout_node_state
+{
+    cim_f32 X;
+    cim_f32 Y;
+    cim_f32 Width;
+    cim_f32 Height;
+} ui_layout_node_state;
+
 typedef struct ui_layout_tree
 {
     // Memory pool

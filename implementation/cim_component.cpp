@@ -84,10 +84,11 @@ FindComponent(const char *Key)
     return NULL;
 }
 
+// NOTE: Then do we simply want a helper macro that does this stuff for us user side?
 static void
 UILayoutRow(bool DrawEdges)
 {
-    DrawEdges = false; // Because unused, but this would be used for debugging for example.
+    DrawEdges = false; // Because unused, but this would be used for debugging. 
 
     ui_layout_node *LayoutNode = PushLayoutNode(true, NULL); Cim_Assert(LayoutNode);
     LayoutNode->Padding       = {5, 5, 5, 5};
@@ -101,6 +102,16 @@ UIEndLayoutRow()
     PopParent();
 }
 
+// TODO: Figure this out.
+static void
+UILayoutText(const char *TextToRender)
+{
+    Cim_Assert(CimCurrent && CimCurrent->CurrentFont.IsValid && TextToRender);
+
+    // TODO: How do we query the state. Can we simply hash the string?
+    // That seems heavy.
+}
+
 static bool
 UILayoutWindow(const char *Id, const char *ThemeId, ui_component_state *State)
 {
@@ -110,31 +121,44 @@ UILayoutWindow(const char *Id, const char *ThemeId, ui_component_state *State)
     ui_component   *Component  = FindComponent(Id);           Cim_Assert(Component);
 
     ui_window_theme Theme = GetWindowTheme(ThemeId, Component->ThemeId);
-    if (Theme.ThemeId.Value)
+    Cim_Assert(Theme.ThemeId.Value);
+
+    LayoutNode->Padding       = Theme.Padding;
+    LayoutNode->Spacing       = Theme.Spacing;
+    LayoutNode->ContainerType = UIContainer_Column;
+
+    // TODO: Get the X,Y from somewhere else and do a better job for the layout.
+    LayoutNode->X = 500.0f;
+    LayoutNode->Y = 400.0f;
+
+    if (Theme.BorderWidth > 0)
     {
-        // NOTE: As far as I understand, we don't even need to specify a size if it tries to fit its content.
-        // Only in that case though, so we might as well specify it?
-
-        LayoutNode->Padding       = Theme.Padding;
-        LayoutNode->Spacing       = Theme.Spacing;
-        LayoutNode->ContainerType = UIContainer_Column;
-
-        // TODO: Get the X,Y from somewhere else and do a better job for the layout.
-        LayoutNode->X = 500.0f;
-        LayoutNode->Y = 400.0f;
-    }
-
-    // NOTE: Draw commands needs: Layout Node (Position/Size) && Theme (Colors, Others)
-    ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-    if (Command)
-    {
-        Command->Type         = UICommand_Window;  // NOTE: I believe this is wrong. Must be more general?
+        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+        Command->Type         = UICommand_Border;
         Command->Pipeline     = UIPipeline_Default;
         Command->ClippingRect = {};
         Command->LayoutNodeId = LayoutNode->Id;
-        Command->ThemeId      = Theme.ThemeId;
+
+        // We now set extra data the layout doesn't care about.
+        Command->ExtraData.Border.Color = Theme.BorderColor;
+        Command->ExtraData.Border.Width = Theme.BorderWidth;
     }
 
+    {
+        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+        if (Command)
+        {
+            Command->Type         = UICommand_Quad;
+            Command->Pipeline     = UIPipeline_Default;
+            Command->ClippingRect = {};
+            Command->LayoutNodeId = LayoutNode->Id;
+
+            // We now set extra data the layout doesn't care about.
+            Command->ExtraData.Quad.Color = Theme.Color;
+        }
+    }
+
+    // Cache it for faster retrieval. Could be done at initialization if we have that.
     Component->ThemeId = Theme.ThemeId;
 
     return true;
@@ -155,155 +179,34 @@ UILayoutButton(const char *Id, const char *ThemeId, ui_component_state *State)
         LayoutNode->Height = Theme.Size.y;
     }
 
-    // NOTE: Draw commands needs: Layout Node (Position/Size) && Theme (Colors, Others)
-    ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-    if (Command)
+    if (Theme.BorderWidth > 0)
     {
-        Command->Type         = UICommand_Button;
+        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+        Command->Type         = UICommand_Border;
         Command->Pipeline     = UIPipeline_Default;
         Command->ClippingRect = {};
         Command->LayoutNodeId = LayoutNode->Id;
-        Command->ThemeId      = Component->ThemeId = Theme.ThemeId;
+
+        // We now set extra data the layout doesn't care about.
+        Command->ExtraData.Border.Color = Theme.BorderColor;
+        Command->ExtraData.Border.Width = Theme.BorderWidth;
     }
-}
 
-static void
-UIEndDraw(ui_draw_list *DrawList)
-{
-    // TODO: Can we make this better? With less access to other parts of the code?
-
-    for (cim_u32 CommandIdx = 0; CommandIdx < DrawList->CommandCount; CommandIdx++)
     {
-        ui_draw_command *Command    = DrawList->Commands + CommandIdx;
-        ui_layout_node  *LayoutNode = GetUILayoutNode(Command->LayoutNodeId);
-        ui_draw_batch   *Batch      = GetDrawBatch(UIP_BATCHES, Command->ClippingRect, Command->Pipeline);
-
-        switch (Command->Type)
+        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+        if (Command)
         {
+            Command->Type         = UICommand_Quad;
+            Command->Pipeline     = UIPipeline_Default;
+            Command->ClippingRect = {};
+            Command->LayoutNodeId = LayoutNode->Id;
 
-        case UICommand_Window:
-        {
-            ui_window_theme Theme = GetWindowTheme(NULL, Command->ThemeId);
-
-            if (Theme.BorderWidth > 0)
-            {
-                cim_f32 X0 = LayoutNode->X - Theme.BorderWidth;
-                cim_f32 Y0 = LayoutNode->Y - Theme.BorderWidth;
-                cim_f32 X1 = LayoutNode->X + LayoutNode->Width  + Theme.BorderWidth;
-                cim_f32 Y1 = LayoutNode->Y + LayoutNode->Height + Theme.BorderWidth;
-
-                ui_vertex Borders[4];
-                Borders[0] = {X0, Y0, 0.0f, 1.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
-                Borders[1] = {X0, Y1, 0.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
-                Borders[2] = {X1, Y0, 1.0f, 1.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
-                Borders[3] = {X1, Y1, 1.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w};
-
-                cim_u32 Indices[6];
-                Indices[0] = Batch->VtxCount + 0;
-                Indices[1] = Batch->VtxCount + 2;
-                Indices[2] = Batch->VtxCount + 1;
-                Indices[3] = Batch->VtxCount + 2;
-                Indices[4] = Batch->VtxCount + 3;
-                Indices[5] = Batch->VtxCount + 1;
-
-                WriteToArena(Borders, sizeof(Borders), UIP_BATCHES.FrameVtx);
-                WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
-
-                Batch->VtxCount += 4;
-                Batch->IdxCount += 6;
-            }
-
-            cim_f32 X0 = LayoutNode->X;
-            cim_f32 Y0 = LayoutNode->Y;
-            cim_f32 X1 = LayoutNode->X + LayoutNode->Width;
-            cim_f32 Y1 = LayoutNode->Y + LayoutNode->Height;
-
-            ui_vertex Body[4];
-            Body[0] = {X0, Y0, 0.0f, 1.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
-            Body[1] = {X0, Y1, 0.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
-            Body[2] = {X1, Y0, 1.0f, 1.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
-            Body[3] = {X1, Y1, 1.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w};
-
-            cim_u32 Indices[6];
-            Indices[0] = Batch->VtxCount + 0;
-            Indices[1] = Batch->VtxCount + 2;
-            Indices[2] = Batch->VtxCount + 1;
-            Indices[3] = Batch->VtxCount + 2;
-            Indices[4] = Batch->VtxCount + 3;
-            Indices[5] = Batch->VtxCount + 1;
-
-            WriteToArena(Body   , sizeof(Body)   , UIP_BATCHES.FrameVtx);
-            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
-
-            Batch->VtxCount += 4;
-            Batch->IdxCount += 6;
-
-        } break;
-
-        case UICommand_Button:
-        {
-            ui_button_theme Theme = GetButtonTheme(NULL, Command->ThemeId);
-
-            if (Theme.BorderWidth > 0)
-            {
-                cim_f32 X0 = LayoutNode->X - Theme.BorderWidth;
-                cim_f32 Y0 = LayoutNode->Y - Theme.BorderWidth;
-                cim_f32 X1 = LayoutNode->X + LayoutNode->Width + Theme.BorderWidth;
-                cim_f32 Y1 = LayoutNode->Y + LayoutNode->Height + Theme.BorderWidth;
-
-                ui_vertex Borders[4];
-                Borders[0] = { X0, Y0, 0.0f, 1.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w };
-                Borders[1] = { X0, Y1, 0.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w };
-                Borders[2] = { X1, Y0, 1.0f, 1.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w };
-                Borders[3] = { X1, Y1, 1.0f, 0.0f, Theme.BorderColor.x, Theme.BorderColor.y, Theme.BorderColor.z, Theme.BorderColor.w };
-
-                cim_u32 Indices[6];
-                Indices[0] = Batch->VtxCount + 0;
-                Indices[1] = Batch->VtxCount + 2;
-                Indices[2] = Batch->VtxCount + 1;
-                Indices[3] = Batch->VtxCount + 2;
-                Indices[4] = Batch->VtxCount + 3;
-                Indices[5] = Batch->VtxCount + 1;
-
-                WriteToArena(Borders, sizeof(Borders), UIP_BATCHES.FrameVtx);
-                WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
-
-                Batch->VtxCount += 4;
-                Batch->IdxCount += 6;
-            }
-
-            cim_f32 X0 = LayoutNode->X;
-            cim_f32 Y0 = LayoutNode->Y;
-            cim_f32 X1 = LayoutNode->X + LayoutNode->Width;
-            cim_f32 Y1 = LayoutNode->Y + LayoutNode->Height;
-
-            ui_vertex Body[4];
-            Body[0] = { X0, Y0, 0.0f, 1.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w };
-            Body[1] = { X0, Y1, 0.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w };
-            Body[2] = { X1, Y0, 1.0f, 1.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w };
-            Body[3] = { X1, Y1, 1.0f, 0.0f,  Theme.Color.x, Theme.Color.y, Theme.Color.z, Theme.Color.w };
-
-            cim_u32 Indices[6];
-            Indices[0] = Batch->VtxCount + 0;
-            Indices[1] = Batch->VtxCount + 2;
-            Indices[2] = Batch->VtxCount + 1;
-            Indices[3] = Batch->VtxCount + 2;
-            Indices[4] = Batch->VtxCount + 3;
-            Indices[5] = Batch->VtxCount + 1;
-
-            WriteToArena(Body   , sizeof(Body)   , UIP_BATCHES.FrameVtx);
-            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
-
-            Batch->VtxCount += 4;
-            Batch->IdxCount += 6;
-
-        } break;
-
+            // We now set extra data the layout doesn't care about.
+            Command->ExtraData.Quad.Color = Theme.Color;
         }
     }
-
-    DrawList->CommandCount = 0;
 }
+
 
 //// NOTE: We probably don't want to take this as an argument. Something like UISetFont.
 //static void

@@ -19,14 +19,6 @@ typedef enum UIPipeline_Type
     UIPipeline_Count   = 3,
 } UIPipeline_Type;
 
-// NOTE: This probably changes
-typedef enum UICommand_Type
-{
-    UICommand_None   = 0,
-    UICommand_Window = 1,
-    UICommand_Button = 2,
-} UICommand_Type;
-
 typedef struct ui_shader_desc
 {
     char         *SourceCode;
@@ -69,13 +61,37 @@ typedef struct ui_draw_batch_buffer
     UIPipeline_Type CurrentPipelineType;
 } ui_draw_batch_buffer;
 
+// NOTE: This probably changes
+typedef enum UICommand_Type
+{
+    UICommand_None   = 0,
+    UICommand_Quad   = 1,
+    UICommand_Border = 2,
+    UICommand_Text   = 3,
+} UICommand_Type;
+
+typedef struct ui_draw_command_quad
+{
+    cim_vector4 Color;
+} ui_draw_command_quad;
+
+typedef struct ui_draw_command_border
+{
+    cim_vector4 Color;
+    cim_f32     Width;
+} ui_draw_command_border;
+
 typedef struct ui_draw_command
 {
     UICommand_Type Type;
+    union
+    {
+        ui_draw_command_quad   Quad;
+        ui_draw_command_border Border;
+    } ExtraData;
 
     // Data-Retrieval
     cim_u32  LayoutNodeId;
-    theme_id ThemeId;
 
     cim_rect        ClippingRect;
     UIPipeline_Type Pipeline;

@@ -159,6 +159,92 @@ GetDrawBatch(ui_draw_batch_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type Pi
     return Batch;
 }
 
+static void
+UIEndDraw(ui_draw_list *DrawList)
+{
+    for (cim_u32 CommandIdx = 0; CommandIdx < DrawList->CommandCount; CommandIdx++)
+    {
+        ui_draw_command *Command = DrawList->Commands + CommandIdx;
+        ui_draw_batch   *Batch   = GetDrawBatch(UIP_BATCHES, Command->ClippingRect, Command->Pipeline);
+
+        switch (Command->Type)
+        {
+
+        case UICommand_Quad:
+        {
+            ui_layout_node_state NodeState = GetUILayoutNodeState(Command->LayoutNodeId);
+            ui_draw_command_quad Quad      = Command->ExtraData.Quad;
+
+            cim_f32 X0 = NodeState.X;
+            cim_f32 Y0 = NodeState.Y;
+            cim_f32 X1 = NodeState.X + NodeState.Width;
+            cim_f32 Y1 = NodeState.Y + NodeState.Height;
+
+            ui_vertex Body[4];
+            Body[0] = {X0, Y0, 0.0f, 1.0f,  Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+            Body[1] = {X0, Y1, 0.0f, 0.0f,  Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+            Body[2] = {X1, Y0, 1.0f, 1.0f,  Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+            Body[3] = {X1, Y1, 1.0f, 0.0f,  Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+
+            cim_u32 Indices[6];
+            Indices[0] = Batch->VtxCount + 0;
+            Indices[1] = Batch->VtxCount + 2;
+            Indices[2] = Batch->VtxCount + 1;
+            Indices[3] = Batch->VtxCount + 2;
+            Indices[4] = Batch->VtxCount + 3;
+            Indices[5] = Batch->VtxCount + 1;
+
+            WriteToArena(Body   , sizeof(Body)   , UIP_BATCHES.FrameVtx);
+            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
+
+            Batch->VtxCount += 4;
+            Batch->IdxCount += 6;
+
+        } break;
+
+        case UICommand_Border:
+        {
+            ui_layout_node_state   NodeState = GetUILayoutNodeState(Command->LayoutNodeId);
+            ui_draw_command_border Border    = Command->ExtraData.Border;
+            Cim_Assert(Border.Width > 0);
+
+            cim_f32 X0 = NodeState.X - Border.Width;
+            cim_f32 Y0 = NodeState.Y - Border.Width;
+            cim_f32 X1 = NodeState.X + NodeState.Width + Border.Width;
+            cim_f32 Y1 = NodeState.Y + NodeState.Height + Border.Width;
+
+            ui_vertex Borders[4];
+            Borders[0] = {X0, Y0, 0.0f, 1.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
+            Borders[1] = {X0, Y1, 0.0f, 0.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
+            Borders[2] = {X1, Y0, 1.0f, 1.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
+            Borders[3] = {X1, Y1, 1.0f, 0.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
+
+            cim_u32 Indices[6];
+            Indices[0] = Batch->VtxCount + 0;
+            Indices[1] = Batch->VtxCount + 2;
+            Indices[2] = Batch->VtxCount + 1;
+            Indices[3] = Batch->VtxCount + 2;
+            Indices[4] = Batch->VtxCount + 3;
+            Indices[5] = Batch->VtxCount + 1;
+
+            WriteToArena(Borders, sizeof(Borders), UIP_BATCHES.FrameVtx);
+            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
+
+            Batch->VtxCount += 4;
+            Batch->IdxCount += 6;
+        } break;
+
+        default:
+        {
+            CimLog_Warn("Unknown command type.");
+        } break;
+
+        }
+    }
+
+    DrawList->CommandCount = 0;
+}
+
 // [Uber Shaders]
 // NOTE: I still don't really know what I want to do with this.
 // It's kind of annoying to maintain?

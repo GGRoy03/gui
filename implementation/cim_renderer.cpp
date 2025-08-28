@@ -1,7 +1,7 @@
 // D3D Interface.
 static bool    D3DInitialize     (void *UserDevice, void *UserContext);
 static void    D3DDrawUI         (cim_i32 ClientWidth, cim_i32 ClientHeight);
-static void    D3DTransferGlyph  (stbrp_rect Rect, ui_font Font);
+static void    D3DTransferGlyph  (stbrp_rect Rect, ui_font *Font);
 static ui_font D3DLoadFont       (const char *FontName, cim_f32 FontSize);
 static void    D3DReleaseFont    (ui_font *Font);
 
@@ -27,7 +27,7 @@ InitializeRenderer(CimRenderer_Backend Backend, void *Param1, void *Param2) // W
             Renderer->TransferGlyph = D3DTransferGlyph; // Internal
             Renderer->LoadFont      = D3DLoadFont;      // Public
             Renderer->ReleaseFont   = D3DReleaseFont;   // Public
-           
+
         }
     } break;
 
@@ -42,7 +42,7 @@ InitializeRenderer(CimRenderer_Backend Backend, void *Param1, void *Param2) // W
 
 // WARN: This is internal only, unsure where to put this.
 static void
-TransferGlyph(stbrp_rect Rect, ui_font Font)
+TransferGlyph(stbrp_rect Rect, ui_font *Font)
 {
     Cim_Assert(CimCurrent);
     CimCurrent->Renderer.TransferGlyph(Rect, Font);
@@ -52,10 +52,10 @@ TransferGlyph(stbrp_rect Rect, ui_font Font)
 
 // TODO: Check if this is inlined.
 static ui_font
-UILoadFont(const char *FileName, cim_f32 FontSize)
+UILoadFont(const char *FontName, cim_f32 FontSize)
 {
     Cim_Assert(CimCurrent);
-    ui_font Result = CimCurrent->Renderer.LoadFont(FileName, FontSize);
+    ui_font Result = CimCurrent->Renderer.LoadFont(FontName, FontSize);
     return Result;
 }
 
@@ -81,17 +81,17 @@ UIUnloadFont(ui_font *Font)
 }
 
 static void
-UISetFont(ui_font Font)
+UISetFont(ui_font *Font)
 {
     Cim_Assert(CimCurrent);
 
-    if (Font.IsValid)
+    if (Font->IsValid)
     {
         CimCurrent->CurrentFont = Font;
     }
     else
     {
-        // TODO: Set a default font?
+        // TODO: Set a default font/log?
     }
 }
 
@@ -127,12 +127,12 @@ GetDrawBatch(ui_draw_batch_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type Pi
 
         if (Buffer->Batches)
         {
-            memcpy(New, Buffer->Batches, Buffer->BatchCount * sizeof(ui_draw_command));
+            memcpy(New, Buffer->Batches, Buffer->BatchCount * sizeof(ui_draw_batch));
             free(Buffer->Batches);
         }
 
         // NOTE: Why do we memset?
-        memset(New, 0, Buffer->BatchSize * sizeof(ui_draw_command));
+        memset(New, 0, Buffer->BatchSize * sizeof(ui_draw_batch));
         Buffer->Batches = New;
     }
 
@@ -141,7 +141,7 @@ GetDrawBatch(ui_draw_batch_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type Pi
         Batch = Buffer->Batches + Buffer->BatchCount++;
 
         Batch->VertexByteOffset = Buffer->FrameVtx.At;
-        Batch->StartIndexRead   = Buffer->FrameIdx.At / sizeof(cim_u32); // Assuming 32 bits indices.
+        Batch->StartIndexRead   = Buffer->FrameIdx.At / sizeof(cim_u32);
         Batch->BaseVertexOffset = 0;
         Batch->VtxCount         = 0;
         Batch->IdxCount         = 0;
@@ -210,7 +210,7 @@ UIEndDraw(ui_draw_list *DrawList)
 
             cim_f32 X0 = NodeState.X - Border.Width;
             cim_f32 Y0 = NodeState.Y - Border.Width;
-            cim_f32 X1 = NodeState.X + NodeState.Width + Border.Width;
+            cim_f32 X1 = NodeState.X + NodeState.Width  + Border.Width;
             cim_f32 Y1 = NodeState.Y + NodeState.Height + Border.Width;
 
             ui_vertex Borders[4];
@@ -232,6 +232,76 @@ UIEndDraw(ui_draw_list *DrawList)
 
             Batch->VtxCount += 4;
             Batch->IdxCount += 6;
+        } break;
+
+        case UICommand_Text:
+        {
+            ui_layout_node_state NodeState = GetUILayoutNodeState(Command->LayoutNodeId);
+            ui_draw_command_text Text      = Command->ExtraData.Text;
+            text_layout_info     Layout    = Text.Layout;
+
+            // WARN: This code is very very buggy. It also comes from how we supplying
+            // the text layouts. It would help if instead of text layouts (Whole glyph runs)
+            // we cached layout information on the glyph itself. Would make it, such that we
+            // rely less on the state of the component. And overall simpler logic. Because we
+            // can simply do single glyph runs, can't we? So why do we care about the layout
+            // if we can query all of the information and do our own layout. This also doesn't
+            // handle right to left text.
+
+            cim_f32 MiddleXOffset = (NodeState.Width  - Layout.Width)  / 2;
+            cim_f32 MiddleYOffset = (NodeState.Height - Layout.Height) / 2;
+
+            cim_f32 PenX   = NodeState.X + MiddleXOffset;
+            cim_f32 PenY   = NodeState.Y + MiddleYOffset;
+            cim_f32 StartX = PenX;
+
+            // TODO: Change GetGlyphEntry to something that returns a subset
+            // of the needed information.
+
+            for(cim_u32 Idx = 0; Idx < Layout.GlyphCount; Idx++)
+            {
+                glyph_layout_info GlyphLayout = Layout.GlyphLayoutInfo[Idx];
+                glyph_entry      *Glyph       = GetGlyphEntry(Text.Font.Table, GlyphLayout.MapId);
+
+                // TODO: Double check this.
+                if(PenX + GlyphLayout.AdvanceX > StartX + Layout.Width && (Idx != Layout.GlyphCount - 1))
+                {
+                    PenX  = StartX;
+                    PenY += Text.Font.LineHeight;
+                }
+
+                cim_f32 MinX = PenX + GlyphLayout.OffsetX;
+                cim_f32 MinY = PenY + GlyphLayout.OffsetY;
+                cim_f32 MaxX = MinX + Glyph->Size.Width;
+                cim_f32 MaxY = MinY + Glyph->Size.Height;
+
+                // BUG: ui_vertex is incorrect with this type of data.
+                ui_text_vertex Quad[4];
+                Quad[0] = {MinX, MinY, Glyph->U0, Glyph->V0}; // Top-left
+                Quad[1] = {MinX, MaxY, Glyph->U0, Glyph->V1}; // Bottom-left
+                Quad[2] = {MaxX, MinY, Glyph->U1, Glyph->V0}; // Top-right
+                Quad[3] = {MaxX, MaxY, Glyph->U1, Glyph->V1}; // Bottom-right
+
+                cim_u32 Indices[6];
+                Indices[0] = Batch->VtxCount + 0;
+                Indices[1] = Batch->VtxCount + 2;
+                Indices[2] = Batch->VtxCount + 1;
+                Indices[3] = Batch->VtxCount + 2;
+                Indices[4] = Batch->VtxCount + 3;
+                Indices[5] = Batch->VtxCount + 1;
+
+                WriteToArena(Quad   , sizeof(Quad)   , UIP_BATCHES.FrameVtx);
+                WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);
+
+                Batch->VtxCount += 4;
+                Batch->IdxCount += 6;
+
+                PenX += GlyphLayout.AdvanceX;
+            }
+
+            // WARN: Probably temporary. Change this when we rework pipelines.
+            Batch->Font = Command->ExtraData.Text.Font;
+
         } break;
 
         default:
@@ -925,12 +995,12 @@ D3DLoadFont(const char *FontName, cim_f32 FontSize)
     Params.HashCount  = 256;
     Params.EntryCount = 1024;
 
-    size_t OSFontObjectsSize  = GetFontObjectsFootprint();
-    size_t GlyphTableSize     = GetGlyphTableFootprint(Params);
-    size_t FontObjectsSize    = sizeof(renderer_font_objects);
-    size_t AtlasAllocatorSize = Font.AtlasWidth * sizeof(stbrp_node);
+    size_t OSFontObjectsSize = GetFontObjectsFootprint();
+    size_t GlyphTableSize    = GetGlyphTableFootprint(Params);
+    size_t FontObjectsSize   = sizeof(renderer_font_objects);
+    size_t AtlasNodesSize    = Font.AtlasWidth * sizeof(stbrp_node);
 
-    size_t HeapSize    = OSFontObjectsSize + GlyphTableSize + FontObjectsSize + AtlasAllocatorSize;
+    size_t HeapSize    = OSFontObjectsSize + GlyphTableSize + FontObjectsSize + AtlasNodesSize;
     char  *HeapPointer = (char *)malloc(HeapSize);
     if (!HeapPointer)
     {
@@ -939,11 +1009,10 @@ D3DLoadFont(const char *FontName, cim_f32 FontSize)
     memset(HeapPointer, 0, HeapSize);
     Font.HeapBase = HeapPointer;
 
-    // WARN: Misaligned stuff? Need to check that. Maybe causing some crashes.
     Font.Table         = PlaceGlyphTableInMemory(Params, HeapPointer);
     Font.FontObjects   = (renderer_font_objects *) (HeapPointer + GlyphTableSize);
     Font.AtlasNodes    = (stbrp_node *)            (HeapPointer + GlyphTableSize + FontObjectsSize);
-    Font.OSFontObjects = (os_font_objects *)       (HeapPointer + GlyphTableSize + FontObjectsSize + AtlasAllocatorSize);
+    Font.OSFontObjects = (os_font_objects *)       (HeapPointer + GlyphTableSize + FontObjectsSize + AtlasNodesSize);
 
     // NOTE: The glyph cache and the glyph transfer are created with some hardcoded numbers
     // for now I probable need to know more about the font and use the table params to set
@@ -1162,17 +1231,18 @@ D3DDrawUI(cim_i32 ClientWidth, cim_i32 ClientHeight)
         ui_draw_batch *Batch    = BatchBuffer->Batches + CmdIdx;
         d3d_pipeline  *Pipeline = &Pipelines[Batch->PipelineType];
 
-        // BUG: When drawing text we never bind the texture, since we don't even know how.
-        // What do we even do then? We need the access to the font associated with the pipeline.
-        // Let's just do something really bad for now. And maybe refactor this to command based
-        // renderer?
-
         DeviceCtx->IASetInputLayout(Pipeline->Layout);
         DeviceCtx->IASetVertexBuffers(0, 1, &Backend->VtxBuffer, &Pipeline->Stride, (UINT *)&Batch->VertexByteOffset);
 
         DeviceCtx->VSSetShader(Pipeline->VtxShader, NULL, 0);
 
         DeviceCtx->PSSetShader(Pipeline->PxlShader, NULL, 0);
+
+        // TODO: Change this cluster fuck (Pipelines included)
+        if (Batch->PipelineType == UIPipeline_Text)
+        {
+            DeviceCtx->PSSetShaderResources(0, 1, &Batch->Font.FontObjects->GlyphCacheView);
+        }
 
         DeviceCtx->DrawIndexed(Batch->IdxCount, Batch->StartIndexRead, Batch->BaseVertexOffset);
     }
@@ -1183,7 +1253,7 @@ D3DDrawUI(cim_i32 ClientWidth, cim_i32 ClientHeight)
 }
 
 static void
-D3DTransferGlyph(stbrp_rect Rect, ui_font Font)
+D3DTransferGlyph(stbrp_rect Rect, ui_font *Font)
 {
     Cim_Assert(CimCurrent);
     Cim_Assert(CimCurrent->Backend);
@@ -1200,8 +1270,8 @@ D3DTransferGlyph(stbrp_rect Rect, ui_font Font)
         SourceBox.bottom = Rect.h;
         SourceBox.back   = 1;
 
-        Backend->DeviceContext->CopySubresourceRegion(Font.FontObjects->GlyphCache, 0, Rect.x, Rect.y, 0,
-                                                      Font.FontObjects->GlyphTransfer, 0, &SourceBox);
+        Backend->DeviceContext->CopySubresourceRegion(Font->FontObjects->GlyphCache, 0, Rect.x, Rect.y, 0,
+                                                      Font->FontObjects->GlyphTransfer, 0, &SourceBox);
     }
 }
 

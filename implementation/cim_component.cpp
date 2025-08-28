@@ -86,34 +86,22 @@ FindComponent(const char *Key)
 
 // NOTE: Then do we simply want a helper macro that does this stuff for us user side?
 static void
-UILayoutRow(bool DrawEdges)
+UIRow(void)
 {
-    DrawEdges = false; // Because unused, but this would be used for debugging. 
-
     ui_layout_node *LayoutNode = PushLayoutNode(true, NULL); Cim_Assert(LayoutNode);
     LayoutNode->Padding       = {5, 5, 5, 5};
-    LayoutNode->Spacing       = {20, 0};
+    LayoutNode->Spacing       = {10, 0};
     LayoutNode->ContainerType = UIContainer_Row;
 }
 
 static void
-UIEndLayoutRow()
+UIEndRow()
 {
     PopParent();
 }
 
-// TODO: Figure this out.
-static void
-UILayoutText(const char *TextToRender)
-{
-    Cim_Assert(CimCurrent && CimCurrent->CurrentFont.IsValid && TextToRender);
-
-    // TODO: How do we query the state. Can we simply hash the string?
-    // That seems heavy.
-}
-
 static bool
-UILayoutWindow(const char *Id, const char *ThemeId, ui_component_state *State)
+UIWindow(const char *Id, const char *ThemeId, ui_component_state *State)
 {
     Cim_Assert(CimCurrent && Id && ThemeId);
 
@@ -139,7 +127,6 @@ UILayoutWindow(const char *Id, const char *ThemeId, ui_component_state *State)
         Command->ClippingRect = {};
         Command->LayoutNodeId = LayoutNode->Id;
 
-        // We now set extra data the layout doesn't care about.
         Command->ExtraData.Border.Color = Theme.BorderColor;
         Command->ExtraData.Border.Width = Theme.BorderWidth;
     }
@@ -153,7 +140,6 @@ UILayoutWindow(const char *Id, const char *ThemeId, ui_component_state *State)
             Command->ClippingRect = {};
             Command->LayoutNodeId = LayoutNode->Id;
 
-            // We now set extra data the layout doesn't care about.
             Command->ExtraData.Quad.Color = Theme.Color;
         }
     }
@@ -164,8 +150,14 @@ UILayoutWindow(const char *Id, const char *ThemeId, ui_component_state *State)
     return true;
 }
 
+// NOTE: An annoying problem is that a button doesn't really have a state if it doesn't have any text.
+// So asking an ID for the button is quite annoying. Not sure yet. The problem is that we store the theme
+// on the state. So unless we pay the cost for finding the theme every frame then we need the user ID.
+// Not really sure. Maybe we pay it? We are not set in stone regarding themes yet anyways. Evne the DSL
+// might not be here to stay?
+
 static void
-UILayoutButton(const char *Id, const char *ThemeId, ui_component_state *State)
+UIButton(const char *Id, const char *ThemeId, ui_component_state *State)
 {
     Cim_Assert(CimCurrent && Id && ThemeId);
 
@@ -187,7 +179,6 @@ UILayoutButton(const char *Id, const char *ThemeId, ui_component_state *State)
         Command->ClippingRect = {};
         Command->LayoutNodeId = LayoutNode->Id;
 
-        // We now set extra data the layout doesn't care about.
         Command->ExtraData.Border.Color = Theme.BorderColor;
         Command->ExtraData.Border.Width = Theme.BorderWidth;
     }
@@ -201,14 +192,129 @@ UILayoutButton(const char *Id, const char *ThemeId, ui_component_state *State)
             Command->ClippingRect = {};
             Command->LayoutNodeId = LayoutNode->Id;
 
-            // We now set extra data the layout doesn't care about.
             Command->ExtraData.Quad.Color = Theme.Color;
         }
     }
+
+    // Cache it for faster retrieval. Could be done at initialization if we have that.
+    Component->ThemeId = Theme.ThemeId;
+}
+
+static void
+UIButton(const char *Id, const char *ThemeId, const char *Text, ui_component_state *State)
+{
+    Cim_Assert(CimCurrent && Id && ThemeId);
+
+    ui_layout_node *LayoutNode = PushLayoutNode(false, State); Cim_Assert(LayoutNode);
+    ui_component   *Component  = FindComponent(Id);            Cim_Assert(Component);
+
+    ui_button_theme Theme = GetButtonTheme(ThemeId, Component->ThemeId);
+    if (Theme.ThemeId.Value)
+    {
+        LayoutNode->Width  = Theme.Size.x;
+        LayoutNode->Height = Theme.Size.y;
+    }
+
+    if (Theme.BorderWidth > 0)
+    {
+        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+        Command->Type         = UICommand_Border;
+        Command->Pipeline     = UIPipeline_Default;
+        Command->ClippingRect = {};
+        Command->LayoutNodeId = LayoutNode->Id;
+
+        Command->ExtraData.Border.Color = Theme.BorderColor;
+        Command->ExtraData.Border.Width = Theme.BorderWidth;
+    }
+
+    {
+        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+        if (Command)
+        {
+            Command->Type         = UICommand_Quad;
+            Command->Pipeline     = UIPipeline_Default;
+            Command->ClippingRect = {};
+            Command->LayoutNodeId = LayoutNode->Id;
+
+            Command->ExtraData.Quad.Color = Theme.Color;
+        }
+    }
+
+    if (Text)
+    {
+        ui_button *Button = &Component->Extra.Button;
+        ui_font   *Font   = CimCurrent->CurrentFont;
+        Cim_Assert(Font->IsValid);
+
+        // TODO: Need to check for dirty states as well.
+        if (!Button->TextLayout.BackendLayout)
+        {
+            // NOTE: This means that we cannot grow the button to match the text, which is annoying.
+            // We could give the layout some fake space and figure out the length of the text and then grow
+            // the button, but that means overriding the user theme. We somehow have to send some form
+            // of draw call. Also probably depends on what the user wants?
+            Button->TextLayout = CreateTextLayout((char *)Text, Theme.Size.x, Theme.Size.y, Font);
+        }
+
+        // NOTE: Again we should be checking for dirty states and only update then.
+        // Maybe by running a hash on the string? This is simply an update routine
+        // for the cache. This can be unpacked as a helper (because the text widget, probably wants it as well)
+        for (cim_u32 Idx = 0; Idx < Button->TextLayout.GlyphCount; Idx++)
+        {
+            glyph_hash Hash  = ComputeGlyphHash(Button->TextLayout.GlyphLayoutInfo[Idx].GlyphId);
+            glyph_info Glyph = FindGlyphEntryByHash(Font->Table, Hash);
+
+            if (!Glyph.IsInAtlas)
+            {
+                glyph_size GlyphSize = GetGlyphExtent((char*) & Text[Idx], 1, Font);
+
+                // BUG: This crashes for some reasons.
+                stbrp_rect Rect = {};
+                Rect.w  = GlyphSize.Width;
+                Rect.h  = GlyphSize.Height;
+                stbrp_pack_rects(&Font->AtlasContext, &Rect, 1);
+                if (Rect.was_packed)
+                {
+                    cim_f32 U0 = (cim_f32) Rect.x           / Font->AtlasWidth;
+                    cim_f32 V0 = (cim_f32) Rect.y           / Font->AtlasHeight;
+                    cim_f32 U1 = (cim_f32)(Rect.x + Rect.w) / Font->AtlasWidth;
+                    cim_f32 V1 = (cim_f32)(Rect.y + Rect.h) / Font->AtlasHeight;
+
+                    RasterizeGlyph(Text[Idx], Rect, Font);
+                    UpdateGlyphCacheEntry(Font->Table, Glyph.MapId, true, U0, V0, U1, V1, GlyphSize);
+                }
+                else
+                {
+                    // TODO: This either means there is a bug or there is no more
+                    // place in the atlas. Note that we don't have a way to free
+                    // things from the atlas at the moment. I think as things get
+                    // evicted from the cache, we should also free their rects in
+                    // the allocator.
+                }
+            }
+
+            // Cache for easier retrieval when drawing.
+            Button->TextLayout.GlyphLayoutInfo[Idx].MapId = Glyph.MapId;
+        }
+
+        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
+        if (Command)
+        {
+            Command->Type         = UICommand_Text;
+            Command->ClippingRect = {};
+            Command->Pipeline     = UIPipeline_Text;
+            Command->LayoutNodeId = LayoutNode->Id;
+
+            Command->ExtraData.Text.Font   = *Font; // WARN: Quite a big struct.
+            Command->ExtraData.Text.Layout = Button->TextLayout;
+        }
+        
+    }
+
+    Component->ThemeId = Theme.ThemeId;
 }
 
 
-//// NOTE: We probably don't want to take this as an argument. Something like UISetFont.
 //static void
 //UITextInternal(const char *TextToRender, UIPass_Type Pass)
 //{

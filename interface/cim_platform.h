@@ -74,12 +74,12 @@ static bool   PlatformInit                (const char *StyleDir);
 static buffer PlatformReadFile            (char *FileName);
 static void   PlatformLogMessage          (CimLog_Severity Level, const char *File, cim_i32 Line, const char *Format, ...);
 
-// Objects
+// Font
 static bool    CreateFontObjects        (const char *FontName, cim_f32 FontSize, void *TransferSurface, ui_font *Font);
 static void    ReleaseFontObjects       (os_font_objects *Objects);
 static size_t  GetFontObjectsFootprint  ();
 
 // Glyphs
-static void             RasterizeGlyph    (char Character, stbrp_rect Rect, ui_font Font);
-static glyph_size       GetGlyphExtent    (char *String, cim_u32 StringLength, ui_font Font);
-static text_layout_info CreateTextLayout  (char *String, cim_u32 Width, cim_u32 Height, ui_font Font);
+static void             RasterizeGlyph    (char Character, stbrp_rect Rect, ui_font *Font);
+static glyph_size       GetGlyphExtent    (char *String, cim_u32 StringLength, ui_font *Font);
+static text_layout_info CreateTextLayout  (char *String, cim_u32 Width, cim_u32 Height, ui_font *Font);

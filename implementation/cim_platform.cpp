@@ -11,36 +11,12 @@ ProcessInputMessage(cim_button_state *NewState, bool IsDown)
 }
 
 static bool
-IsMouseDown(CimMouse_Button MouseButton, cim_inputs *Inputs)
-{
-    bool IsDown = Inputs->MouseButtons[MouseButton].EndedDown;
-
-    return IsDown;
-}
-
-static bool
 IsMouseClicked(CimMouse_Button MouseButton, cim_inputs *Inputs)
 {
     cim_button_state *State = &Inputs->MouseButtons[MouseButton];
     bool IsClicked = (State->EndedDown) && (State->HalfTransitionCount > 0);
 
     return IsClicked;
-}
-
-static cim_i32
-GetMouseDeltaX(cim_inputs *Inputs)
-{
-    cim_i32 DeltaX = Inputs->MouseDeltaX;
-
-    return DeltaX;
-}
-
-static cim_i32
-GetMouseDeltaY(cim_inputs *Inputs)
-{
-    cim_i32 DeltaY = Inputs->MouseDeltaY;
-
-    return DeltaY;
 }
 
 // [Win32]
@@ -510,11 +486,11 @@ PlatformLogMessage(CimLog_Severity Level, const char *File, cim_i32 Line, const 
 }
 
 static text_layout_info
-CreateTextLayout(char *String, cim_u32 Width, cim_u32 Height, ui_font Font)
+CreateTextLayout(char *String, cim_u32 Width, cim_u32 Height, ui_font *Font)
 {
     text_layout_info LayoutInfo  = {};
     HRESULT          Error       = S_OK;
-    os_font_objects *FontObjects = Font.OSFontObjects;
+    os_font_objects *FontObjects = Font->OSFontObjects;
 
     Cim_Assert(FontObjects && FontObjects->Format);
 
@@ -568,12 +544,12 @@ CreateTextLayout(char *String, cim_u32 Width, cim_u32 Height, ui_font Font)
 // but in reality it only takes in a simple character.
 
 static glyph_size
-GetGlyphExtent(char *String, cim_u32 StringLength, ui_font Font)
+GetGlyphExtent(char *String, cim_u32 StringLength, ui_font *Font)
 {
     // WARN: Obviously setting a hard limit on the string is trash, what can we do?
 
     glyph_size       Result      = {};
-    os_font_objects *FontObjects = Font.OSFontObjects;
+    os_font_objects *FontObjects = Font->OSFontObjects;
 
     if (DWriteFactory || StringLength >= 64)
     {
@@ -606,9 +582,9 @@ GetGlyphExtent(char *String, cim_u32 StringLength, ui_font Font)
 }
 
 static void
-RasterizeGlyph(char Character, stbrp_rect Rect, ui_font Font)
+RasterizeGlyph(char Character, stbrp_rect Rect, ui_font *Font)
 {
-    os_font_objects *FontObjects = (os_font_objects * )Font.OSFontObjects;
+    os_font_objects *FontObjects = (os_font_objects * )Font->OSFontObjects;
 
     if (!FontObjects->RenderTarget|| !FontObjects->FillBrush)
     {

@@ -27,7 +27,6 @@ typedef struct glyph_layout_info
     cim_f32 AdvanceX;
 } glyph_layout_info;
 
-// General layout for a glyph run, maybe rename?
 typedef struct text_layout_info
 {
     // Global

@@ -6,7 +6,7 @@ typedef struct glyph_entry
 	cim_u32 NextLRU;
 	cim_u32 PrevLRU;
 
-	bool       IsInAtlas;      // replace this probably?
+	bool       IsInAtlas;
 	cim_f32    U0, V0, U1, V1;
 	glyph_size Size;
 } glyph_entry;
@@ -275,7 +275,7 @@ PlaceGlyphTableInMemory(glyph_table_params Params, void *Memory)
 	{
 		glyph_entry *Entries = (glyph_entry *)Memory;
 		Result = (glyph_table *)(Entries + Params.EntryCount);
-		Result->HashTable = (uint32_t *)(Result + 1);
+		Result->HashTable = (cim_u32 *)(Result + 1);
 		Result->Entries   = Entries;
 
 		Result->HashMask   = Params.HashCount - 1;
@@ -284,7 +284,7 @@ PlaceGlyphTableInMemory(glyph_table_params Params, void *Memory)
 
 		memset(Result->HashTable, 0, Result->HashCount * sizeof(Result->HashTable[0]));
 
-		for (uint32_t EntryIndex = 0; EntryIndex < Params.EntryCount; ++EntryIndex)
+		for (cim_u32 EntryIndex = 0; EntryIndex < Params.EntryCount; ++EntryIndex)
 		{
 			glyph_entry *Entry = GetGlyphEntry(Result, EntryIndex);
 			if ((EntryIndex + 1) < Params.EntryCount)
@@ -313,7 +313,7 @@ PlaceGlyphTableInMemory(glyph_table_params Params, void *Memory)
 static size_t 
 GetGlyphTableFootprint(glyph_table_params Params)
 {
-	size_t HashSize  = Params.HashCount * sizeof(uint32_t);
+	size_t HashSize  = Params.HashCount  * sizeof(cim_u32);
 	size_t EntrySize = Params.EntryCount * sizeof(glyph_entry);
 	size_t Result    = (sizeof(glyph_table) + HashSize + EntrySize);
 

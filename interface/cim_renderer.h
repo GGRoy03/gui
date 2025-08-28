@@ -32,6 +32,12 @@ typedef struct ui_vertex
     cim_f32 R, G, B, A;
 } ui_vertex;
 
+typedef struct ui_text_vertex
+{
+    cim_f32 PosX, PosY;
+    cim_f32 U, V;
+}  ui_text_vertex;
+
 typedef struct ui_draw_batch
 {
     size_t VertexByteOffset;
@@ -41,9 +47,10 @@ typedef struct ui_draw_batch
     cim_u32 IdxCount;
     cim_u32 VtxCount;
 
-    cim_rect      ClippingRect;
-    cim_bit_field Features;
+    cim_rect        ClippingRect;
+    cim_bit_field   Features;
     UIPipeline_Type PipelineType;
+    ui_font         Font;
 } ui_draw_batch;
 
 typedef struct ui_draw_batch_buffer
@@ -81,6 +88,12 @@ typedef struct ui_draw_command_border
     cim_f32     Width;
 } ui_draw_command_border;
 
+typedef struct ui_draw_command_text
+{
+    ui_font          Font;
+    text_layout_info Layout;
+} ui_draw_command_text;
+
 typedef struct ui_draw_command
 {
     UICommand_Type Type;
@@ -88,6 +101,7 @@ typedef struct ui_draw_command
     {
         ui_draw_command_quad   Quad;
         ui_draw_command_border Border;
+        ui_draw_command_text   Text;
     } ExtraData;
 
     // Data-Retrieval
@@ -107,7 +121,7 @@ typedef struct ui_draw_list
 typedef void DrawUI (cim_i32 Width, cim_i32 Height);
 
 // Text
-typedef void    draw_glyph    (stbrp_rect Rect, ui_font Font);
+typedef void    draw_glyph    (stbrp_rect Rect, ui_font *Font);
 typedef ui_font load_font     (const char *FontName, cim_f32 FontSize);
 typedef void    release_font  (ui_font *Font);
 
@@ -122,4 +136,4 @@ typedef struct cim_renderer
 } cim_renderer;
 
 // NOTE: This is an internal proxy only, unsure how to build the interface.
-static void TransferGlyph  (stbrp_rect Rect, ui_font Font);
+static void TransferGlyph  (stbrp_rect Rect, ui_font *Font);

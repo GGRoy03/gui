@@ -364,7 +364,7 @@ GetNextTokenBuffer(buffer *FileContent, theme_parser *Parser)
             Token->Identifier.At = FileContent->Data + At;
 
             Char = FileContent->Data[At];
-            while (IsValidBuffer(FileContent) && (IsAlphaCharacter(Char) || IsNumberCharacter(Char) || Char == ' '))
+            while (IsValidBuffer(FileContent) && Char != '"')
             {
                 Char = FileContent->Data[++At];
             }

@@ -1,4 +1,4 @@
-#include <stdio.h> // For printf
+﻿#include <stdio.h> // For printf
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -171,8 +171,8 @@ int main()
     PlatformInit("D:/Work/CIM/styles");
     InitializeRenderer(CimRenderer_D3D, Dx11.Device, Dx11.DeviceContext);
 
-    ui_font MyFont = UILoadFont("Consolas", 20);
-    Cim_Assert(MyFont.IsValid);
+    ui_font DefaultFont = UILoadFont("Consolas", 20);
+    Cim_Assert(DefaultFont.IsValid);
 
     // TODO: Fix the window closing bug.
     while(Win32_ProcessMessages())
@@ -196,24 +196,20 @@ int main()
         UIBeginContext()
         {
             static ui_component_state CloseButton;
-            static ui_component_state CloseButton2;
 
             switch (Pass)
             {
 
             case UIPass_Layout:
             {
-                if (UILayoutWindow("Window", "MainWindow", NULL))
+                if (UIWindow("Window", "MainWindow", NULL))
                 {
-                    UILayoutRow(false);
-                    UILayoutButton("Button1", "Buttons", &CloseButton);
-                    UILayoutButton("Button2", "Buttons", NULL);
-                    UIEndLayoutRow();
-
-                    UILayoutRow(false);
-                    UILayoutButton("Button3", "Buttons", &CloseButton2);
-                    UILayoutButton("Button4", "Buttons", NULL);
-                    UIEndLayoutRow();
+                    // NOTE: There are a lot of strings :(
+                    UISetFont(&DefaultFont);
+                    UIRow();
+                    UIButton("FileBrowser_Backward", "FileBrowser_HeaderButtons", "<--"    , &CloseButton);
+                    UIButton("FileBrowser_Forward" , "FileBrowser_HeaderButtons", "-->"    , NULL);
+                    UIEndRow();
                 }
             } break;
 
@@ -247,5 +243,5 @@ int main()
     }
 
     // NOTE: This is not necessary.
-    UIUnloadFont(&MyFont);
+    UIUnloadFont(&DefaultFont);
 }

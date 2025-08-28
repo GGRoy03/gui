@@ -74,7 +74,7 @@ typedef struct cim_context
     ui_draw_batch_buffer Batches;
 
     // Current State
-    ui_font CurrentFont;
+    ui_font *CurrentFont;
 
     void *Backend;
 } cim_context;
@@ -105,13 +105,18 @@ static cim_context *CimCurrent;
 // [PUBLIC CIM API]
 
 // Components
+static void UIRow     (void);
+static bool UIWindow  (const char *Id, const char *ThemeId, ui_component_state *State);
+static void UIButton  (const char *Id, const char *ThemeId, ui_component_state *State);
+static void UIButton  (const char *Id, const char *ThemeId, const char *Text, ui_component_state *State);
 
 // Text
 static ui_font UILoadFont    (const char *FileName, cim_f32 FontSize);
 static void    UIUnloadFont  (ui_font *Font);
-static void    UISetFont     (ui_font Font);
+static void    UISetFont     (ui_font *Font);
 
 // TODO: Figure out what to do with these 3.
+
 static void
 UIBeginFrame()
 {

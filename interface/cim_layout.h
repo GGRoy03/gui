@@ -25,10 +25,10 @@ typedef struct cim_window
     cim_u32 Nothing;
 } cim_window;
 
-typedef struct cim_button
+typedef struct ui_button
 {
-    cim_u32 Nothing;
-} cim_button;
+    text_layout_info TextLayout;
+} ui_button;
 
 typedef struct cim_text
 {
@@ -37,18 +37,15 @@ typedef struct cim_text
 
 typedef struct ui_component
 {
-    bool IsInitialized;
-
-    cim_u32  LayoutNodeIndex;
     theme_id ThemeId;
     
     CimComponent_Flag Type;
     union
     {
         cim_window Window;
-        cim_button Button;
+        ui_button  Button;
         cim_text   Text;
-    } For;
+    } Extra;
 } ui_component;
 
 typedef struct ui_component_entry

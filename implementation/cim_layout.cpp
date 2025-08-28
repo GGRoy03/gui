@@ -55,27 +55,6 @@ GetUILayoutNodeState(cim_u32 Index)
 }
 
 static ui_layout_node *
-GetUILayoutNode(cim_u32 Index)
-{
-    Cim_Assert(CimCurrent);
-
-    cim_layout     *Layout = UIP_LAYOUT;
-    ui_layout_tree *Tree   = &Layout->Tree; // This would access the current tree.
-
-    if (Index < Tree->NodeCount)
-    {
-        ui_layout_node *Node = Tree->Nodes + Index;
-
-        return Node;
-    }
-    else
-    {
-        CimLog_Error("Invalid index used when accesing layout node: %u", Index);
-        return NULL;
-    }
-}
-
-static ui_layout_node *
 PushLayoutNode(bool IsContainer, ui_component_state *State)
 {
     Cim_Assert(CimCurrent);

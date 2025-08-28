@@ -1,18 +1,18 @@
 theme "MainWindow" for Window
 {
-    Color       := [255, 0, 0, 255];
-    BorderWidth := 3;
-    BorderColor := [255, 255, 255, 255];
+    Color       := [33, 33, 33, 255];
+    BorderWidth := 2;
+    BorderColor := [72, 72, 81, 255];
 
     Padding := [10, 15, 10, 15];
     Spacing := [20, 10];
 }
 
-theme "Buttons" for Button
+theme "FileBrowser_HeaderButtons" for Button
 {
-    Color       := [255, 255, 255, 255];
-    BorderWidth := 3;
+    Color       := [124, 77, 255, 255];
+    BorderWidth := 0;
     BorderColor := [83, 52, 235, 255];
     
-    Size := [50, 30];
+    Size := [50, 20];
 }

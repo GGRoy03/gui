@@ -160,6 +160,11 @@ Dx11_Initialize(win32_window Window)
     return Dx11;
 }
 
+// TODO: Cleanup the code above/integration.
+
+// Demos:
+#include "test/file_browser_demo.cpp"
+
 int main()
 {
     win32_window Win32 = Win32_Initialize(1920, 1080);
@@ -168,11 +173,11 @@ int main()
     cim_context *UIContext = (cim_context *)malloc(sizeof(cim_context));
     UIInitializeContext(UIContext);
 
-    PlatformInit("D:/Work/CIM/styles");
-    InitializeRenderer(CimRenderer_D3D, Dx11.Device, Dx11.DeviceContext);
+    PlatformInit("D:/Work/CIM/styles"); // WARN : Weird... Should also be renamed.
+    InitializeRenderer(UIRenderer_D3D, Dx11.Device, Dx11.DeviceContext);
 
-    ui_font DefaultFont = UILoadFont("Consolas", 20);
-    Cim_Assert(DefaultFont.IsValid);
+    ui_font *DefaultFont = UILoadFont("Consolas", 20, UIFont_ExtendedASCIIDirectMapping);
+    Cim_Assert(DefaultFont->IsValid);
 
     // TODO: Fix the window closing bug.
     while(Win32_ProcessMessages())
@@ -193,43 +198,7 @@ int main()
         // so if we detect that none of the other actions were performed in the frame we can skip hit-testing
         // on that component. So a behavior mask.
 
-        UIBeginContext()
-        {
-            static ui_component_state CloseButton;
-
-            switch (Pass)
-            {
-
-            case UIPass_Layout:
-            {
-                if (UIWindow("Window", "MainWindow", NULL))
-                {
-                    // NOTE: There are a lot of strings :(
-                    UISetFont(&DefaultFont);
-                    UIRow();
-                    UIButton("FileBrowser_Backward", "FileBrowser_HeaderButtons", "<--"    , &CloseButton);
-                    UIButton("FileBrowser_Forward" , "FileBrowser_HeaderButtons", "-->"    , NULL);
-                    UIEndRow();
-                }
-            } break;
-
-            case UIPass_Event:
-            {
-                if (CloseButton.Clicked)
-                {
-                    // NOTE: We could add a helper: UIConsumeEvent(&State)
-                    CimLog_Info("Close button clicked.");
-                    CloseButton.Clicked = false;
-                    CloseButton.Hovered = false;
-                }
-            } break;
-
-            default: break;
-
-            }
-
-            UIEndContext()
-        }
+        FileBrowser(DefaultFont);
 
         // TODO: Remove this.
         Win32_GetClientSize(Win32.Handle, &Win32.Width, &Win32.Height);
@@ -243,5 +212,5 @@ int main()
     }
 
     // NOTE: This is not necessary.
-    UIUnloadFont(&DefaultFont);
+    UIUnloadFont(DefaultFont);
 }

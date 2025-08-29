@@ -58,11 +58,10 @@ typedef enum UIPass_Type
 } UIPass_Type;
 
 // Header files
-#include "interface/cim_text.h"     // Depends on nothing type-wise.
-#include "interface/cim_helpers.h"  // Depends on nothing type-wise.
-#include "interface/cim_style.h"    // Depends on nothing type-wise.
+#include "interface/cim_helpers.h"  // Depends on [nothing] type-wise.
+#include "interface/cim_style.h"    // Depends on [nothing] type-wise.
 #include "interface/cim_platform.h" // Depends on [helpers] type-wise.
-#include "interface/cim_renderer.h" // Depends on [helpers] type-wise.
+#include "interface/cim_renderer.h" // Depends on [helpers & platform] type-wise.
 #include "interface/cim_layout.h"   // Depends on [style & renderer] type-wise.
 
 typedef struct cim_context
@@ -107,13 +106,15 @@ static cim_context *CimCurrent;
 // Components
 static void UIRow     (void);
 static bool UIWindow  (const char *Id, const char *ThemeId, ui_component_state *State);
-static void UIButton  (const char *Id, const char *ThemeId, ui_component_state *State);
-static void UIButton  (const char *Id, const char *ThemeId, const char *Text, ui_component_state *State);
+
+// NOTE: Still not sold on macros.
+#define UIButton(Id, ThemeId, Text, State)           ButtonComponent(Id, ThemeId, Text, State, 0)
+#define UIIndexedButton(ThemeId, Text, State, Index) ButtonComponent(NULL, ThemeId, Text, State, Index)
 
 // Text
-static ui_font UILoadFont    (const char *FileName, cim_f32 FontSize);
-static void    UIUnloadFont  (ui_font *Font);
-static void    UISetFont     (ui_font *Font);
+static ui_font * UILoadFont    (const char *FileName, cim_f32 FontSize, UIFont_Mode Mode);
+static void      UIUnloadFont  (ui_font *Font);
+static void      UISetFont     (ui_font *Font);
 
 // TODO: Figure out what to do with these 3.
 

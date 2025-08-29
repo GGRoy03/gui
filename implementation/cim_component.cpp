@@ -115,7 +115,7 @@ UIWindow(const char *Id, const char *ThemeId, ui_component_state *State)
     LayoutNode->Spacing       = Theme.Spacing;
     LayoutNode->ContainerType = UIContainer_Column;
 
-    // TODO: Get the X,Y from somewhere else and do a better job for the layout.
+    // TODO: Get the X,Y from somewhere else.
     LayoutNode->X = 500.0f;
     LayoutNode->Y = 400.0f;
 
@@ -150,27 +150,34 @@ UIWindow(const char *Id, const char *ThemeId, ui_component_state *State)
     return true;
 }
 
-// NOTE: An annoying problem is that a button doesn't really have a state if it doesn't have any text.
-// So asking an ID for the button is quite annoying. Not sure yet. The problem is that we store the theme
-// on the state. So unless we pay the cost for finding the theme every frame then we need the user ID.
-// Not really sure. Maybe we pay it? We are not set in stone regarding themes yet anyways. Evne the DSL
-// might not be here to stay?
-
+// TODO: Make use of the index.
 static void
-UIButton(const char *Id, const char *ThemeId, ui_component_state *State)
+ButtonComponent(const char *Id, const char *ThemeId, const char *Text, ui_component_state *State, cim_u32 Index)
 {
-    Cim_Assert(CimCurrent && Id && ThemeId);
+    Cim_Assert(CimCurrent && ThemeId);
 
-    ui_layout_node *LayoutNode = PushLayoutNode(false, State); Cim_Assert(LayoutNode);
-    ui_component   *Component  = FindComponent(Id);            Cim_Assert(Component);
+    ui_button_theme Theme      = {};
+    ui_layout_node *LayoutNode = NULL;
+    ui_component   *Component  = NULL;
 
-    ui_button_theme Theme = GetButtonTheme(ThemeId, Component->ThemeId);
-    if (Theme.ThemeId.Value)
+    if (Id)
     {
-        LayoutNode->Width  = Theme.Size.x;
-        LayoutNode->Height = Theme.Size.y;
+        Component = FindComponent(Id); Cim_Assert(Component);
+        Theme     = GetButtonTheme(ThemeId, Component->ThemeId);
+
+        // Cache for easier retrieval.
+        Component->ThemeId = Theme.ThemeId;
+    }
+    else
+    {
+        Theme = GetButtonTheme(ThemeId, {0});
     }
 
+    LayoutNode = PushLayoutNode(false, State);
+    LayoutNode->Width  = Theme.Size.x;
+    LayoutNode->Height = Theme.Size.y;
+
+    // Draw Border
     if (Theme.BorderWidth > 0)
     {
         ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
@@ -183,119 +190,70 @@ UIButton(const char *Id, const char *ThemeId, ui_component_state *State)
         Command->ExtraData.Border.Width = Theme.BorderWidth;
     }
 
+    // Draw Body
     {
         ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
         if (Command)
         {
-            Command->Type         = UICommand_Quad;
-            Command->Pipeline     = UIPipeline_Default;
+            Command->Type = UICommand_Quad;
+            Command->Pipeline = UIPipeline_Default;
             Command->ClippingRect = {};
             Command->LayoutNodeId = LayoutNode->Id;
 
             Command->ExtraData.Quad.Color = Theme.Color;
+            Command->ExtraData.Quad.Index = Index;
         }
     }
 
-    // Cache it for faster retrieval. Could be done at initialization if we have that.
-    Component->ThemeId = Theme.ThemeId;
-}
-
-static void
-UIButton(const char *Id, const char *ThemeId, const char *Text, ui_component_state *State)
-{
-    Cim_Assert(CimCurrent && Id && ThemeId);
-
-    ui_layout_node *LayoutNode = PushLayoutNode(false, State); Cim_Assert(LayoutNode);
-    ui_component   *Component  = FindComponent(Id);            Cim_Assert(Component);
-
-    ui_button_theme Theme = GetButtonTheme(ThemeId, Component->ThemeId);
-    if (Theme.ThemeId.Value)
-    {
-        LayoutNode->Width  = Theme.Size.x;
-        LayoutNode->Height = Theme.Size.y;
-    }
-
-    if (Theme.BorderWidth > 0)
-    {
-        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-        Command->Type         = UICommand_Border;
-        Command->Pipeline     = UIPipeline_Default;
-        Command->ClippingRect = {};
-        Command->LayoutNodeId = LayoutNode->Id;
-
-        Command->ExtraData.Border.Color = Theme.BorderColor;
-        Command->ExtraData.Border.Width = Theme.BorderWidth;
-    }
-
-    {
-        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-        if (Command)
-        {
-            Command->Type         = UICommand_Quad;
-            Command->Pipeline     = UIPipeline_Default;
-            Command->ClippingRect = {};
-            Command->LayoutNodeId = LayoutNode->Id;
-
-            Command->ExtraData.Quad.Color = Theme.Color;
-        }
-    }
-
+    // Draw Text
     if (Text)
     {
-        ui_button *Button = &Component->Extra.Button;
-        ui_font   *Font   = CimCurrent->CurrentFont;
+        // NOTE: Could be provided by the user?
+        cim_u32 TextLength       = (cim_u32)strlen(Text);
+        cim_f32 TextContentWidth = 0.0f;
+
+        ui_font *Font = CimCurrent->CurrentFont;
         Cim_Assert(Font->IsValid);
 
-        // TODO: Need to check for dirty states as well.
-        if (!Button->TextLayout.BackendLayout)
+        if (Font->Mode == UIFont_ExtendedASCIIDirectMapping)
         {
-            // NOTE: This means that we cannot grow the button to match the text, which is annoying.
-            // We could give the layout some fake space and figure out the length of the text and then grow
-            // the button, but that means overriding the user theme. We somehow have to send some form
-            // of draw call. Also probably depends on what the user wants?
-            Button->TextLayout = CreateTextLayout((char *)Text, Theme.Size.x, Theme.Size.y, Font);
-        }
-
-        // NOTE: Again we should be checking for dirty states and only update then.
-        // Maybe by running a hash on the string? This is simply an update routine
-        // for the cache. This can be unpacked as a helper (because the text widget, probably wants it as well)
-        for (cim_u32 Idx = 0; Idx < Button->TextLayout.GlyphCount; Idx++)
-        {
-            glyph_hash Hash  = ComputeGlyphHash(Button->TextLayout.GlyphLayoutInfo[Idx].GlyphId);
-            glyph_info Glyph = FindGlyphEntryByHash(Font->Table, Hash);
-
-            if (!Glyph.IsInAtlas)
+            for (cim_u32 Idx = 0; Idx < TextLength; Idx++)
             {
-                glyph_size GlyphSize = GetGlyphExtent((char*) & Text[Idx], 1, Font);
+                glyph_atlas AtlasInfo = FindGlyphAtlasByDirectMapping(Font->Table.Direct, Text[Idx]);
 
-                // BUG: This crashes for some reasons.
-                stbrp_rect Rect = {};
-                Rect.w  = GlyphSize.Width;
-                Rect.h  = GlyphSize.Height;
-                stbrp_pack_rects(&Font->AtlasContext, &Rect, 1);
-                if (Rect.was_packed)
+                if (!AtlasInfo.IsInAtlas)
                 {
-                    cim_f32 U0 = (cim_f32) Rect.x           / Font->AtlasWidth;
-                    cim_f32 V0 = (cim_f32) Rect.y           / Font->AtlasHeight;
-                    cim_f32 U1 = (cim_f32)(Rect.x + Rect.w) / Font->AtlasWidth;
-                    cim_f32 V1 = (cim_f32)(Rect.y + Rect.h) / Font->AtlasHeight;
+                    glyph_layout Layout = OSGetGlyphLayout(Text[Idx], Font);
 
-                    RasterizeGlyph(Text[Idx], Rect, Font);
-                    UpdateGlyphCacheEntry(Font->Table, Glyph.MapId, true, U0, V0, U1, V1, GlyphSize);
+                    stbrp_rect Rect = {};
+                    Rect.w = Layout.Size.Width + 4;
+                    Rect.h = Layout.Size.Height + 4;
+                    stbrp_pack_rects(&Font->AtlasContext, &Rect, 1);
+
+                    if (Rect.was_packed)
+                    {
+                        ui_texture_coord Tex;
+                        Tex.u0 = (cim_f32)Rect.x / Font->AtlasWidth;
+                        Tex.v0 = (cim_f32)Rect.y / Font->AtlasHeight;
+                        Tex.u1 = (cim_f32)(Rect.x + Rect.w) / Font->AtlasWidth;
+                        Tex.v1 = (cim_f32)(Rect.y + Rect.h) / Font->AtlasHeight;
+
+                        OSRasterizeGlyph(Text[Idx], Rect, Font);
+                        UpdateDirectGlyphTable(Font->Table.Direct, AtlasInfo.TableId, true, Tex, Layout.Offsets, Layout.Size, Layout.AdvanceX);
+                    }
                 }
                 else
                 {
-                    // TODO: This either means there is a bug or there is no more
-                    // place in the atlas. Note that we don't have a way to free
-                    // things from the atlas at the moment. I think as things get
-                    // evicted from the cache, we should also free their rects in
-                    // the allocator.
+                    glyph_layout Layout = FindGlyphLayoutByDirectMapping(Font->Table.Direct, Text[Idx]);
+                    TextContentWidth += Layout.AdvanceX;
                 }
             }
-
-            // Cache for easier retrieval when drawing.
-            Button->TextLayout.GlyphLayoutInfo[Idx].MapId = Glyph.MapId;
         }
+        else
+        {
+            // TODO: Other modes?
+        }
+
 
         ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
         if (Command)
@@ -305,13 +263,12 @@ UIButton(const char *Id, const char *ThemeId, const char *Text, ui_component_sta
             Command->Pipeline     = UIPipeline_Text;
             Command->LayoutNodeId = LayoutNode->Id;
 
-            Command->ExtraData.Text.Font   = *Font; // WARN: Quite a big struct.
-            Command->ExtraData.Text.Layout = Button->TextLayout;
+            Command->ExtraData.Text.Font         = Font;
+            Command->ExtraData.Text.StringLength = TextLength;
+            Command->ExtraData.Text.String       = (char*)Text;
+            Command->ExtraData.Text.Width        = TextContentWidth;
         }
-        
     }
-
-    Component->ThemeId = Theme.ThemeId;
 }
 
 

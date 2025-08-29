@@ -1,13 +1,17 @@
 // D3D Interface.
-static bool    D3DInitialize     (void *UserDevice, void *UserContext);
-static void    D3DDrawUI         (cim_i32 ClientWidth, cim_i32 ClientHeight);
-static void    D3DTransferGlyph  (stbrp_rect Rect, ui_font *Font);
-static ui_font D3DLoadFont       (const char *FontName, cim_f32 FontSize);
-static void    D3DReleaseFont    (ui_font *Font);
+static bool    D3DInitialize (void *UserDevice, void *UserContext);
+static void    D3DDrawUI     (cim_i32 ClientWidth, cim_i32 ClientHeight);
+// [Font/Text]
+static void      D3DTransferGlyph     (stbrp_rect Rect, ui_font *Font);
+static ui_font * D3DLoadFont          (const char *FontName, cim_f32 FontSize, UIFont_Mode Mode);
+static void      D3DReleaseFont       (ui_font *Font);
+static size_t    D3DGetFontFootprint  (glyph_table_params Params, cim_u32 AtlasWidth, UIFont_Mode Mode);
 
 static bool 
-InitializeRenderer(CimRenderer_Backend Backend, void *Param1, void *Param2) // WARN: This is a bit goofy.
+InitializeRenderer(UIRenderer_Backend Backend, void *Param1, void *Param2) // WARN: This is a bit goofy.
 {
+    Cim_Assert(CimCurrent);
+
     cim_renderer *Renderer    = UIP_RENDERER;
     bool          Initialized = false;
 
@@ -16,7 +20,7 @@ InitializeRenderer(CimRenderer_Backend Backend, void *Param1, void *Param2) // W
 
 #ifdef _WIN32
 
-    case CimRenderer_D3D:
+    case UIRenderer_D3D:
     {
         Initialized = D3DInitialize(Param1, Param2);
         if (Initialized)
@@ -38,8 +42,6 @@ InitializeRenderer(CimRenderer_Backend Backend, void *Param1, void *Param2) // W
     return Initialized;
 }
 
-// TODO: Check if these are inlined.
-
 // WARN: This is internal only, unsure where to put this.
 static void
 TransferGlyph(stbrp_rect Rect, ui_font *Font)
@@ -50,12 +52,11 @@ TransferGlyph(stbrp_rect Rect, ui_font *Font)
 
 // [Font Public API]
 
-// TODO: Check if this is inlined.
-static ui_font
-UILoadFont(const char *FontName, cim_f32 FontSize)
+static ui_font *
+UILoadFont(const char *FontName, cim_f32 FontSize, UIFont_Mode Mode)
 {
     Cim_Assert(CimCurrent);
-    ui_font Result = CimCurrent->Renderer.LoadFont(FontName, FontSize);
+    ui_font *Result = CimCurrent->Renderer.LoadFont(FontName, FontSize, Mode);
     return Result;
 }
 
@@ -65,13 +66,12 @@ UIUnloadFont(ui_font *Font)
     Cim_Assert(CimCurrent);
     CimCurrent->Renderer.ReleaseFont(Font);
 
-    if (Font->HeapBase)
+    if (Font->FreePointer)
     {
-        free(Font->HeapBase);
-        Font->HeapBase = NULL;
+        free(Font->FreePointer);
+        Font->FreePointer = NULL;
     }
 
-    Font->Table        = NULL;
     Font->AtlasNodes   = NULL;
     Font->AtlasWidth   = 0;
     Font->AtlasHeight  = 0;
@@ -234,72 +234,72 @@ UIEndDraw(ui_draw_list *DrawList)
             Batch->IdxCount += 6;
         } break;
 
+        // TODO: Debug this.
         case UICommand_Text:
         {
             ui_layout_node_state NodeState = GetUILayoutNodeState(Command->LayoutNodeId);
             ui_draw_command_text Text      = Command->ExtraData.Text;
-            text_layout_info     Layout    = Text.Layout;
 
-            // WARN: This code is very very buggy. It also comes from how we supplying
-            // the text layouts. It would help if instead of text layouts (Whole glyph runs)
-            // we cached layout information on the glyph itself. Would make it, such that we
-            // rely less on the state of the component. And overall simpler logic. Because we
-            // can simply do single glyph runs, can't we? So why do we care about the layout
-            // if we can query all of the information and do our own layout. This also doesn't
-            // handle right to left text.
+            // NOTE: Okay so one limitation is that we use the NodeState to place the text.
+            // Okay for now. Let's just get it going? And then we have stateless text. Which
+            // might be bad or not. But the overall code is cleaner everywhere which is nice :)
+            // Another one right now are our limited options for styling, we force center
+            // ... I wonder if stateless text was just a bad idea? I don't know, I need it anyways.
 
-            cim_f32 MiddleXOffset = (NodeState.Width  - Layout.Width)  / 2;
-            cim_f32 MiddleYOffset = (NodeState.Height - Layout.Height) / 2;
-
-            cim_f32 PenX   = NodeState.X + MiddleXOffset;
-            cim_f32 PenY   = NodeState.Y + MiddleYOffset;
-            cim_f32 StartX = PenX;
-
-            // TODO: Change GetGlyphEntry to something that returns a subset
-            // of the needed information.
-
-            for(cim_u32 Idx = 0; Idx < Layout.GlyphCount; Idx++)
+            if (Text.Font->Mode == UIFont_ExtendedASCIIDirectMapping)
             {
-                glyph_layout_info GlyphLayout = Layout.GlyphLayoutInfo[Idx];
-                glyph_entry      *Glyph       = GetGlyphEntry(Text.Font.Table, GlyphLayout.MapId);
+                cim_f32 MiddleOffsetX = (NodeState.Width - Text.Width) / 2;
 
-                // TODO: Double check this.
-                if(PenX + GlyphLayout.AdvanceX > StartX + Layout.Width && (Idx != Layout.GlyphCount - 1))
+                cim_f32 PenX   = NodeState.X + MiddleOffsetX;
+                cim_f32 PenY   = NodeState.Y;
+                cim_f32 StartX = PenX;
+
+                for(cim_u32 Idx = 0; Idx < Text.StringLength; Idx++)
                 {
-                    PenX  = StartX;
-                    PenY += Text.Font.LineHeight;
+                    glyph_layout Layout = FindGlyphLayoutByDirectMapping(Text.Font->Table.Direct, Text.String[Idx]);
+                    glyph_atlas  Atlas  = FindGlyphAtlasByDirectMapping (Text.Font->Table.Direct, Text.String[Idx]);
+
+                    // TODO: Double check this.
+                    if(PenX + Layout.AdvanceX > NodeState.X + NodeState.Width && (Idx != Text.StringLength - 1))
+                    {
+                        PenX  = StartX;
+                        PenY += Text.Font->LineHeight;
+                    }
+
+                    cim_f32 MinX = PenX + Layout.Offsets.x;
+                    cim_f32 MinY = PenY - Layout.Offsets.y;
+                    cim_f32 MaxX = MinX + Layout.Size.Width;
+                    cim_f32 MaxY = MinY + Layout.Size.Height;
+
+                    MinX = floorf(MinX + 0.5f);
+                    MinY = floorf(MinY + 0.5f);
+                    MaxX = floorf(MaxX + 0.5f);
+                    MaxY = floorf(MaxY + 0.5f);
+
+                    ui_text_vertex Quad[4];
+                    Quad[0] = {MinX, MinY, Atlas.TexCoord.u0, Atlas.TexCoord.v0}; // Top-left
+                    Quad[1] = {MinX, MaxY, Atlas.TexCoord.u0, Atlas.TexCoord.v1}; // Bottom-left
+                    Quad[2] = {MaxX, MinY, Atlas.TexCoord.u1, Atlas.TexCoord.v0}; // Top-right
+                    Quad[3] = {MaxX, MaxY, Atlas.TexCoord.u1, Atlas.TexCoord.v1}; // Bottom-right
+
+                    cim_u32 Indices[6];
+                    Indices[0] = Batch->VtxCount + 0;
+                    Indices[1] = Batch->VtxCount + 2;
+                    Indices[2] = Batch->VtxCount + 1;
+                    Indices[3] = Batch->VtxCount + 2;
+                    Indices[4] = Batch->VtxCount + 3;
+                    Indices[5] = Batch->VtxCount + 1;
+
+                    WriteToArena(Quad   , sizeof(Quad)   , UIP_BATCHES.FrameVtx);
+                    WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);
+
+                    Batch->VtxCount += 4;
+                    Batch->IdxCount += 6;
+
+                    PenX += Layout.AdvanceX;
                 }
-
-                cim_f32 MinX = PenX + GlyphLayout.OffsetX;
-                cim_f32 MinY = PenY + GlyphLayout.OffsetY;
-                cim_f32 MaxX = MinX + Glyph->Size.Width;
-                cim_f32 MaxY = MinY + Glyph->Size.Height;
-
-                // BUG: ui_vertex is incorrect with this type of data.
-                ui_text_vertex Quad[4];
-                Quad[0] = {MinX, MinY, Glyph->U0, Glyph->V0}; // Top-left
-                Quad[1] = {MinX, MaxY, Glyph->U0, Glyph->V1}; // Bottom-left
-                Quad[2] = {MaxX, MinY, Glyph->U1, Glyph->V0}; // Top-right
-                Quad[3] = {MaxX, MaxY, Glyph->U1, Glyph->V1}; // Bottom-right
-
-                cim_u32 Indices[6];
-                Indices[0] = Batch->VtxCount + 0;
-                Indices[1] = Batch->VtxCount + 2;
-                Indices[2] = Batch->VtxCount + 1;
-                Indices[3] = Batch->VtxCount + 2;
-                Indices[4] = Batch->VtxCount + 3;
-                Indices[5] = Batch->VtxCount + 1;
-
-                WriteToArena(Quad   , sizeof(Quad)   , UIP_BATCHES.FrameVtx);
-                WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);
-
-                Batch->VtxCount += 4;
-                Batch->IdxCount += 6;
-
-                PenX += GlyphLayout.AdvanceX;
             }
 
-            // WARN: Probably temporary. Change this when we rework pipelines.
             Batch->Font = Command->ExtraData.Text.Font;
 
         } break;
@@ -451,7 +451,7 @@ typedef struct d3d_backend
 } d3d_backend;
 
 // NOTE: This is part of the interface implementation.
-typedef struct renderer_font_objects
+typedef struct gpu_font_backend
 {
     ID3D11Texture2D          *GlyphCache;
     ID3D11ShaderResourceView *GlyphCacheView;
@@ -459,7 +459,7 @@ typedef struct renderer_font_objects
     ID3D11Texture2D          *GlyphTransfer;
     ID3D11ShaderResourceView *GlyphTransferView;
     IDXGISurface             *GlyphTransferSurface;
-} renderer_font_objects;
+} gpu_font_backend;
 
 // Temporary for testing. These are default pipelines.
 static d3d_pipeline Pipelines[UIPipeline_Count] = {};
@@ -853,13 +853,14 @@ SetupD3DRenderState(cim_i32 ClientWidth, cim_i32 ClientHeight, d3d_backend *Back
     return Error;
 }
 
-// And these are the new functions that go with the new fonts.
 static HRESULT
-CreateD3DGlyphCache(d3d_backend *Backend, renderer_font_objects *Objects, cim_u32 Width, cim_u32 Height)
+CreateD3DGlyphCache(d3d_backend *D3DBackend, gpu_font_backend *FontBackend, cim_u32 Width, cim_u32 Height)
 {
+    Cim_Assert(FontBackend);
+
     HRESULT Error = E_FAIL;
 
-    if (Backend->Device)
+    if (D3DBackend->Device)
     {
         D3D11_TEXTURE2D_DESC TextureDesc = {};
         TextureDesc.Width      = Width;
@@ -871,10 +872,10 @@ CreateD3DGlyphCache(d3d_backend *Backend, renderer_font_objects *Objects, cim_u3
         TextureDesc.Usage      = D3D11_USAGE_DEFAULT;
         TextureDesc.BindFlags  = D3D11_BIND_SHADER_RESOURCE;
 
-        Error = Backend->Device->CreateTexture2D(&TextureDesc, NULL, &Objects->GlyphCache);
+        Error = D3DBackend->Device->CreateTexture2D(&TextureDesc, NULL, &FontBackend->GlyphCache);
         if (SUCCEEDED(Error))
         {
-            Error = Backend->Device->CreateShaderResourceView(Objects->GlyphCache, NULL, &Objects->GlyphCacheView);
+            Error = D3DBackend->Device->CreateShaderResourceView(FontBackend->GlyphCache, NULL, &FontBackend->GlyphCacheView);
         }
     }
 
@@ -882,26 +883,26 @@ CreateD3DGlyphCache(d3d_backend *Backend, renderer_font_objects *Objects, cim_u3
 }
 
 static void
-ReleaseD3DGlyphCache(renderer_font_objects *Objects)
+ReleaseD3DGlyphCache(gpu_font_backend *Backend)
 {
-    if (Objects->GlyphCache)
+    if (Backend->GlyphCache)
     {
-        Objects->GlyphCache->Release();
-        Objects->GlyphCache = NULL;
+        Backend->GlyphCache->Release();
+        Backend->GlyphCache = NULL;
     }
 
-    if (Objects->GlyphCacheView)
+    if (Backend->GlyphCacheView)
     {
-        Objects->GlyphCacheView->Release();
-        Objects->GlyphCacheView = NULL;
+        Backend->GlyphCacheView->Release();
+        Backend->GlyphCacheView = NULL;
     }
 }
 
 static HRESULT
-CreateD3DGlyphTransfer(d3d_backend *Backend, renderer_font_objects *Objects, cim_u32 Width, cim_u32 Height)
+CreateD3DGlyphTransfer(d3d_backend *D3DBackend, gpu_font_backend *FontBackend, cim_u32 Width, cim_u32 Height)
 {
     HRESULT Error = E_FAIL;
-    if (Backend->Device)
+    if (D3DBackend->Device)
     {
         D3D11_TEXTURE2D_DESC TextureDesc = {};
         TextureDesc.Width      = Width;
@@ -913,13 +914,13 @@ CreateD3DGlyphTransfer(d3d_backend *Backend, renderer_font_objects *Objects, cim
         TextureDesc.Usage      = D3D11_USAGE_DEFAULT;
         TextureDesc.BindFlags  = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
-        Error = Backend->Device->CreateTexture2D(&TextureDesc, NULL, &Objects->GlyphTransfer);
+        Error = D3DBackend->Device->CreateTexture2D(&TextureDesc, NULL, &FontBackend->GlyphTransfer);
         if (SUCCEEDED(Error))
         {
-            Error = Backend->Device->CreateShaderResourceView(Objects->GlyphTransfer, NULL, &Objects->GlyphTransferView);
+            Error = D3DBackend->Device->CreateShaderResourceView(FontBackend->GlyphTransfer, NULL, &FontBackend->GlyphTransferView);
             if (SUCCEEDED(Error))
             {
-                Error = Objects->GlyphTransfer->QueryInterface(IID_IDXGISurface, (void **)&Objects->GlyphTransferSurface);
+                Error = FontBackend->GlyphTransfer->QueryInterface(IID_IDXGISurface, (void **)&FontBackend->GlyphTransferSurface);
             }
 
         }
@@ -929,128 +930,161 @@ CreateD3DGlyphTransfer(d3d_backend *Backend, renderer_font_objects *Objects, cim
 }
 
 static void 
-ReleaseD3DGlyphTransfer(renderer_font_objects *Objects)
+ReleaseD3DGlyphTransfer(gpu_font_backend *Backend)
 {
-    if (Objects->GlyphTransferSurface)
+    if (Backend->GlyphTransferSurface)
     {
-        Objects->GlyphTransferSurface->Release();
-        Objects->GlyphTransferSurface = NULL;
+        Backend->GlyphTransferSurface->Release();
+        Backend->GlyphTransferSurface = NULL;
     }
 
-    if (Objects->GlyphTransferView)
+    if (Backend->GlyphTransferView)
     {
-        Objects->GlyphTransferView->Release();
-        Objects->GlyphTransferView = NULL;
+        Backend->GlyphTransferView->Release();
+        Backend->GlyphTransferView = NULL;
     }
 
-    if (Objects->GlyphTransfer)
+    if (Backend->GlyphTransfer)
     {
-        Objects->GlyphTransfer->Release();
-        Objects->GlyphTransfer = NULL;
+        Backend->GlyphTransfer->Release();
+        Backend->GlyphTransfer = NULL;
     }
 }
 
-//static void
-//ReleaseD3DFont(ui_font *Font)
-//{
-//
-//}
-
 // [D3D Public Implementation]
+
+// [Text/Font]
+static ui_font *
+D3DLoadFont(const char *FontName, cim_f32 FontSize, UIFont_Mode Mode)
+{
+    Cim_Assert(CimCurrent && CimCurrent->Backend);
+
+    ui_font           *Result  = NULL;
+    d3d_backend       *Backend = (d3d_backend *)CimCurrent->Backend;
+    glyph_table_params Params  = {};
+
+    cim_u32 AtlasWidth  = 0;
+    cim_u32 AtlasHeight = 0;
+    if (Mode == UIFont_ExtendedASCIIDirectMapping)
+    {
+        // WARN: Still unsure about all of this.
+        AtlasWidth  = 1024;
+        AtlasHeight = 1024;
+
+        Params.HashCount  = 0;
+        Params.EntryCount = UIText_ExtendedASCIITableSize;
+    }
+
+    if (AtlasWidth > 0 && AtlasHeight > 0)
+    {
+        size_t HeapSize = D3DGetFontFootprint(Params, AtlasWidth, Mode);
+        char*  HeapBase = (char*)malloc(HeapSize);
+
+        if (HeapBase)
+        {
+            memset(HeapBase, 0, HeapSize);
+
+            Result   = (ui_font *)HeapBase;
+            HeapBase = (char *)(Result + 1);
+
+            if (Mode == UIFont_ExtendedASCIIDirectMapping)
+            {
+                Result->Table.Direct = PlaceDirectGlyphTableInMemory(Params, HeapBase);
+                HeapBase            += GetDirectGlyphTableFootPrint(Params);
+            }
+            Cim_Assert(Result->Table.Direct || Result->Table.LRU);
+
+            Result->AtlasNodes = (stbrp_node*)HeapBase;
+            HeapBase          += AtlasWidth * sizeof(stbrp_node);
+
+            Result->OSBackend = (os_font_backend *)HeapBase;
+            HeapBase          = (char *)(Result->OSBackend + 1);
+
+            Result->GPUBackend = (gpu_font_backend *)HeapBase;
+            HeapBase           = (char *)(Result->GPUBackend + 1);
+
+            Result->FreePointer = HeapBase - HeapSize;
+        }
+
+        Result->AtlasWidth  = AtlasWidth;
+        Result->AtlasHeight = AtlasHeight;
+        stbrp_init_target(&Result->AtlasContext, Result->AtlasWidth, Result->AtlasHeight, Result->AtlasNodes, Result->AtlasWidth);
+    }
+
+    if (Result)
+    {
+        HRESULT Error = S_OK;
+
+        Error = CreateD3DGlyphCache(Backend, Result->GPUBackend, Result->AtlasWidth, Result->AtlasHeight);
+        if (SUCCEEDED(Error))
+        {
+            Error = CreateD3DGlyphTransfer(Backend, Result->GPUBackend, Result->AtlasWidth, Result->AtlasHeight);
+            if (SUCCEEDED(Error))
+            {
+                Error = OSAcquireFontBackend(FontName, FontSize, Result->GPUBackend->GlyphTransferSurface, Result) ? S_OK : E_FAIL;
+            }
+        }
+
+        if (FAILED(Error))
+        {
+            ReleaseD3DGlyphCache(Result->GPUBackend);
+            ReleaseD3DGlyphTransfer(Result->GPUBackend);
+            OSReleaseFontBackend(Result->OSBackend);
+            free(Result->FreePointer);
+        }
+        else
+        {
+            Result->IsValid = true;
+            Result->Size    = FontSize;
+        }
+    }
+
+    return Result;
+}
 
 static void
 D3DReleaseFont(ui_font *Font)
 {
-    if (Font->FontObjects)
+    if (Font->GPUBackend)
     {
-        ReleaseD3DGlyphCache(Font->FontObjects);
-        ReleaseD3DGlyphTransfer(Font->FontObjects);
+        ReleaseD3DGlyphCache(Font->GPUBackend);
+        ReleaseD3DGlyphTransfer(Font->GPUBackend);
     }
 
-    if (Font->OSFontObjects)
+    if (Font->OSBackend)
     {
-        ReleaseFontObjects(Font->OSFontObjects);
+        OSReleaseFontBackend(Font->OSBackend);
     }
 }
 
-// TODO: Clenaup this function.
-static ui_font
-D3DLoadFont(const char *FontName, cim_f32 FontSize)
+static size_t
+D3DGetFontFootprint(glyph_table_params Params, cim_u32 AtlasWidth, UIFont_Mode Mode)
 {
-    Cim_Assert(CimCurrent && CimCurrent->Backend);
+    size_t Result = 0;
 
-    ui_font      Font    = {};
-    d3d_backend *Backend = (d3d_backend *)CimCurrent->Backend;
-    HRESULT      Error   = S_OK;
-
-    // NOTE: We use hardcoded numbers for everything for now. Probably should depend
-    // on the user parameter.
-    Font.AtlasWidth  = 1024;
-    Font.AtlasHeight = 1024;
-
-    // NOTE: I still don't know how to query/set to appropriate amount.
-    // Maybe the user controls that. We also probably need to ask the OS
-    // for some of that information.
-    glyph_table_params Params;
-    Params.HashCount  = 256;
-    Params.EntryCount = 1024;
-
-    size_t OSFontObjectsSize = GetFontObjectsFootprint();
-    size_t GlyphTableSize    = GetGlyphTableFootprint(Params);
-    size_t FontObjectsSize   = sizeof(renderer_font_objects);
-    size_t AtlasNodesSize    = Font.AtlasWidth * sizeof(stbrp_node);
-
-    size_t HeapSize    = OSFontObjectsSize + GlyphTableSize + FontObjectsSize + AtlasNodesSize;
-    char  *HeapPointer = (char *)malloc(HeapSize);
-    if (!HeapPointer)
+    switch(Mode)
     {
-        return Font;
-    }
-    memset(HeapPointer, 0, HeapSize);
-    Font.HeapBase = HeapPointer;
 
-    Font.Table         = PlaceGlyphTableInMemory(Params, HeapPointer);
-    Font.FontObjects   = (renderer_font_objects *) (HeapPointer + GlyphTableSize);
-    Font.AtlasNodes    = (stbrp_node *)            (HeapPointer + GlyphTableSize + FontObjectsSize);
-    Font.OSFontObjects = (os_font_objects *)       (HeapPointer + GlyphTableSize + FontObjectsSize + AtlasNodesSize);
-
-    // NOTE: The glyph cache and the glyph transfer are created with some hardcoded numbers
-    // for now I probable need to know more about the font and use the table params to set
-    // the appropriate size.
-    Error = CreateD3DGlyphCache(Backend, Font.FontObjects, Font.AtlasWidth, Font.AtlasHeight);
-    if(FAILED(Error))
+    case UIFont_ExtendedASCIIDirectMapping:
     {
-        ReleaseD3DGlyphCache(Font.FontObjects);
-        ReleaseD3DGlyphTransfer(Font.FontObjects);
-        free(HeapPointer);
-        return Font;
+        size_t GlyphTableSize = GetDirectGlyphTableFootPrint(Params);
+        size_t AtlasNodeSize  = AtlasWidth * sizeof(stbrp_node);
+        size_t GPUBackendSize = sizeof(gpu_font_backend);
+        size_t OSBackendSize  = sizeof(os_font_backend);
+        
+        Result = sizeof(ui_font) + GlyphTableSize + AtlasNodeSize + GPUBackendSize + OSBackendSize;
+    } break;
+
+    default: break;
+
     }
 
-    Error = CreateD3DGlyphTransfer(Backend, Font.FontObjects, Font.AtlasWidth, Font.AtlasHeight);
-    if (FAILED(Error))
-    {
-        ReleaseD3DGlyphCache(Font.FontObjects);
-        ReleaseD3DGlyphTransfer(Font.FontObjects);
-        free(HeapPointer);
-        return Font;
-    }
-
-    if (!CreateFontObjects(FontName, FontSize, (void *)Font.FontObjects->GlyphTransferSurface, &Font))
-    {
-        ReleaseD3DGlyphCache(Font.FontObjects);
-        ReleaseD3DGlyphTransfer(Font.FontObjects);
-        free(HeapPointer);
-        return Font;
-    }
-
-    // Seems to crash if there is a mistake.
-    stbrp_init_target(&Font.AtlasContext, Font.AtlasWidth, Font.AtlasHeight, Font.AtlasNodes, Font.AtlasWidth);
-
-    Font.IsValid = true;
-    return Font;
+    return Result;
 }
+
 
 // TODO: Make a backend cleanup function probably.
+// TODO: Rework this function slightly. (Mostly Okay)
 static bool
 D3DInitialize(void *UserDevice, void *UserContext)
 {
@@ -1109,7 +1143,7 @@ D3DInitialize(void *UserDevice, void *UserContext)
         }
 
         D3D11_SAMPLER_DESC Desc = {};
-        Desc.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        Desc.Filter         = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
         Desc.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
         Desc.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
         Desc.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -1241,7 +1275,7 @@ D3DDrawUI(cim_i32 ClientWidth, cim_i32 ClientHeight)
         // TODO: Change this cluster fuck (Pipelines included)
         if (Batch->PipelineType == UIPipeline_Text)
         {
-            DeviceCtx->PSSetShaderResources(0, 1, &Batch->Font.FontObjects->GlyphCacheView);
+            DeviceCtx->PSSetShaderResources(0, 1, &Batch->Font->GPUBackend->GlyphCacheView);
         }
 
         DeviceCtx->DrawIndexed(Batch->IdxCount, Batch->StartIndexRead, Batch->BaseVertexOffset);
@@ -1270,8 +1304,8 @@ D3DTransferGlyph(stbrp_rect Rect, ui_font *Font)
         SourceBox.bottom = Rect.h;
         SourceBox.back   = 1;
 
-        Backend->DeviceContext->CopySubresourceRegion(Font->FontObjects->GlyphCache, 0, Rect.x, Rect.y, 0,
-                                                      Font->FontObjects->GlyphTransfer, 0, &SourceBox);
+        Backend->DeviceContext->CopySubresourceRegion(Font->GPUBackend->GlyphCache, 0, Rect.x, Rect.y, 0,
+                                                      Font->GPUBackend->GlyphTransfer, 0, &SourceBox);
     }
 }
 

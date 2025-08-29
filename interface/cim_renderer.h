@@ -1,9 +1,11 @@
 #pragma once
 
-typedef enum CimRenderer_Backend
+// [Enums]
+
+typedef enum UIRenderer_Backend
 {
-	CimRenderer_D3D = 0,
-} CimRenderer_Backend;
+	UIRenderer_D3D = 0,
+} UIRenderer_Backend;
 
 typedef enum UIShader_Type
 {
@@ -18,6 +20,12 @@ typedef enum UIPipeline_Type
     UIPipeline_Text    = 2,
     UIPipeline_Count   = 3,
 } UIPipeline_Type;
+
+// [Forward Declarations]
+
+typedef struct ui_font ui_font;
+
+// [Types]
 
 typedef struct ui_shader_desc
 {
@@ -50,7 +58,7 @@ typedef struct ui_draw_batch
     cim_rect        ClippingRect;
     cim_bit_field   Features;
     UIPipeline_Type PipelineType;
-    ui_font         Font;
+    ui_font        *Font;
 } ui_draw_batch;
 
 typedef struct ui_draw_batch_buffer
@@ -68,7 +76,6 @@ typedef struct ui_draw_batch_buffer
     UIPipeline_Type CurrentPipelineType;
 } ui_draw_batch_buffer;
 
-// NOTE: This probably changes
 typedef enum UICommand_Type
 {
     UICommand_None   = 0,
@@ -80,6 +87,7 @@ typedef enum UICommand_Type
 typedef struct ui_draw_command_quad
 {
     cim_vector4 Color;
+    cim_u32     Index; // NOTE: Used for indexed button for example, could apply to other things than quads.
 } ui_draw_command_quad;
 
 typedef struct ui_draw_command_border
@@ -90,8 +98,10 @@ typedef struct ui_draw_command_border
 
 typedef struct ui_draw_command_text
 {
-    ui_font          Font;
-    text_layout_info Layout;
+    ui_font *Font;
+    cim_f32  Width;
+    cim_u32  StringLength;
+    char    *String;  // WARN: This is very fragile
 } ui_draw_command_text;
 
 typedef struct ui_draw_command
@@ -104,8 +114,7 @@ typedef struct ui_draw_command
         ui_draw_command_text   Text;
     } ExtraData;
 
-    // Data-Retrieval
-    cim_u32  LayoutNodeId;
+    cim_u32 LayoutNodeId;
 
     cim_rect        ClippingRect;
     UIPipeline_Type Pipeline;
@@ -121,9 +130,9 @@ typedef struct ui_draw_list
 typedef void DrawUI (cim_i32 Width, cim_i32 Height);
 
 // Text
-typedef void    draw_glyph    (stbrp_rect Rect, ui_font *Font);
-typedef ui_font load_font     (const char *FontName, cim_f32 FontSize);
-typedef void    release_font  (ui_font *Font);
+typedef void      draw_glyph    (stbrp_rect Rect, ui_font *Font);
+typedef ui_font * load_font     (const char *FontName, cim_f32 FontSize, UIFont_Mode Mode);
+typedef void      release_font  (ui_font *Font);
 
 typedef struct cim_renderer 
 {
@@ -136,4 +145,4 @@ typedef struct cim_renderer
 } cim_renderer;
 
 // NOTE: This is an internal proxy only, unsure how to build the interface.
-static void TransferGlyph  (stbrp_rect Rect, ui_font *Font);
+static void TransferGlyph (stbrp_rect Rect, ui_font *Font);

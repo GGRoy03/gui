@@ -27,12 +27,12 @@ typedef struct cim_window
 
 typedef struct ui_button
 {
-    text_layout_info TextLayout;
+    void *Nothing;
 } ui_button;
 
 typedef struct cim_text
 {
-    text_layout_info LayoutInfo;
+    void *Nothing;
 } cim_text;
 
 typedef struct ui_component
@@ -62,10 +62,12 @@ typedef struct ui_component_hashmap
     bool                IsInitialized;
 } ui_component_hashmap;
 
+// NOTE: We could have leaner types? If this grows too much.
 typedef struct ui_component_state
 {
-    bool Clicked;
-    bool Hovered;
+    bool    Clicked;
+    bool    Hovered;
+    cim_u32 ActiveIndex;
 } ui_component_state;
 
 typedef struct ui_layout_node

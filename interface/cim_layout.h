@@ -1,9 +1,10 @@
 #pragma once
 
-#define CimLayout_MaxNestDepth 32
-#define CimLayout_InvalidNode 0xFFFFFFFF
-#define CimLayout_MaxShapesForDrag 4
-#define CimLayout_MaxDragPerBatch 16
+// [Constants]
+
+#define UILayout_NodeCount 128
+#define UILayout_NestingDepth 32
+#define UILayout_InvalidNode 0xFFFFFFFF
 
 typedef enum CimComponent_Flag
 {
@@ -19,6 +20,8 @@ typedef enum UIContainer_Type
     UIContainer_Row    = 1,
     UIContainer_Column = 2,
 } UIContainer_Type;
+
+// [Types]
 
 typedef struct cim_window
 {
@@ -38,7 +41,7 @@ typedef struct cim_text
 typedef struct ui_component
 {
     theme_id ThemeId;
-    
+
     CimComponent_Flag Type;
     union
     {
@@ -72,68 +75,43 @@ typedef struct ui_component_state
 
 typedef struct ui_layout_node
 {
-    // Hierarchy
+    // NOTE: Some of these we don't need...
     cim_u32 Id;
     cim_u32 Parent;
     cim_u32 FirstChild;
-    cim_u32 LastChild;
-    cim_u32 NextSibling;
+    cim_u32 Next;
     cim_u32 ChildCount;
 
-    // Layout
     UIContainer_Type ContainerType;
     cim_vector2      Spacing;
     cim_vector4      Padding;
 
-    // This is weird. It's used by both the drawer and the layout code.
     cim_f32 X;
     cim_f32 Y;
     cim_f32 Width;
     cim_f32 Height;
 
-    // We mutate the state when hit-testing.
+    // NOTE: This might change, but let's get it working for now.
+    ui_draw_command_id CommandHeader;
+
     ui_component_state *State;
 } ui_layout_node;
 
-typedef struct ui_layout_node_state
+typedef struct ui_tree
 {
-    cim_f32 X;
-    cim_f32 Y;
-    cim_f32 Width;
-    cim_f32 Height;
-} ui_layout_node_state;
+    union
+    {
+        ui_draw_node   Draw[UILayout_NodeCount];
+        ui_layout_node Layout[UILayout_NodeCount];
+    } Nodes;
+    cim_u32 NodeCount;
 
-typedef struct ui_layout_tree
-{
-    // Memory pool
-    ui_layout_node *Nodes;
-    cim_u32         NodeCount;
-    cim_u32         NodeSize;
-
-    // Tree-Logic
-    cim_u32 ParentStack[CimLayout_MaxNestDepth];
-    cim_u32 AtParent;
-
-    // Tree-State
-    ui_draw_list DrawList;
-} ui_layout_tree;
-
-typedef struct ui_tree_stats
-{
-    cim_u32 VisitedNodes;
-    cim_u32 LeafCount;
-    cim_u32 Depth;
-} ui_tree_stats;
+    cim_u32 ParentStack[32];
+    cim_u32 ParentTop;
+} ui_tree;
 
 typedef struct ui_tree_sizing_result
 {
     cim_u32 Stack[256];
     cim_u32 Top;
 } ui_tree_sizing_result;
-
-// TODO: I don't know about this. It depends on if we cache trees or not.
-typedef struct cim_layout
-{
-    ui_layout_tree       Tree;       // WARN: Forced to 1 tree for now.
-    ui_component_hashmap Components;
-} cim_layout;

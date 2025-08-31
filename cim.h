@@ -67,10 +67,15 @@ typedef enum UIPass_Type
 typedef struct cim_context
 {
     // Global Systems
-    cim_layout           Layout;
     cim_renderer         Renderer;
     cim_inputs           Inputs;
     ui_draw_batch_buffer Batches;
+    ui_component_hashmap Components;
+
+    // Trees
+    ui_tree      LayoutTree;
+    ui_tree      DrawTree;
+    ui_draw_list DrawList;
 
     // Current State
     ui_font *CurrentFont;
@@ -81,14 +86,17 @@ typedef struct cim_context
 static cim_context *CimCurrent;
 
 #define UI_STATE      (CimCurrent->State)
-#define UI_LAYOUT     (CimCurrent->Layout)
-#define UIP_LAYOUT   &(CimCurrent->Layout)
 #define UI_INPUT      (CimCurrent->Inputs)
 #define UIP_INPUT    &(CimCurrent->Inputs)
 #define UI_BATCHES    (CimCurrent->Batches)
 #define UIP_BATCHES  &(CimCurrent->Batches)
 #define UI_RENDERER   (CimCurrent->Renderer)
 #define UIP_RENDERER &(CimCurrent->Renderer)
+
+#define UI_DrawList   (CimCurrent->DrawList)
+#define UI_Components (CimCurrent->Components)
+#define UI_LayoutTree (CimCurrent->LayoutTree)
+#define UI_DrawTree   (CimCurrent->DrawTree)
 
 // TODO: Figure out dependencies.
 
@@ -97,8 +105,8 @@ static cim_context *CimCurrent;
 #include "implementation/cim_styles.cpp"
 #include "implementation/cim_platform.cpp"
 #include "implementation/cim_text.cpp"
-#include "implementation/cim_layout.cpp"
 #include "implementation/cim_renderer.cpp"
+#include "implementation/cim_layout.cpp"
 #include "implementation/cim_component.cpp"
 
 // [COMPONENTS]
@@ -125,16 +133,13 @@ TextComponent(const char *Text, ui_layout_node *LayoutNode, ui_font *Font);
 
 // [CONTEXT MANAGEMENT]
 #define UIBeginContext() for (UIPass_Type Pass = UIPass_Layout; Pass !=  UIPass_Ended; Pass = (UIPass_Type)((cim_u32)Pass + 1))
-#define UIEndContext()   if (Pass == UIPass_Layout) {UIEndLayout();} else if (Pass == UIPass_Draw) {UIEndDraw(UIP_LAYOUT.Tree.DrawList);}
+#define UIEndContext()   if (Pass == UIPass_Layout) {UIEndLayout();} else if (Pass == UIPass_Draw) {UIEndDraw(&UI_DrawList);}
 
 static void
 UIBeginFrame()
 {
-    // Obviously wouldn't really do this but prototyping.
-    cim_layout *Layout = UIP_LAYOUT;
-    Layout->Tree.NodeCount = 0;
-    Layout->Tree.AtParent = 0;
-    Layout->Tree.ParentStack[0] = CimLayout_InvalidNode; // Temp.
+    ClearUITree(&UI_LayoutTree);
+    ClearUITree(&UI_DrawTree);
 }
 
 // TODO: Make this call the renderer draw function.

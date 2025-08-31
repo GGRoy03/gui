@@ -498,6 +498,7 @@ StoreAttributeInTheme(UIThemeAttribute_Flag Attribute, theme_token *Value, theme
 
     ui_theme *ThemeToFill = Parser->ActiveEffectTheme ? Parser->ActiveEffectTheme : Parser->ActiveTheme;
 
+    // TODO: Double check this.
     switch (ThemeToFill->Type)
     {
 
@@ -505,7 +506,7 @@ StoreAttributeInTheme(UIThemeAttribute_Flag Attribute, theme_token *Value, theme
     {
         theme_parsing_error Error = {};
         Error.Type                = ThemeParsingError_Internal;
-        WriteErrorMessage(&Error, "Invalid parser state when trying to set an attribute. Should have been found earlier.");
+        WriteErrorMessage(&Error, "Invalid theme supplied");
 
         return Error;
     }

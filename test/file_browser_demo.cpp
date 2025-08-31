@@ -301,6 +301,9 @@ FileBrowser()
                     FileBrowser.ActiveFolderIndex = PopHistory(&FileBrowser.Backward);
                 }
 
+                FileBrowser.BackwardButton.Clicked = false;
+                FileBrowser.BackwardButton.Hovered = false;
+
                 break;
             }
 
@@ -310,6 +313,9 @@ FileBrowser()
                 {
                     PushHistory(FileBrowser.ActiveFolderIndex, &FileBrowser.Backward);
                     FileBrowser.ActiveFolderIndex = PopHistory(&FileBrowser.Forward);
+
+                    FileBrowser.ForwardButton.Clicked = false;
+                    FileBrowser.ForwardButton.Hovered = false;
                 }
 
                 break;
@@ -323,6 +329,9 @@ FileBrowser()
                     while (ClickedIndex != PopHistory(&FileBrowser.Backward)) {};
                     FileBrowser.ActiveFolderIndex = ClickedIndex;
                 }
+
+                FileBrowser.HistoryButton.Clicked = false;
+                FileBrowser.HistoryButton.Hovered = false;
             }
 
         } break;

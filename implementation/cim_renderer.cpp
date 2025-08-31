@@ -97,19 +97,6 @@ UISetFont(ui_font *Font)
 
 // [Agnostic Code]
 
-static ui_draw_command *
-AllocateDrawCommand(ui_draw_list *List)
-{
-    ui_draw_command *Result = NULL;
-
-    if (List->CommandCount < Cim_ArrayCount(List->Commands))
-    {
-        Result = List->Commands + List->CommandCount++;
-    }
-
-    return Result;
-}
-
 static ui_draw_batch *
 GetDrawBatch(ui_draw_batch_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type PipelineType)
 {
@@ -159,32 +146,158 @@ GetDrawBatch(ui_draw_batch_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type Pi
     return Batch;
 }
 
+static ui_draw_node *
+GetDrawNode(ui_tree *Tree, cim_u32 Index)
+{
+    ui_draw_node *Result = NULL;
+
+    if (Index < Cim_ArrayCount(Tree->Nodes.Draw))
+    {
+        Result = Tree->Nodes.Draw + Index;
+
+        if(Index == Tree->NodeCount)
+        {
+            Tree->NodeCount++;
+        }
+    }
+
+    return Result;
+}
+
+// NOTE: Also temporary while we figure out a better way.
+static ui_draw_command *
+AllocateDrawCommand(ui_draw_list *List, UIDrawCommand_Type Type, cim_bit_field Flag)
+{
+    ui_draw_command *Result = NULL;
+
+    if (List->CommandCount < Cim_ArrayCount(List->Commands))
+    {
+        Result        = List->Commands + List->CommandCount;
+        Result->Type  = Type;
+        Result->Id    = {List->CommandCount};
+        Result->Flags = Flag;
+
+
+        ++List->CommandCount;
+    }
+
+    return Result;
+}
+
+static ui_draw_command *
+GetDrawCommand(ui_draw_list *DrawList, ui_draw_command_id Id)
+{
+    ui_draw_command *Result = NULL;
+
+    if (Id.Value < DrawList->CommandCount)
+    {
+        Result = DrawList->Commands + Id.Value;
+    }
+
+    return Result;
+}
+
+static ui_draw_node *
+PushDrawNode(UIDrawNode_Type Type)
+{
+    Cim_Assert(CimCurrent && (Type > UIDrawNode_None && Type <= UIDrawNode_Text));
+
+    ui_tree      *Tree   = &UI_DrawTree;
+    ui_draw_node *Result = NULL;
+
+    // TODO: Common tree allocation.
+    Cim_Assert(Tree->NodeCount < UILayout_NodeCount);
+
+    cim_u32 NodeIndex   = Tree->NodeCount;
+    cim_u32 ParentIndex = Tree->ParentStack[Tree->ParentTop];
+
+    Result = GetDrawNode(Tree, NodeIndex);
+    if(Result)
+    { 
+        Result->Type       = Type;
+        Result->Next       = UITree_InvalidNode;
+        Result->FirstChild = UITree_InvalidNode;
+
+        // WARN: Duplicate code.
+        ui_draw_node *ParentNode = GetDrawNode(Tree, ParentIndex);
+        if(ParentNode)
+        {
+            cim_u32       LastIndex = ParentNode->FirstChild;
+            ui_draw_node *LastNode  = GetDrawNode(Tree, LastIndex);
+            while(LastNode && LastNode->Next != UITree_InvalidNode)
+            {
+                LastIndex = LastNode->Next;
+                LastNode  = GetDrawNode(Tree, LastIndex);
+            }
+
+            if(!LastNode)
+            {
+                ParentNode->FirstChild = NodeIndex;
+            }
+            else
+            {
+                LastNode->Next = NodeIndex;
+            }
+        }
+    }
+
+    // BUG: Missing the parent stack check. How does this work?
+    // If we want a parallel tree we should just rely the on the push
+    // node function? I literally don't need a tree or what? Because
+    // the code works just fine right now. What is the point of the
+    // tree then? What was the idea?
+
+    return Result;
+}
+
 static void
 UIEndDraw(ui_draw_list *DrawList)
 {
+    // State.
+    cim_vector2     Position     = {};
+    cim_vector2     Size         = {};
+    ui_draw_batch  *Batch        = NULL;
+    cim_rect        ClippingRect = {};
+    UIPipeline_Type Pipeline     = UIPipeline_None;
+
     for (cim_u32 CommandIdx = 0; CommandIdx < DrawList->CommandCount; CommandIdx++)
     {
         ui_draw_command *Command = DrawList->Commands + CommandIdx;
-        ui_draw_batch   *Batch   = GetDrawBatch(UIP_BATCHES, Command->ClippingRect, Command->Pipeline);
 
         switch (Command->Type)
         {
 
-        case UICommand_Quad:
+        case UIDrawCommand_Header:
         {
-            ui_layout_node_state NodeState = GetUILayoutNodeState(Command->LayoutNodeId);
-            ui_draw_command_quad Quad      = Command->ExtraData.Quad;
+            ui_draw_command_header Header = Command->Data.Header;
+            ClippingRect = Header.ClippingRect;
+            Pipeline     = Header.Pipeline;
 
-            cim_f32 X0 = NodeState.X;
-            cim_f32 Y0 = NodeState.Y;
-            cim_f32 X1 = NodeState.X + NodeState.Width;
-            cim_f32 Y1 = NodeState.Y + NodeState.Height;
+            // NOTE: Is that bad? Seems fine. And works great.
+            bool CanOverwritePosition = !(Command->Flags & UIDrawCommand_NoPositionOverwrite);
+            if (CanOverwritePosition)
+            {
+                Position = Header.Position;
+                Size     = Header.Size;
+            }
+
+            Batch = GetDrawBatch(UIP_BATCHES, ClippingRect, Pipeline);
+        } break;
+
+        case UIDrawCommand_Quad:
+        {
+            ui_draw_command_quad Quad = Command->Data.Quad;
+
+            cim_f32 X0 = Position.x;
+            cim_f32 Y0 = Position.y;
+            cim_f32 X1 = Position.x + Size.x;
+            cim_f32 Y1 = Position.y + Size.y;
 
             ui_vertex Body[4];
-            Body[0] = {X0, Y0, 0.0f, 1.0f,  Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
-            Body[1] = {X0, Y1, 0.0f, 0.0f,  Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
-            Body[2] = {X1, Y0, 1.0f, 1.0f,  Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
-            Body[3] = {X1, Y1, 1.0f, 0.0f,  Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+            Body[0] = {X0, Y0, 0.0f, 1.0f, Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+            Body[1] = {X0, Y1, 0.0f, 0.0f, Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+            Body[2] = {X1, Y0, 1.0f, 1.0f, Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+            Body[3] = {X1, Y1, 1.0f, 0.0f, Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
 
             cim_u32 Indices[6];
             Indices[0] = Batch->VtxCount + 0;
@@ -202,16 +315,15 @@ UIEndDraw(ui_draw_list *DrawList)
 
         } break;
 
-        case UICommand_Border:
+        case UIDrawCommand_Border:
         {
-            ui_layout_node_state   NodeState = GetUILayoutNodeState(Command->LayoutNodeId);
-            ui_draw_command_border Border    = Command->ExtraData.Border;
+            ui_draw_command_border Border = Command->Data.Border;
             Cim_Assert(Border.Width > 0);
 
-            cim_f32 X0 = NodeState.X - Border.Width;
-            cim_f32 Y0 = NodeState.Y - Border.Width;
-            cim_f32 X1 = NodeState.X + NodeState.Width  + Border.Width;
-            cim_f32 Y1 = NodeState.Y + NodeState.Height + Border.Width;
+            cim_f32 X0 = Position.x - Border.Width;
+            cim_f32 Y0 = Position.y - Border.Width;
+            cim_f32 X1 = Position.x + Size.x + Border.Width;
+            cim_f32 Y1 = Position.y + Size.y + Border.Width;
 
             ui_vertex Borders[4];
             Borders[0] = {X0, Y0, 0.0f, 1.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
@@ -235,10 +347,9 @@ UIEndDraw(ui_draw_list *DrawList)
         } break;
 
         // TODO: Debug this.
-        case UICommand_Text:
+        case UIDrawCommand_Text:
         {
-            ui_layout_node_state NodeState = GetUILayoutNodeState(Command->LayoutNodeId);
-            ui_draw_command_text Text      = Command->ExtraData.Text;
+            ui_draw_command_text Text = Command->Data.Text;
 
             // NOTE: Okay so one limitation is that we use the NodeState to place the text.
             // Okay for now. Let's just get it going? And then we have stateless text. Which
@@ -248,21 +359,21 @@ UIEndDraw(ui_draw_list *DrawList)
 
             if (Text.Font->Mode == UIFont_ExtendedASCIIDirectMapping)
             {
-                cim_f32 MiddleOffsetX = (NodeState.Width - Text.Width) / 2;
+                cim_f32 MiddleOffsetX = (Size.x - Text.Width) / 2;
 
-                cim_f32 PenX   = NodeState.X + MiddleOffsetX;
-                cim_f32 PenY   = NodeState.Y;
+                cim_f32 PenX   = Position.x + MiddleOffsetX;
+                cim_f32 PenY   = Position.y;
                 cim_f32 StartX = PenX;
 
-                for(cim_u32 Idx = 0; Idx < Text.StringLength; Idx++)
+                for (cim_u32 Idx = 0; Idx < Text.StringLength; Idx++)
                 {
                     glyph_layout Layout = FindGlyphLayoutByDirectMapping(Text.Font->Table.Direct, Text.String[Idx]);
-                    glyph_atlas  Atlas  = FindGlyphAtlasByDirectMapping (Text.Font->Table.Direct, Text.String[Idx]);
+                    glyph_atlas  Atlas  = FindGlyphAtlasByDirectMapping(Text.Font->Table.Direct, Text.String[Idx]);
 
                     // TODO: Double check this.
-                    if(PenX + Layout.AdvanceX > NodeState.X + NodeState.Width && (Idx != Text.StringLength - 1))
+                    if (PenX + Layout.AdvanceX > Position.x + Size.x && (Idx != Text.StringLength - 1))
                     {
-                        PenX  = StartX;
+                        PenX = StartX;
                         PenY += Text.Font->LineHeight;
                     }
 
@@ -300,7 +411,7 @@ UIEndDraw(ui_draw_list *DrawList)
                 }
             }
 
-            Batch->Font = Command->ExtraData.Text.Font;
+            Batch->Font = Command->Data.Text.Font;
 
         } break;
 
@@ -314,6 +425,7 @@ UIEndDraw(ui_draw_list *DrawList)
 
     DrawList->CommandCount = 0;
 }
+
 
 // [Uber Shaders]
 // NOTE: I still don't really know what I want to do with this.

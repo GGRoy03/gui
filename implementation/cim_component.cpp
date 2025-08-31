@@ -2,7 +2,7 @@ static ui_component *
 FindComponent(const char *Key)
 {
     Cim_Assert(CimCurrent);
-    ui_component_hashmap *Hashmap = &UI_LAYOUT.Components;
+    ui_component_hashmap *Hashmap = &UI_Components;
 
     if (!Hashmap->IsInitialized)
     {
@@ -79,16 +79,15 @@ FindComponent(const char *Key)
 static void
 UIRow(void)
 {
-    ui_layout_node *LayoutNode = PushLayoutNode(true, NULL); Cim_Assert(LayoutNode);
-    LayoutNode->Padding       = {5, 5, 5, 5};
-    LayoutNode->Spacing       = {10, 0};
-    LayoutNode->ContainerType = UIContainer_Row;
+    ui_layout_node *LayoutNode = PushLayoutNode(UIContainer_Row, {UILayout_InvalidNode}, NULL); Cim_Assert(LayoutNode);
+    LayoutNode->Padding = {5, 5, 5, 5};
+    LayoutNode->Spacing = {10, 0};
 }
 
 static void
 UIEndRow()
 {
-    PopParent();
+    PopParentNode(&UI_LayoutTree);
 }
 
 static bool
@@ -96,46 +95,48 @@ UIWindow(const char *Id, const char *ThemeId, ui_component_state *State)
 {
     Cim_Assert(CimCurrent && Id && ThemeId);
 
-    ui_layout_node *LayoutNode = PushLayoutNode(true, State); Cim_Assert(LayoutNode);
-    ui_component   *Component  = FindComponent(Id);           Cim_Assert(Component);
+    ui_component *Component = FindComponent(Id);    
+    Cim_Assert(Component);
 
     ui_window_theme Theme = GetWindowTheme(ThemeId, Component->ThemeId);
     Cim_Assert(Theme.ThemeId.Value);
 
-    LayoutNode->Padding       = Theme.Padding;
-    LayoutNode->Spacing       = Theme.Spacing;
-    LayoutNode->ContainerType = UIContainer_Column;
-
-    // TODO: Get the X,Y from somewhere else.
-    LayoutNode->X = 500.0f;
-    LayoutNode->Y = 400.0f;
-
-    if (Theme.BorderWidth > 0)
+    ui_draw_node    *DrawNode      = PushDrawNode(UIDrawNode_Window);
+    ui_draw_command *CommandHeader = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Header, UIDrawCommand_NoFlags);
+    if (DrawNode && CommandHeader)
     {
-        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-        Command->Type         = UICommand_Border;
-        Command->Pipeline     = UIPipeline_Default;
-        Command->ClippingRect = {};
-        Command->LayoutNodeId = LayoutNode->Id;
+        CommandHeader->Data.Header.ClippingRect = {};
+        CommandHeader->Data.Header.Pipeline     = UIPipeline_Default;
 
-        Command->ExtraData.Border.Color = Theme.BorderColor;
-        Command->ExtraData.Border.Width = Theme.BorderWidth;
-    }
-
-    {
-        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-        if (Command)
+        if (Theme.BorderWidth > 0)
         {
-            Command->Type         = UICommand_Quad;
-            Command->Pipeline     = UIPipeline_Default;
-            Command->ClippingRect = {};
-            Command->LayoutNodeId = LayoutNode->Id;
+            ui_draw_command *BorderCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Border, UIDrawCommand_NoFlags);
+            if (BorderCommand)
+            {
+                BorderCommand->Data.Border.Color = Theme.BorderColor;
+                BorderCommand->Data.Border.Width = Theme.BorderWidth;
 
-            Command->ExtraData.Quad.Color = Theme.Color;
+                DrawNode->Data.Window.BodyCommand = BorderCommand->Id;
+            }
+        }
+
+        ui_draw_command *BodyCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Quad, UIDrawCommand_NoFlags);
+        if (BodyCommand)
+        {
+            BodyCommand->Data.Quad.Color = Theme.Color;
+
+            DrawNode->Data.Window.BodyCommand = BodyCommand->Id;
         }
     }
 
-    // Cache it for faster retrieval. Could be done at initialization if we have that.
+    // TODO: Get the X,Y from somewhere else.
+    ui_layout_node *LayoutNode = PushLayoutNode(UIContainer_Column, CommandHeader->Id, State);
+    LayoutNode->Padding = Theme.Padding;
+    LayoutNode->Spacing = Theme.Spacing;
+    LayoutNode->X       = 500.0f;
+    LayoutNode->Y       = 400.0f;
+
+    // NOTE: Cache it for next frame.
     Component->ThemeId = Theme.ThemeId;
 
     return true;
@@ -190,11 +191,33 @@ TextComponent(const char *Text, ui_layout_node *LayoutNode, ui_font *Font)
         // TODO: Other modes.
     }
 
-    cim_u32 LayoutNodeId = 0;
+    cim_bit_field HeaderFlags = UIDrawCommand_NoFlags;
     if (LayoutNode)
     {
-        LayoutNodeId = LayoutNode->Id;
+        HeaderFlags = UIDrawCommand_NoPositionOverwrite;
+    }
 
+    ui_draw_node    *TextNode      = PushDrawNode(UIDrawNode_Text);
+    ui_draw_command *CommandHeader = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Header, HeaderFlags);
+    if (TextNode && CommandHeader)
+    {
+        CommandHeader->Data.Header.ClippingRect = {};
+        CommandHeader->Data.Header.Pipeline     = UIPipeline_Text;
+
+        ui_draw_command *TextCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Text, UIDrawCommand_NoFlags);
+        if (TextCommand)
+        {
+            TextCommand->Data.Text.Font         = Font;
+            TextCommand->Data.Text.StringLength = TextLength;
+            TextCommand->Data.Text.String       = (char *)Text;    // WARN: Danger!
+            TextCommand->Data.Text.Width        = TextContentWidth;
+
+            TextNode->Data.Text.TextCommand = TextCommand->Id;
+        }
+    }
+
+    if (LayoutNode)
+    {
         // TODO: Idk about this? Probably depends on what the user wants.
         if (LayoutNode->Width < TextContentWidth)
         {
@@ -203,26 +226,11 @@ TextComponent(const char *Text, ui_layout_node *LayoutNode, ui_font *Font)
     }
     else
     {
-        ui_layout_node *Layout = PushLayoutNode(false, NULL); // WARN: Then we are forced to no states on text for now.
+        ui_layout_node *Layout = PushLayoutNode(UIContainer_None, CommandHeader->Id, NULL);
         Layout->Width  = TextContentWidth;
         Layout->Height = Font->LineHeight;
-
-        LayoutNodeId = Layout->Id;
     }
 
-    ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-    if (Command)
-    {
-        Command->Type         = UICommand_Text;
-        Command->ClippingRect = {};
-        Command->Pipeline     = UIPipeline_Text;
-        Command->LayoutNodeId = LayoutNodeId;
-
-        Command->ExtraData.Text.Font         = Font;
-        Command->ExtraData.Text.StringLength = TextLength;
-        Command->ExtraData.Text.String       = (char *)Text;     // WARN: Danger!
-        Command->ExtraData.Text.Width        = TextContentWidth;
-    }
 }
 
 static void
@@ -231,9 +239,8 @@ ButtonComponent(const char *Id, const char *ThemeId, const char *Text,
 {
     Cim_Assert(CimCurrent && ThemeId);
 
-    ui_button_theme Theme      = {};
-    ui_layout_node *LayoutNode = NULL;
-    ui_component   *Component  = NULL;
+    ui_button_theme Theme     = {};
+    ui_component   *Component = NULL;
 
     if (Id)
     {
@@ -248,42 +255,45 @@ ButtonComponent(const char *Id, const char *ThemeId, const char *Text,
         Theme = GetButtonTheme(ThemeId, {0});
     }
 
-    // NOTE: We could overwrite if the text is bigger and the user wants it.
-    LayoutNode = PushLayoutNode(false, State);
-    LayoutNode->Width  = Theme.Size.x;
-    LayoutNode->Height = Theme.Size.y;
-
-    // Draw Border
-    if (Theme.BorderWidth > 0)
+    ui_draw_node    *DrawNode      = PushDrawNode(UIDrawNode_Button);
+    ui_draw_command *CommandHeader = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Header, UIDrawCommand_NoFlags);
+    ui_layout_node  *LayoutNode    = PushLayoutNode(UIContainer_None, CommandHeader->Id, State);
+    if (LayoutNode && DrawNode && CommandHeader)
     {
-        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-        Command->Type         = UICommand_Border;
-        Command->Pipeline     = UIPipeline_Default;
-        Command->ClippingRect = {};
-        Command->LayoutNodeId = LayoutNode->Id;
+        LayoutNode->Width  = Theme.Size.x;
+        LayoutNode->Height = Theme.Size.y;
 
-        Command->ExtraData.Border.Color = Theme.BorderColor;
-        Command->ExtraData.Border.Width = Theme.BorderWidth;
-    }
+        CommandHeader->Data.Header.ClippingRect = {};
+        CommandHeader->Data.Header.Pipeline = UIPipeline_Default;
 
-    // Draw Body
-    {
-        ui_draw_command *Command = AllocateDrawCommand(UIP_LAYOUT.Tree.DrawList);
-        if (Command)
+        if (Theme.BorderWidth > 0)
         {
-            Command->Type         = UICommand_Quad;
-            Command->Pipeline     = UIPipeline_Default;
-            Command->ClippingRect = {};
-            Command->LayoutNodeId = LayoutNode->Id;
+            // NOTE: Doing this is annoying. We could create it and send it instead.
+            // Then that is where we decide if we accept it or not. Which is way simpler.
+            ui_draw_command *BorderCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Border, UIDrawCommand_NoFlags);
+            if (BorderCommand)
+            {
+                BorderCommand->Data.Border.Color = Theme.BorderColor;
+                BorderCommand->Data.Border.Width = Theme.BorderWidth;
 
-            Command->ExtraData.Quad.Color = Theme.Color;
-            Command->ExtraData.Quad.Index = Index;
+                DrawNode->Data.Button.BorderCommand = BorderCommand->Id;
+            }
         }
-    }
+        
+        ui_draw_command *BodyCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Quad, UIDrawCommand_NoFlags);
+        if (BodyCommand)
+        {
+            BodyCommand->Data.Quad.Color = Theme.Color;
+            BodyCommand->Data.Quad.Index = Index;
 
-    // Draw Text
-    if (Text)
-    {
-        TextComponent(Text, LayoutNode, CimCurrent->CurrentFont);
+            DrawNode->Data.Button.BodyCommand = BodyCommand->Id;
+        }
+
+        // BUG: This is a problem as well since we need it inside the node.
+        // Fix it when we do text effects.
+        if (Text)
+        {
+            TextComponent(Text, LayoutNode, CimCurrent->CurrentFont);
+        }
     }
 }

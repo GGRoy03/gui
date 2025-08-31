@@ -1,10 +1,13 @@
 #pragma once
 
-// [Enums]
+// [Constants]
+
+#define UITree_NestingDepth 32
+#define UITree_InvalidNode 0xFFFFFFFF
 
 typedef enum UIRenderer_Backend
 {
-	UIRenderer_D3D = 0,
+    UIRenderer_D3D = 0,
 } UIRenderer_Backend;
 
 typedef enum UIShader_Type
@@ -21,11 +24,129 @@ typedef enum UIPipeline_Type
     UIPipeline_Count   = 3,
 } UIPipeline_Type;
 
+typedef enum UIDrawNode_Type
+{
+    UIDrawNode_None   = 0,
+    UIDrawNode_Window = 1,
+    UIDrawNode_Button = 2,
+    UIDrawNode_Text   = 3,
+} UIDrawNode_Type;
+
+typedef enum UIDrawCommand_Type
+{
+    UIDrawCommand_None   = 0,
+    UIDrawCommand_Header = 1, // NOTE: Not a header like window header, but more like a command header.
+    UIDrawCommand_Quad   = 2,
+    UIDrawCommand_Border = 3,
+    UIDrawCommand_Text   = 4,
+} UIDrawCommand_Type;
+
+typedef enum UIDrawCommand_Flag
+{
+    UIDrawCommand_NoFlags             = 0,
+    UIDrawCommand_NoPositionOverwrite = 1,
+} UIDrawCommand_Flag;
+
 // [Forward Declarations]
 
 typedef struct ui_font ui_font;
 
 // [Types]
+
+typedef struct ui_draw_command_id
+{
+    cim_u32 Value;
+} ui_draw_command_id;
+
+typedef struct ui_draw_node_window
+{
+    ui_draw_command_id BorderCommand;
+    ui_draw_command_id BodyCommand;
+} ui_draw_node_window;
+
+typedef struct ui_draw_node_button
+{
+    ui_draw_command_id BorderCommand;
+    ui_draw_command_id BodyCommand;
+    ui_draw_command_id TextCommand;
+} ui_draw_node_button;
+
+typedef struct ui_draw_node_text
+{
+    ui_draw_command_id TextCommand;
+} ui_draw_node_text;
+
+typedef struct ui_draw_node
+{
+    UIDrawNode_Type Type;
+    union
+    {
+        ui_draw_node_window Window;
+        ui_draw_node_button Button;
+        ui_draw_node_text   Text;
+    } Data;
+
+    // Written to by layout
+    cim_vector2 Position;
+    cim_vector2 Size;
+
+    // Tree
+    cim_u32 Id;
+    cim_u32 Next;
+    cim_u32 FirstChild;
+} ui_draw_node;
+
+typedef struct ui_draw_command_header
+{
+    cim_rect        ClippingRect;
+    UIPipeline_Type Pipeline;
+    cim_vector2     Position;
+    cim_vector2     Size;
+} ui_draw_command_header;
+
+typedef struct ui_draw_command_quad
+{
+    cim_vector4 Color;
+    cim_u32     Index;
+} ui_draw_command_quad;
+
+typedef struct ui_draw_command_border
+{
+    cim_vector4 Color;
+    cim_f32     Width;
+} ui_draw_command_border;
+
+typedef struct ui_draw_command_text
+{
+    ui_font *Font;
+    cim_f32  Width;
+    cim_u32  StringLength;
+    char    *String;       // WARN: This is very fragile
+} ui_draw_command_text;
+
+typedef struct ui_draw_command
+{
+    UIDrawCommand_Type Type;
+    union
+    {
+        ui_draw_command_quad   Quad;
+        ui_draw_command_border Border;
+        ui_draw_command_text   Text;
+        ui_draw_command_header Header;
+    } Data;
+
+    ui_draw_command_id Id;
+    cim_bit_field      Flags;
+} ui_draw_command;
+
+// NOTE: This is temporary while we figure out a better way.
+typedef struct ui_draw_list
+{
+    ui_draw_command Commands[64];
+    cim_u32         CommandCount;
+} ui_draw_list;
+
+// NOTE: Experimenting above.
 
 typedef struct ui_shader_desc
 {
@@ -75,56 +196,6 @@ typedef struct ui_draw_batch_buffer
     cim_rect        CurrentClipRect;
     UIPipeline_Type CurrentPipelineType;
 } ui_draw_batch_buffer;
-
-typedef enum UICommand_Type
-{
-    UICommand_None   = 0,
-    UICommand_Quad   = 1,
-    UICommand_Border = 2,
-    UICommand_Text   = 3,
-} UICommand_Type;
-
-typedef struct ui_draw_command_quad
-{
-    cim_vector4 Color;
-    cim_u32     Index; // NOTE: Used for indexed button for example, could apply to other things than quads.
-} ui_draw_command_quad;
-
-typedef struct ui_draw_command_border
-{
-    cim_vector4 Color;
-    cim_f32     Width;
-} ui_draw_command_border;
-
-typedef struct ui_draw_command_text
-{
-    ui_font *Font;
-    cim_f32  Width;
-    cim_u32  StringLength;
-    char    *String;  // WARN: This is very fragile
-} ui_draw_command_text;
-
-typedef struct ui_draw_command
-{
-    UICommand_Type Type;
-    union
-    {
-        ui_draw_command_quad   Quad;
-        ui_draw_command_border Border;
-        ui_draw_command_text   Text;
-    } ExtraData;
-
-    cim_u32 LayoutNodeId;
-
-    cim_rect        ClippingRect;
-    UIPipeline_Type Pipeline;
-} ui_draw_command;
-
-typedef struct ui_draw_list
-{
-    ui_draw_command Commands[16];
-    cim_u32         CommandCount;
-} ui_draw_list;
 
 // V-Table
 typedef void DrawUI (cim_i32 Width, cim_i32 Height);

@@ -79,7 +79,12 @@ FindComponent(const char *Key)
 static void
 UIRow(void)
 {
-    ui_layout_node *LayoutNode = PushLayoutNode(UIContainer_Row, {UILayout_InvalidNode}, NULL); Cim_Assert(LayoutNode);
+    ui_layout_node *LayoutNode = NULL;
+    ui_draw_node   *DrawNode   = NULL;
+    PushLayoutAndDrawNode(UIContainer_Row, UIDrawNode_None, NULL, &LayoutNode, &DrawNode);
+
+    DrawNode->Pipeline = UIPipeline_None; // NOTE: Should get ignored by the drawer.
+
     LayoutNode->Padding = {5, 5, 5, 5};
     LayoutNode->Spacing = {10, 0};
 }
@@ -101,40 +106,38 @@ UIWindow(const char *Id, const char *ThemeId, ui_component_state *State)
     ui_window_theme Theme = GetWindowTheme(ThemeId, Component->ThemeId);
     Cim_Assert(Theme.ThemeId.Value);
 
-    ui_draw_node    *DrawNode      = PushDrawNode(UIDrawNode_Window);
-    ui_draw_command *CommandHeader = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Header, UIDrawCommand_NoFlags);
-    if (DrawNode && CommandHeader)
+    ui_draw_node   *DrawNode   = NULL;
+    ui_layout_node *LayoutNode = NULL;
+    PushLayoutAndDrawNode(UIContainer_Column, UIDrawNode_Window, State, &LayoutNode, &DrawNode);
+
+    if (DrawNode && LayoutNode)
     {
-        CommandHeader->Data.Header.ClippingRect = {};
-        CommandHeader->Data.Header.Pipeline     = UIPipeline_Default;
+        // TODO: Get the X,Y from somewhere else.
+        LayoutNode->Padding = Theme.Padding;
+        LayoutNode->Spacing = Theme.Spacing;
+        LayoutNode->X       = 500.0f;
+        LayoutNode->Y       = 400.0f;
+
+        DrawNode->ClippingRect = {};
+        DrawNode->Pipeline    = UIPipeline_Default;
+
+        ui_draw_command_border *BorderCommand     = &DrawNode->Data.Window.BorderCommand;
+        ui_draw_command_quad   *BackgroundCommand = &DrawNode->Data.Window.BodyCommand;
 
         if (Theme.BorderWidth > 0)
         {
-            ui_draw_command *BorderCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Border, UIDrawCommand_NoFlags);
-            if (BorderCommand)
-            {
-                BorderCommand->Data.Border.Color = Theme.BorderColor;
-                BorderCommand->Data.Border.Width = Theme.BorderWidth;
-
-                DrawNode->Data.Window.BodyCommand = BorderCommand->Id;
-            }
+            BorderCommand->Color     = Theme.BorderColor;
+            BorderCommand->Width     = Theme.BorderWidth;
+            BorderCommand->IsVisible = true;
         }
-
-        ui_draw_command *BodyCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Quad, UIDrawCommand_NoFlags);
-        if (BodyCommand)
+        else
         {
-            BodyCommand->Data.Quad.Color = Theme.Color;
-
-            DrawNode->Data.Window.BodyCommand = BodyCommand->Id;
+            BorderCommand->IsVisible = false;
         }
+        
+        BackgroundCommand->Color     = Theme.Color;
+        BackgroundCommand->IsVisible = true;
     }
-
-    // TODO: Get the X,Y from somewhere else.
-    ui_layout_node *LayoutNode = PushLayoutNode(UIContainer_Column, CommandHeader->Id, State);
-    LayoutNode->Padding = Theme.Padding;
-    LayoutNode->Spacing = Theme.Spacing;
-    LayoutNode->X       = 500.0f;
-    LayoutNode->Y       = 400.0f;
 
     // NOTE: Cache it for next frame.
     Component->ThemeId = Theme.ThemeId;
@@ -142,7 +145,7 @@ UIWindow(const char *Id, const char *ThemeId, ui_component_state *State)
     return true;
 }
 
-static void
+static ui_draw_command_text
 TextComponent(const char *Text, ui_layout_node *LayoutNode, ui_font *Font)
 {
     Cim_Assert(Text);
@@ -191,46 +194,40 @@ TextComponent(const char *Text, ui_layout_node *LayoutNode, ui_font *Font)
         // TODO: Other modes.
     }
 
-    cim_bit_field HeaderFlags = UIDrawCommand_NoFlags;
-    if (LayoutNode)
-    {
-        HeaderFlags = UIDrawCommand_NoPositionOverwrite;
-    }
-
-    ui_draw_node    *TextNode      = PushDrawNode(UIDrawNode_Text);
-    ui_draw_command *CommandHeader = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Header, HeaderFlags);
-    if (TextNode && CommandHeader)
-    {
-        CommandHeader->Data.Header.ClippingRect = {};
-        CommandHeader->Data.Header.Pipeline     = UIPipeline_Text;
-
-        ui_draw_command *TextCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Text, UIDrawCommand_NoFlags);
-        if (TextCommand)
-        {
-            TextCommand->Data.Text.Font         = Font;
-            TextCommand->Data.Text.StringLength = TextLength;
-            TextCommand->Data.Text.String       = (char *)Text;    // WARN: Danger!
-            TextCommand->Data.Text.Width        = TextContentWidth;
-
-            TextNode->Data.Text.TextCommand = TextCommand->Id;
-        }
-    }
+    ui_draw_command_text Result = {};
 
     if (LayoutNode)
     {
-        // TODO: Idk about this? Probably depends on what the user wants.
-        if (LayoutNode->Width < TextContentWidth)
-        {
-            LayoutNode->Width = TextContentWidth + 10;
-        }
+        Result.Font         = Font;
+        Result.String       = (char *)Text;
+        Result.StringLength = TextLength;
+        Result.Width        = TextContentWidth;
+        Result.IsVisible    = true;
     }
     else
     {
-        ui_layout_node *Layout = PushLayoutNode(UIContainer_None, CommandHeader->Id, NULL);
-        Layout->Width  = TextContentWidth;
-        Layout->Height = Font->LineHeight;
+        ui_draw_node   *DrawNode   = NULL;
+        ui_layout_node *LayoutNode = NULL;
+        PushLayoutAndDrawNode(UIContainer_None, UIDrawNode_Text, NULL, &LayoutNode, &DrawNode);
+
+        if (DrawNode && LayoutNode)
+        {
+            LayoutNode->Width  = TextContentWidth;
+            LayoutNode->Height = Font->LineHeight;
+
+            DrawNode->ClippingRect = {};
+            DrawNode->Pipeline     = UIPipeline_Text;
+
+            ui_draw_command_text *TextCommand = &DrawNode->Data.Text.TextCommand;
+            TextCommand->Font         = Font;
+            TextCommand->String       = (char *)Text;
+            TextCommand->StringLength = TextLength;
+            TextCommand->Width        = TextContentWidth;
+            TextCommand->IsVisible    = true;
+        }
     }
 
+    return Result;
 }
 
 static void
@@ -255,45 +252,45 @@ ButtonComponent(const char *Id, const char *ThemeId, const char *Text,
         Theme = GetButtonTheme(ThemeId, {0});
     }
 
-    ui_draw_node    *DrawNode      = PushDrawNode(UIDrawNode_Button);
-    ui_draw_command *CommandHeader = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Header, UIDrawCommand_NoFlags);
-    ui_layout_node  *LayoutNode    = PushLayoutNode(UIContainer_None, CommandHeader->Id, State);
-    if (LayoutNode && DrawNode && CommandHeader)
+    ui_draw_node   *DrawNode   = NULL;
+    ui_layout_node *LayoutNode = NULL;
+    PushLayoutAndDrawNode(UIContainer_None, UIDrawNode_Button, State, &LayoutNode, &DrawNode);
+
+    if (DrawNode && LayoutNode)
     {
         LayoutNode->Width  = Theme.Size.x;
         LayoutNode->Height = Theme.Size.y;
 
-        CommandHeader->Data.Header.ClippingRect = {};
-        CommandHeader->Data.Header.Pipeline = UIPipeline_Default;
+        // BUG: Since we also draw text from this node, it means we won't be able to change the pipeline...
+        DrawNode->ClippingRect = {};
+        DrawNode->Pipeline     = UIPipeline_Default;
+
+        ui_draw_command_border *BorderCommand     = &DrawNode->Data.Button.BorderCommand;
+        ui_draw_command_quad   *BackgroundCommand = &DrawNode->Data.Button.BodyCommand;
+        ui_draw_command_text   *TextCommand       = &DrawNode->Data.Button.TextCommand;
 
         if (Theme.BorderWidth > 0)
         {
-            // NOTE: Doing this is annoying. We could create it and send it instead.
-            // Then that is where we decide if we accept it or not. Which is way simpler.
-            ui_draw_command *BorderCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Border, UIDrawCommand_NoFlags);
-            if (BorderCommand)
-            {
-                BorderCommand->Data.Border.Color = Theme.BorderColor;
-                BorderCommand->Data.Border.Width = Theme.BorderWidth;
-
-                DrawNode->Data.Button.BorderCommand = BorderCommand->Id;
-            }
+            BorderCommand->Color     = Theme.BorderColor;
+            BorderCommand->Width     = Theme.BorderWidth;
+            BorderCommand->IsVisible = true;
         }
-        
-        ui_draw_command *BodyCommand = AllocateDrawCommand(&UI_DrawList, UIDrawCommand_Quad, UIDrawCommand_NoFlags);
-        if (BodyCommand)
+        else
         {
-            BodyCommand->Data.Quad.Color = Theme.Color;
-            BodyCommand->Data.Quad.Index = Index;
-
-            DrawNode->Data.Button.BodyCommand = BodyCommand->Id;
+            BorderCommand->IsVisible = false;
         }
 
-        // BUG: This is a problem as well since we need it inside the node.
-        // Fix it when we do text effects.
+        BackgroundCommand->Color     = Theme.Color;
+        BackgroundCommand->Index     = Index;
+        BackgroundCommand->IsVisible = true;
+
         if (Text)
         {
-            TextComponent(Text, LayoutNode, CimCurrent->CurrentFont);
+            *TextCommand = TextComponent(Text, LayoutNode, CimCurrent->CurrentFont);
+        }
+        else
+        {
+            TextCommand->IsVisible = false;
         }
     }
 }

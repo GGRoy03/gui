@@ -72,61 +72,79 @@ GetLayoutNode(ui_tree *Tree, cim_u32 Index)
     return Result;
 }
 
-static ui_layout_node *
-PushLayoutNode(UIContainer_Type Type, ui_draw_command_id HeaderId, ui_component_state *State)
+static void
+LinkChildToParent(ui_tree *LayoutTree, ui_tree *DrawTree, cim_u32 NodeIndex, cim_u32 ParentIndex)
 {
-    Cim_Assert(CimCurrent && (Type >= UIContainer_None && Type <= UIContainer_Column));
+    ui_layout_node *ParentNode = GetLayoutNode(LayoutTree, ParentIndex);
+    ui_draw_node   *DrawNode   = GetDrawNode(DrawTree, ParentIndex);
 
-    ui_tree        *Tree   = &UI_LayoutTree;
-    ui_layout_node *Result = NULL;
-
-    // TODO: Common tree allocation.
-    Cim_Assert(Tree->NodeCount < UILayout_NodeCount);
-
-    cim_u32 NodeIndex   = Tree->NodeCount;
-    cim_u32 ParentIndex = GetParentIndex(Tree);
-
-    Result = GetLayoutNode(Tree, NodeIndex);
-    if(Result)
+    if (ParentNode && DrawNode)
     {
-        Result->Id            = NodeIndex;
-        Result->FirstChild    = UILayout_InvalidNode;
-        Result->Next          = UILayout_InvalidNode;
-        Result->Parent        = ParentIndex;
-        Result->State         = State;
-        Result->ChildCount    = 0;
-        Result->ContainerType = Type;
-        Result->CommandHeader = HeaderId;
-
-        // WARN: Duplicate code.
-        ui_layout_node *ParentNode = GetLayoutNode(Tree, ParentIndex);
-        if(ParentNode)
+        cim_u32         LastIndex = ParentNode->FirstChild;
+        ui_layout_node *LastNode  = GetLayoutNode(LayoutTree, LastIndex);
+        while (LastNode && LastNode->Next != UITree_InvalidNode)
         {
-            cim_u32         LastIndex = ParentNode->FirstChild;
-            ui_layout_node *LastNode  = GetLayoutNode(Tree, LastIndex);
-            while(LastNode && LastNode->Next != UITree_InvalidNode)
-            {
-                LastIndex = LastNode->Next;
-                LastNode  = GetLayoutNode(Tree, LastIndex);
-            }
+            LastIndex = LastNode->Next;
+            LastNode  = GetLayoutNode(LayoutTree, LastIndex);
+        }
 
-            if(!LastNode)
+        if (!LastNode)
+        {
+            ParentNode->FirstChild = NodeIndex;
+            DrawNode->FirstChild   = NodeIndex;
+        }
+        else
+        {
+            LastNode->Next = NodeIndex;
+
+            ui_draw_node *LastDrawNode = GetDrawNode(DrawTree, LastIndex);
+            if (LastDrawNode)
             {
-                ParentNode->FirstChild = NodeIndex;
-            }
-            else
-            {
-                LastNode->Next = NodeIndex;
+                LastDrawNode->Next = NodeIndex;
             }
         }
     }
+}
 
-    if(Type != UIContainer_None)
+// NOTE: This does 2 thing, push a node into the layout tree and one in the draw tree.
+static void
+PushLayoutAndDrawNode(UIContainer_Type ContainerType, UIDrawNode_Type DrawNodeType, ui_component_state *State,
+                      ui_layout_node **OutLayoutNode, ui_draw_node **OutDrawNode)
+{
+    ui_tree *LayoutTree = &UI_LayoutTree;
+    ui_tree *DrawTree   = &UI_DrawTree;
+
+    cim_u32 NodeIndex   = LayoutTree->NodeCount;
+    cim_u32 ParentIndex = GetParentIndex(LayoutTree);
+
+    ui_layout_node *LayoutNode = GetLayoutNode(LayoutTree, NodeIndex);
+    ui_draw_node   *DrawNode   = GetDrawNode(DrawTree, NodeIndex);
+    if (LayoutNode && DrawNode)
     {
-        PushParentNode(Tree, NodeIndex);
+        LayoutNode->Id            = NodeIndex;
+        LayoutNode->FirstChild    = UILayout_InvalidNode;
+        LayoutNode->Next          = UILayout_InvalidNode;
+        LayoutNode->Parent        = ParentIndex;
+        LayoutNode->ChildCount    = 0;
+        LayoutNode->ContainerType = ContainerType;
+        LayoutNode->State         = State;
+
+        DrawNode->Id         = NodeIndex;
+        DrawNode->FirstChild = UILayout_InvalidNode;
+        DrawNode->Next       = UILayout_InvalidNode;
+        DrawNode->Type       = DrawNodeType;
+
+        LinkChildToParent(LayoutTree, DrawTree, NodeIndex, ParentIndex);
+
+        if (ContainerType != UIContainer_None)
+        {
+            PushParentNode(LayoutTree, NodeIndex);
+            PushParentNode(DrawTree  , NodeIndex);
+        }
     }
 
-    return Result;
+    *OutLayoutNode = LayoutNode;
+    *OutDrawNode   = DrawNode;
 }
 
 static void
@@ -251,16 +269,9 @@ PlaceLayoutTree(ui_tree *Tree)
         cim_u32         NodeIndex = Stack[--Top];
         ui_layout_node *Node      = GetLayoutNode(Tree, NodeIndex);
 
-        // NOTE: This might not be the correct way to do this, but it should allow for
-        // more complex styling. Here we only use it to write the correct size and position.
-        // which looks okay.
-        ui_draw_command *HeaderCommand = GetDrawCommand(&UI_DrawList, Node->CommandHeader);
-        if (HeaderCommand)
-        {
-            Cim_Assert(HeaderCommand->Type == UIDrawCommand_Header);
-            HeaderCommand->Data.Header.Position = { Node->X, Node->Y };
-            HeaderCommand->Data.Header.Size     = { Node->Width, Node->Height };
-        }
+        ui_draw_node *DrawNode = GetDrawNode(&UI_DrawTree, NodeIndex); // NOTE: Trees are parallel.
+        DrawNode->Position = {Node->X, Node->Y};
+        DrawNode->Size     = {Node->Width, Node->Height};
 
         ClientX = Node->X + Node->Padding.x;
         ClientY = Node->Y + Node->Padding.y;

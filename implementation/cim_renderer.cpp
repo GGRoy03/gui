@@ -123,7 +123,7 @@ GetDrawBatch(ui_draw_batch_buffer *Buffer, cim_rect ClipRect, UIPipeline_Type Pi
         Buffer->Batches = New;
     }
 
-    if (Buffer->BatchCount == 0 || !RectAreEqual(Buffer->CurrentClipRect, ClipRect) || Buffer->CurrentPipelineType != PipelineType)
+    if ((Buffer->BatchCount == 0 || !RectAreEqual(Buffer->CurrentClipRect, ClipRect) || Buffer->CurrentPipelineType != PipelineType) && PipelineType != UIPipeline_None)
     {
         Batch = Buffer->Batches + Buffer->BatchCount++;
 
@@ -164,140 +164,105 @@ GetDrawNode(ui_tree *Tree, cim_u32 Index)
     return Result;
 }
 
-// NOTE: Also temporary while we figure out a better way.
-static ui_draw_command *
-AllocateDrawCommand(ui_draw_list *List, UIDrawCommand_Type Type, cim_bit_field Flag)
+static void
+ExecuteQuadCommand(ui_draw_command_quad *Quad, cim_vector2 Position, cim_vector2 Size, ui_draw_batch *Batch)
 {
-    ui_draw_command *Result = NULL;
+    cim_f32 X0 = Position.x;
+    cim_f32 Y0 = Position.y;
+    cim_f32 X1 = Position.x + Size.x;
+    cim_f32 Y1 = Position.y + Size.y;
 
-    if (List->CommandCount < Cim_ArrayCount(List->Commands))
-    {
-        Result        = List->Commands + List->CommandCount;
-        Result->Type  = Type;
-        Result->Id    = {List->CommandCount};
-        Result->Flags = Flag;
+    ui_vertex Body[4];
+    Body[0] = {X0, Y0, 0.0f, 1.0f, Quad->Color.x, Quad->Color.y, Quad->Color.z, Quad->Color.w};
+    Body[1] = {X0, Y1, 0.0f, 0.0f, Quad->Color.x, Quad->Color.y, Quad->Color.z, Quad->Color.w};
+    Body[2] = {X1, Y0, 1.0f, 1.0f, Quad->Color.x, Quad->Color.y, Quad->Color.z, Quad->Color.w};
+    Body[3] = {X1, Y1, 1.0f, 0.0f, Quad->Color.x, Quad->Color.y, Quad->Color.z, Quad->Color.w};
 
+    cim_u32 Indices[6];
+    Indices[0] = Batch->VtxCount + 0;
+    Indices[1] = Batch->VtxCount + 2;
+    Indices[2] = Batch->VtxCount + 1;
+    Indices[3] = Batch->VtxCount + 2;
+    Indices[4] = Batch->VtxCount + 3;
+    Indices[5] = Batch->VtxCount + 1;
 
-        ++List->CommandCount;
-    }
+    WriteToArena(Body, sizeof(Body), UIP_BATCHES.FrameVtx);
+    WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
 
-    return Result;
-}
-
-static ui_draw_command *
-GetDrawCommand(ui_draw_list *DrawList, ui_draw_command_id Id)
-{
-    ui_draw_command *Result = NULL;
-
-    if (Id.Value < DrawList->CommandCount)
-    {
-        Result = DrawList->Commands + Id.Value;
-    }
-
-    return Result;
-}
-
-static ui_draw_node *
-PushDrawNode(UIDrawNode_Type Type)
-{
-    Cim_Assert(CimCurrent && (Type > UIDrawNode_None && Type <= UIDrawNode_Text));
-
-    ui_tree      *Tree   = &UI_DrawTree;
-    ui_draw_node *Result = NULL;
-
-    // TODO: Common tree allocation.
-    Cim_Assert(Tree->NodeCount < UILayout_NodeCount);
-
-    cim_u32 NodeIndex   = Tree->NodeCount;
-    cim_u32 ParentIndex = Tree->ParentStack[Tree->ParentTop];
-
-    Result = GetDrawNode(Tree, NodeIndex);
-    if(Result)
-    { 
-        Result->Type       = Type;
-        Result->Next       = UITree_InvalidNode;
-        Result->FirstChild = UITree_InvalidNode;
-
-        // WARN: Duplicate code.
-        ui_draw_node *ParentNode = GetDrawNode(Tree, ParentIndex);
-        if(ParentNode)
-        {
-            cim_u32       LastIndex = ParentNode->FirstChild;
-            ui_draw_node *LastNode  = GetDrawNode(Tree, LastIndex);
-            while(LastNode && LastNode->Next != UITree_InvalidNode)
-            {
-                LastIndex = LastNode->Next;
-                LastNode  = GetDrawNode(Tree, LastIndex);
-            }
-
-            if(!LastNode)
-            {
-                ParentNode->FirstChild = NodeIndex;
-            }
-            else
-            {
-                LastNode->Next = NodeIndex;
-            }
-        }
-    }
-
-    // BUG: Missing the parent stack check. How does this work?
-    // If we want a parallel tree we should just rely the on the push
-    // node function? I literally don't need a tree or what? Because
-    // the code works just fine right now. What is the point of the
-    // tree then? What was the idea?
-
-    return Result;
+    Batch->VtxCount += 4;
+    Batch->IdxCount += 6;
 }
 
 static void
-UIEndDraw(ui_draw_list *DrawList)
+ExecuteBorderCommand(ui_draw_command_border *Border, cim_vector2 Position, cim_vector2 Size, ui_draw_batch *Batch)
 {
-    // State.
-    cim_vector2     Position     = {};
-    cim_vector2     Size         = {};
-    ui_draw_batch  *Batch        = NULL;
-    cim_rect        ClippingRect = {};
-    UIPipeline_Type Pipeline     = UIPipeline_None;
+    Cim_Assert(Border->Width > 0);
 
-    for (cim_u32 CommandIdx = 0; CommandIdx < DrawList->CommandCount; CommandIdx++)
+    cim_f32 X0 = Position.x - Border->Width;
+    cim_f32 Y0 = Position.y - Border->Width;
+    cim_f32 X1 = Position.x + Size.x + Border->Width;
+    cim_f32 Y1 = Position.y + Size.y + Border->Width;
+
+    ui_vertex Borders[4];
+    Borders[0] = {X0, Y0, 0.0f, 1.0f, Border->Color.x, Border->Color.y, Border->Color.z, Border->Color.w};
+    Borders[1] = {X0, Y1, 0.0f, 0.0f, Border->Color.x, Border->Color.y, Border->Color.z, Border->Color.w};
+    Borders[2] = {X1, Y0, 1.0f, 1.0f, Border->Color.x, Border->Color.y, Border->Color.z, Border->Color.w};
+    Borders[3] = {X1, Y1, 1.0f, 0.0f, Border->Color.x, Border->Color.y, Border->Color.z, Border->Color.w};
+
+    cim_u32 Indices[6];
+    Indices[0] = Batch->VtxCount + 0;
+    Indices[1] = Batch->VtxCount + 2;
+    Indices[2] = Batch->VtxCount + 1;
+    Indices[3] = Batch->VtxCount + 2;
+    Indices[4] = Batch->VtxCount + 3;
+    Indices[5] = Batch->VtxCount + 1;
+
+    WriteToArena(Borders, sizeof(Borders), UIP_BATCHES.FrameVtx);
+    WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
+
+    Batch->VtxCount += 4;
+    Batch->IdxCount += 6;
+}
+
+static void
+ExecuteTextCommand(ui_draw_command_text *Text, cim_vector2 Position, cim_vector2 Size, ui_draw_batch *Batch)
+{
+    if (Text->Font->Mode == UIFont_ExtendedASCIIDirectMapping)
     {
-        ui_draw_command *Command = DrawList->Commands + CommandIdx;
+        cim_f32 MiddleOffsetX = (Size.x - Text->Width) / 2;
 
-        switch (Command->Type)
+        cim_f32 PenX   = Position.x + MiddleOffsetX;
+        cim_f32 PenY   = Position.y;
+        cim_f32 StartX = PenX;
+
+        for (cim_u32 Idx = 0; Idx < Text->StringLength; Idx++)
         {
+            glyph_layout Layout = FindGlyphLayoutByDirectMapping(Text->Font->Table.Direct, Text->String[Idx]);
+            glyph_atlas  Atlas  = FindGlyphAtlasByDirectMapping (Text->Font->Table.Direct, Text->String[Idx]);
 
-        case UIDrawCommand_Header:
-        {
-            ui_draw_command_header Header = Command->Data.Header;
-            ClippingRect = Header.ClippingRect;
-            Pipeline     = Header.Pipeline;
-
-            // NOTE: Is that bad? Seems fine. And works great.
-            bool CanOverwritePosition = !(Command->Flags & UIDrawCommand_NoPositionOverwrite);
-            if (CanOverwritePosition)
+            // TODO: Double check this.
+            if (PenX + Layout.AdvanceX > Position.x + Size.x && (Idx != Text->StringLength - 1))
             {
-                Position = Header.Position;
-                Size     = Header.Size;
+                PenX = StartX;
+                PenY += Text->Font->LineHeight;
             }
 
-            Batch = GetDrawBatch(UIP_BATCHES, ClippingRect, Pipeline);
-        } break;
+            cim_f32 MinX = PenX + Layout.Offsets.x;
+            cim_f32 MinY = PenY - Layout.Offsets.y;
+            cim_f32 MaxX = MinX + Layout.Size.Width;
+            cim_f32 MaxY = MinY + Layout.Size.Height;
 
-        case UIDrawCommand_Quad:
-        {
-            ui_draw_command_quad Quad = Command->Data.Quad;
+            // TODO: Check if this is actually useful.
+            MinX = floorf(MinX + 0.5f);
+            MinY = floorf(MinY + 0.5f);
+            MaxX = floorf(MaxX + 0.5f);
+            MaxY = floorf(MaxY + 0.5f);
 
-            cim_f32 X0 = Position.x;
-            cim_f32 Y0 = Position.y;
-            cim_f32 X1 = Position.x + Size.x;
-            cim_f32 Y1 = Position.y + Size.y;
-
-            ui_vertex Body[4];
-            Body[0] = {X0, Y0, 0.0f, 1.0f, Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
-            Body[1] = {X0, Y1, 0.0f, 0.0f, Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
-            Body[2] = {X1, Y0, 1.0f, 1.0f, Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
-            Body[3] = {X1, Y1, 1.0f, 0.0f, Quad.Color.x, Quad.Color.y, Quad.Color.z, Quad.Color.w};
+            ui_text_vertex Quad[4];
+            Quad[0] = {MinX, MinY, Atlas.TexCoord.u0, Atlas.TexCoord.v0}; // Top-left
+            Quad[1] = {MinX, MaxY, Atlas.TexCoord.u0, Atlas.TexCoord.v1}; // Bottom-left
+            Quad[2] = {MaxX, MinY, Atlas.TexCoord.u1, Atlas.TexCoord.v0}; // Top-right
+            Quad[3] = {MaxX, MaxY, Atlas.TexCoord.u1, Atlas.TexCoord.v1}; // Bottom-right
 
             cim_u32 Indices[6];
             Indices[0] = Batch->VtxCount + 0;
@@ -307,123 +272,118 @@ UIEndDraw(ui_draw_list *DrawList)
             Indices[4] = Batch->VtxCount + 3;
             Indices[5] = Batch->VtxCount + 1;
 
-            WriteToArena(Body   , sizeof(Body)   , UIP_BATCHES.FrameVtx);
-            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
+            WriteToArena(Quad   , sizeof(Quad)   , UIP_BATCHES.FrameVtx);
+            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);
 
             Batch->VtxCount += 4;
             Batch->IdxCount += 6;
 
+            PenX += Layout.AdvanceX;
+        }
+    }
+
+    Batch->Font = Text->Font;
+}
+
+// BUG: What if the command doesn't exist? Who catches that?
+// For example, a button with no text, will not have generated 
+// a text command.
+
+static void
+UIEndDraw(ui_tree *DrawTree)
+{
+    cim_u32 Queue[256];
+    cim_u32 QueueHead  = 0;
+    cim_u32 QueueTail  = 0;
+
+    Queue[QueueTail++] = 0;
+
+    while(QueueHead != QueueTail)
+    {
+        ui_draw_node  *Node  = GetDrawNode(DrawTree, Queue[QueueHead++]);
+        ui_draw_batch *Batch = GetDrawBatch(UIP_BATCHES, Node->ClippingRect, Node->Pipeline);
+
+        cim_u32       ChildIndex = Node->FirstChild;
+        ui_draw_node *ChildNode  = GetDrawNode(DrawTree, ChildIndex);
+        while (ChildIndex != UILayout_InvalidNode)
+        {
+            Queue[QueueTail++] = ChildIndex;
+            Cim_Assert(QueueTail < 256);
+
+            ChildIndex = ChildNode->Next;
+            ChildNode  = GetDrawNode(DrawTree, ChildIndex);
+        }
+
+        switch (Node->Type)
+        {
+
+        case UIDrawNode_None:
+        {
+            // NOTE: Expected from invisible elements.
         } break;
 
-        case UIDrawCommand_Border:
+        case UIDrawNode_Window:
         {
-            ui_draw_command_border Border = Command->Data.Border;
-            Cim_Assert(Border.Width > 0);
+            ui_draw_command_border *BorderCommand     = &Node->Data.Window.BorderCommand;
+            ui_draw_command_quad   *BackgroundCommand = &Node->Data.Window.BodyCommand;
 
-            cim_f32 X0 = Position.x - Border.Width;
-            cim_f32 Y0 = Position.y - Border.Width;
-            cim_f32 X1 = Position.x + Size.x + Border.Width;
-            cim_f32 Y1 = Position.y + Size.y + Border.Width;
-
-            ui_vertex Borders[4];
-            Borders[0] = {X0, Y0, 0.0f, 1.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
-            Borders[1] = {X0, Y1, 0.0f, 0.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
-            Borders[2] = {X1, Y0, 1.0f, 1.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
-            Borders[3] = {X1, Y1, 1.0f, 0.0f, Border.Color.x, Border.Color.y, Border.Color.z, Border.Color.w};
-
-            cim_u32 Indices[6];
-            Indices[0] = Batch->VtxCount + 0;
-            Indices[1] = Batch->VtxCount + 2;
-            Indices[2] = Batch->VtxCount + 1;
-            Indices[3] = Batch->VtxCount + 2;
-            Indices[4] = Batch->VtxCount + 3;
-            Indices[5] = Batch->VtxCount + 1;
-
-            WriteToArena(Borders, sizeof(Borders), UIP_BATCHES.FrameVtx);
-            WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);;
-
-            Batch->VtxCount += 4;
-            Batch->IdxCount += 6;
-        } break;
-
-        // TODO: Debug this.
-        case UIDrawCommand_Text:
-        {
-            ui_draw_command_text Text = Command->Data.Text;
-
-            // NOTE: Okay so one limitation is that we use the NodeState to place the text.
-            // Okay for now. Let's just get it going? And then we have stateless text. Which
-            // might be bad or not. But the overall code is cleaner everywhere which is nice :)
-            // Another one right now are our limited options for styling, we force center
-            // ... I wonder if stateless text was just a bad idea? I don't know, I need it anyways.
-
-            if (Text.Font->Mode == UIFont_ExtendedASCIIDirectMapping)
+            if (BorderCommand->IsVisible)
             {
-                cim_f32 MiddleOffsetX = (Size.x - Text.Width) / 2;
-
-                cim_f32 PenX   = Position.x + MiddleOffsetX;
-                cim_f32 PenY   = Position.y;
-                cim_f32 StartX = PenX;
-
-                for (cim_u32 Idx = 0; Idx < Text.StringLength; Idx++)
-                {
-                    glyph_layout Layout = FindGlyphLayoutByDirectMapping(Text.Font->Table.Direct, Text.String[Idx]);
-                    glyph_atlas  Atlas  = FindGlyphAtlasByDirectMapping(Text.Font->Table.Direct, Text.String[Idx]);
-
-                    // TODO: Double check this.
-                    if (PenX + Layout.AdvanceX > Position.x + Size.x && (Idx != Text.StringLength - 1))
-                    {
-                        PenX = StartX;
-                        PenY += Text.Font->LineHeight;
-                    }
-
-                    cim_f32 MinX = PenX + Layout.Offsets.x;
-                    cim_f32 MinY = PenY - Layout.Offsets.y;
-                    cim_f32 MaxX = MinX + Layout.Size.Width;
-                    cim_f32 MaxY = MinY + Layout.Size.Height;
-
-                    MinX = floorf(MinX + 0.5f);
-                    MinY = floorf(MinY + 0.5f);
-                    MaxX = floorf(MaxX + 0.5f);
-                    MaxY = floorf(MaxY + 0.5f);
-
-                    ui_text_vertex Quad[4];
-                    Quad[0] = {MinX, MinY, Atlas.TexCoord.u0, Atlas.TexCoord.v0}; // Top-left
-                    Quad[1] = {MinX, MaxY, Atlas.TexCoord.u0, Atlas.TexCoord.v1}; // Bottom-left
-                    Quad[2] = {MaxX, MinY, Atlas.TexCoord.u1, Atlas.TexCoord.v0}; // Top-right
-                    Quad[3] = {MaxX, MaxY, Atlas.TexCoord.u1, Atlas.TexCoord.v1}; // Bottom-right
-
-                    cim_u32 Indices[6];
-                    Indices[0] = Batch->VtxCount + 0;
-                    Indices[1] = Batch->VtxCount + 2;
-                    Indices[2] = Batch->VtxCount + 1;
-                    Indices[3] = Batch->VtxCount + 2;
-                    Indices[4] = Batch->VtxCount + 3;
-                    Indices[5] = Batch->VtxCount + 1;
-
-                    WriteToArena(Quad   , sizeof(Quad)   , UIP_BATCHES.FrameVtx);
-                    WriteToArena(Indices, sizeof(Indices), UIP_BATCHES.FrameIdx);
-
-                    Batch->VtxCount += 4;
-                    Batch->IdxCount += 6;
-
-                    PenX += Layout.AdvanceX;
-                }
+                ExecuteBorderCommand(BorderCommand, Node->Position, Node->Size, Batch);
             }
 
-            Batch->Font = Command->Data.Text.Font;
+            if (BackgroundCommand->IsVisible)
+            {
+                ExecuteQuadCommand(BackgroundCommand, Node->Position, Node->Size, Batch);
+            }
+
+        } break;
+
+        case UIDrawNode_Button:
+        {
+            ui_draw_command_border *BorderCommand     = &Node->Data.Button.BorderCommand;
+            ui_draw_command_quad   *BackgroundCommand = &Node->Data.Button.BodyCommand;
+            ui_draw_command_text   *TextCommand       = &Node->Data.Button.TextCommand;
+
+            if (BorderCommand->IsVisible)
+            {
+                ExecuteBorderCommand(BorderCommand, Node->Position, Node->Size, Batch);
+            }
+
+            if (BackgroundCommand->IsVisible)
+            {
+                ExecuteQuadCommand(BackgroundCommand, Node->Position, Node->Size, Batch);
+            }
+
+            // WARN: There's something tricky here. Since a button can also draw text, we need to
+            // change the pipeline and request a new batch... Since our text drawing is still really
+            // naive, we can simply force it here. We'd like to be able to batch text drawing more 
+            // aggressively. This is ugly but it should work.
+            if (TextCommand->IsVisible)
+            {
+                Batch = GetDrawBatch(UIP_BATCHES, {}, UIPipeline_Text);
+                ExecuteTextCommand(&Node->Data.Button.TextCommand, Node->Position, Node->Size, Batch);
+            }
+        } break;
+
+        case UIDrawNode_Text:
+        {
+            ui_draw_command_text *TextCommand = &Node->Data.Button.TextCommand;
+            
+            if (TextCommand->IsVisible)
+            {
+                ExecuteTextCommand(TextCommand, Node->Position, Node->Size, Batch);
+            }
 
         } break;
 
         default:
         {
-            CimLog_Warn("Unknown command type.");
+            Cim_Assert(!"Invalid draw node.");
         } break;
 
         }
     }
-
-    DrawList->CommandCount = 0;
 }
 
 

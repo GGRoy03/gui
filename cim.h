@@ -73,9 +73,8 @@ typedef struct cim_context
     ui_component_hashmap Components;
 
     // Trees
-    ui_tree      LayoutTree;
-    ui_tree      DrawTree;
-    ui_draw_list DrawList;
+    ui_tree LayoutTree;
+    ui_tree DrawTree;
 
     // Current State
     ui_font *CurrentFont;
@@ -93,7 +92,6 @@ static cim_context *CimCurrent;
 #define UI_RENDERER   (CimCurrent->Renderer)
 #define UIP_RENDERER &(CimCurrent->Renderer)
 
-#define UI_DrawList   (CimCurrent->DrawList)
 #define UI_Components (CimCurrent->Components)
 #define UI_LayoutTree (CimCurrent->LayoutTree)
 #define UI_DrawTree   (CimCurrent->DrawTree)
@@ -127,13 +125,13 @@ static void
 ButtonComponent(const char *Id, const char *ThemeId, const char *Text, ui_component_state *State, cim_u32 Index);
 
 // [Text]
-static void 
 #define UIText(Text) TextComponent(Text, NULL, CimCurrent->CurrentFont)
+static ui_draw_command_text
 TextComponent(const char *Text, ui_layout_node *LayoutNode, ui_font *Font);
 
 // [CONTEXT MANAGEMENT]
 #define UIBeginContext() for (UIPass_Type Pass = UIPass_Layout; Pass !=  UIPass_Ended; Pass = (UIPass_Type)((cim_u32)Pass + 1))
-#define UIEndContext()   if (Pass == UIPass_Layout) {UIEndLayout();} else if (Pass == UIPass_Draw) {UIEndDraw(&UI_DrawList);}
+#define UIEndContext()   if (Pass == UIPass_Layout) {UIEndLayout();} else if (Pass == UIPass_Draw) {UIEndDraw(&UI_DrawTree);}
 
 static void
 UIBeginFrame()

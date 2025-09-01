@@ -91,9 +91,6 @@ typedef struct ui_layout_node
     cim_f32 Width;
     cim_f32 Height;
 
-    // NOTE: This might change, but let's get it working for now.
-    ui_draw_command_id CommandHeader;
-
     ui_component_state *State;
 } ui_layout_node;
 
@@ -104,6 +101,7 @@ typedef struct ui_tree
         ui_draw_node   Draw[UILayout_NodeCount];
         ui_layout_node Layout[UILayout_NodeCount];
     } Nodes;
+
     cim_u32 NodeCount;
 
     cim_u32 ParentStack[32];

@@ -285,9 +285,7 @@ ExecuteTextCommand(ui_draw_command_text *Text, cim_vector2 Position, cim_vector2
     Batch->Font = Text->Font;
 }
 
-// BUG: What if the command doesn't exist? Who catches that?
-// For example, a button with no text, will not have generated 
-// a text command.
+// SO FUCKING BAD.
 
 static void
 UIEndDraw(ui_tree *DrawTree)

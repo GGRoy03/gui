@@ -6,6 +6,7 @@ theme "FileBrowser_Window" for Window
 
     Padding := [10, 15, 10, 15];
     Spacing := [20, 10];
+    Size    := [200, 550];
 }
 
 theme "FileBrowser_HeaderButtons" for Button

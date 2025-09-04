@@ -259,7 +259,7 @@ FileBrowser()
                         for (uint32_t Idx = 0; Idx < Count; Idx++)
                         {
                             uint32_t         FolderIndex = FileBrowser.Backward.FolderIndices[Idx];
-                            directory_entry *Entry = GetDirectoryEntry(FolderIndex, &FileBrowser);
+                            directory_entry *Entry       = GetDirectoryEntry(FolderIndex, &FileBrowser);
                             FileBrowser_Assert(Entry);
 
                             UIIndexedButton("FileBrowser_HistoryButtons", Entry->Name, &FileBrowser.HistoryButton, FolderIndex);

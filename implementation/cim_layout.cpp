@@ -106,7 +106,6 @@ LinkChildToParent(ui_tree *LayoutTree, ui_tree *DrawTree, cim_u32 NodeIndex, cim
     }
 }
 
-// NOTE: This does 2 thing, push a node into the layout tree and one in the draw tree.
 static void
 PushLayoutAndDrawNode(UIContainer_Type ContainerType, UIDrawNode_Type DrawNodeType, ui_component_state *State,
                       ui_layout_node **OutLayoutNode, ui_draw_node **OutDrawNode)
@@ -269,9 +268,12 @@ PlaceLayoutTree(ui_tree *Tree)
         cim_u32         NodeIndex = Stack[--Top];
         ui_layout_node *Node      = GetLayoutNode(Tree, NodeIndex);
 
-        ui_draw_node *DrawNode = GetDrawNode(&UI_DrawTree, NodeIndex); // NOTE: Trees are parallel.
-        DrawNode->Position = {Node->X, Node->Y};
-        DrawNode->Size     = {Node->Width, Node->Height};
+        // NOTE: I cannot tell if this is good or bad.
+        {
+            ui_draw_node *DrawNode = GetDrawNode(&UI_DrawTree, NodeIndex); // NOTE: Trees are parallel.
+            DrawNode->Position = { Node->X, Node->Y };
+            DrawNode->Size     = { Node->Width, Node->Height };
+        }
 
         ClientX = Node->X + Node->Padding.x;
         ClientY = Node->Y + Node->Padding.y;
@@ -365,3 +367,6 @@ UIEndLayout()
 
     HitTestLayoutTree(Tree, PostOrderArray);
 }
+
+// NOTE: Everything feels like a mess.
+// (User -> Style -> Layout -> User -> Draw)

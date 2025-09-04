@@ -261,7 +261,6 @@ ButtonComponent(const char *Id, const char *ThemeId, const char *Text,
         LayoutNode->Width  = Theme.Size.x;
         LayoutNode->Height = Theme.Size.y;
 
-        // BUG: Since we also draw text from this node, it means we won't be able to change the pipeline...
         DrawNode->ClippingRect = {};
         DrawNode->Pipeline     = UIPipeline_Default;
 

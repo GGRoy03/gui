@@ -54,6 +54,7 @@ internal os_system_info *OSGetSystemInfo  (void);
 
 internal void *OSReserveMemory  (u64 Size);
 internal b32   OSCommitMemory   (void *Memory, u64 Size);
+internal void  OSRelease        (void *Memory);
 
 internal OSWindow_Status OSUpdateWindow  (void);
 internal void            OSSleep         (u32 Milliseconds);

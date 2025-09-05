@@ -4,6 +4,8 @@
 #define global        static
 #define local_persist static
 
+#define UNUSED(x) (void)(x)
+
 #define Kilobyte(n) (((u64)(n)) << 10)
 #define Megabyte(n) (((u64)(n)) << 20)
 #define Gygabyte(n) (((u64)(n)) << 30)
@@ -32,6 +34,8 @@ typedef long long i64;
 
 typedef uint32_t  bit_field;
 
+// NOTE: These are math related.
+
 typedef struct vec2_f32
 {
     f32 X, Y;
@@ -41,3 +45,8 @@ typedef struct vec4_f32
 {
     f32 X, Y, Z, W;
 } vec4_f32;
+
+typedef struct mat3x3_f32
+{
+    void *Data;
+} mat3x3_f32;

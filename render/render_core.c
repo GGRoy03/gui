@@ -93,15 +93,18 @@ GetBatchList(render_context *Context, RenderPass_Type Pass)
             Params->Last  = 0;
 
             PassNode = PushArena(PassArena, sizeof(render_pass_node), AlignOf(render_pass_node));
-            PassNode->Next          = 0;
-            PassNode->Pass.Type     = RenderPass_UI;
-            PassNode->Pass.UIParams = Params;
+            PassNode->Next           = 0;
+            PassNode->Pass.Type      = RenderPass_UI;
+            PassNode->Pass.Params.UI = Params;
 
             Context->FirstPassNode[Pass] = PassNode;
             Context->LastPassNode[Pass]  = PassNode;
         }
 
-        render_rect_group_node *RectNode = PassNode->Pass.UIParams->Last;
+        // BUG: This should not access the UI directly. This whole Batch/List/Params code
+        // need some serious work.
+
+        render_rect_group_node *RectNode = PassNode->Pass.Params.UI->Last;
         if (!RectNode)
         {
             RectNode = PushArena(PassArena, sizeof(render_rect_group_node), AlignOf(render_rect_group_node));
@@ -111,7 +114,7 @@ GetBatchList(render_context *Context, RenderPass_Type Pass)
             RectNode->BatchList.First            = 0;
             RectNode->BatchList.Last             = 0;
 
-            PassNode->Pass.UIParams->First = RectNode;
+            PassNode->Pass.Params.UI->First = RectNode;
         }
 
         Result = &RectNode->BatchList;

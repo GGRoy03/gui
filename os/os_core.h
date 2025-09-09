@@ -57,5 +57,4 @@ internal void  OSRelease        (void *Memory);
 internal b32   OSUpdateWindow  (void);
 internal void  OSSleep         (u32 Milliseconds);
 
-internal void OSAbort             (i32 ExitCode);
-internal void OSGraphicalMessage  (b32 IsFatal, byte_string Title, byte_string Message);
+internal void OSAbort  (i32 ExitCode);

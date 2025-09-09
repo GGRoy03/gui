@@ -161,11 +161,6 @@ InitializeRenderer(memory_arena *StaticArena)
                                0, 0, &VShaderSrcBlob, &VShaderErrBlob);
             if(FAILED(Error))
             {
-                u8 *String = VShaderErrBlob->lpVtbl->GetBufferPointer(VShaderErrBlob);
-                u64 Size   = VShaderErrBlob->lpVtbl->GetBufferSize(VShaderErrBlob);
-
-                byte_string ErrorString = ByteString(String, Size);
-
                 OSAbort(1);
             }
 
@@ -290,7 +285,7 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
         for (render_pass_node *PassNode = RenderContext->FirstPassNode[RenderPass_UI]; PassNode != 0; PassNode = PassNode->Next)
         {
             render_pass            Pass   = PassNode->Pass;
-            render_pass_params_ui *Params = Pass.UIParams;
+            render_pass_params_ui *Params = Pass.Params.UI;
 
             for (render_rect_group_node *RectGroupNode = Params->First; RectGroupNode != 0; RectGroupNode = RectGroupNode->Next)
             {
@@ -337,7 +332,7 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
                 DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &Backend->RenderView, 0);
 
                 // IA
-                u32 Stride = BatchList.BytesPerInstance;
+                u32 Stride = (u32)BatchList.BytesPerInstance;
                 u32 Offset = 0;
                 DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VBuffer, &Stride, &Offset);
                 DeviceContext->lpVtbl->IASetInputLayout(DeviceContext, ILayout);

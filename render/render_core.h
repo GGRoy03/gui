@@ -105,8 +105,8 @@ typedef struct render_pass
     RenderPass_Type Type;
     union
     {
-        render_pass_params_ui *UIParams;
-    };
+        render_pass_params_ui *UI;
+    } Params;
 } render_pass;
 
 typedef struct render_pass_node render_pass_node;

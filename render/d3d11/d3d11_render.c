@@ -206,6 +206,14 @@ InitializeRenderer(memory_arena *StaticArena)
                 OSAbort(1);
             }
 
+            void *ByteCode = PShaderSrcBlob->lpVtbl->GetBufferPointer(PShaderSrcBlob);
+            u64   ByteSize = PShaderSrcBlob->lpVtbl->GetBufferSize(PShaderSrcBlob);
+            Error = Device->lpVtbl->CreatePixelShader(Device, ByteCode, ByteSize, 0, &PShader);
+            if (FAILED(Error))
+            {
+                OSAbort(1);
+            }
+
             PShaderSrcBlob->lpVtbl->Release(PShaderSrcBlob);
 
             Backend->PShaders[Type] = PShader;
@@ -275,10 +283,14 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
 
     // Render UI
     {
-        for (render_pass_node *PassNode = RenderContext->UIPassNode; PassNode != 0; PassNode = PassNode->Next)
+        // Rasterizer
+        D3D11_VIEWPORT Viewport = {0.0f, 0.0f, (f32)Resolution.X, (f32)Resolution.Y, 0.0f, 1.0f};
+        DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
+
+        for (render_pass_node *PassNode = RenderContext->FirstPassNode[RenderPass_UI]; PassNode != 0; PassNode = PassNode->Next)
         {
             render_pass            Pass   = PassNode->Pass;
-            render_pass_params_ui *Params = Pass.Params.UI;
+            render_pass_params_ui *Params = Pass.UIParams;
 
             for (render_rect_group_node *RectGroupNode = Params->First; RectGroupNode != 0; RectGroupNode = RectGroupNode->Next)
             {
@@ -306,8 +318,8 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
                 {
                     d3d11_rect_uniform_buffer Uniform = { 0 };
                     Uniform.Transform[0] = ToVec4F32(1, 0, 0, 0);
-                    Uniform.Transform[0] = ToVec4F32(0, 1, 0, 0);
-                    Uniform.Transform[0] = ToVec4F32(0, 0, 1, 0);
+                    Uniform.Transform[1] = ToVec4F32(0, 1, 0, 0);
+                    Uniform.Transform[2] = ToVec4F32(0, 0, 1, 0);
                     Uniform.ViewportSize = ToVec2F32((f32)Resolution.X, (f32)Resolution.Y);
 
                     D3D11_MAPPED_SUBRESOURCE Resource = { 0 };
@@ -320,6 +332,9 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
                 ID3D11InputLayout  *ILayout = Backend->ILayouts[RenderPass_UI];
                 ID3D11VertexShader *VShader = Backend->VShaders[RenderPass_UI];
                 ID3D11PixelShader  *PShader = Backend->PShaders[RenderPass_UI];
+
+                // OM
+                DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &Backend->RenderView, 0);
 
                 // IA
                 u32 Stride = BatchList.BytesPerInstance;

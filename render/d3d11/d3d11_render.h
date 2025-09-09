@@ -90,7 +90,7 @@ read_only global u8 D3D11RectVShader[] =
 "    };                                                                                        \n"
 "                                                                                              \n"
 "    float2 Transformed = mul(Transform, float3(CornerPositionPixel[Input.VertexId], 1.f)).xy; \n"
-"    Transformed.x = ViewportSizePixel.y - Transformed.y;                                      \n"
+"    Transformed.y = ViewportSizePixel.y - Transformed.y;                                      \n"
 "                                                                                              \n"
 "    VertexOutput Output;                                                                      \n"
 "    Output.Position.xy = ((2.f * Transformed) / ViewportSizePixel) - 1.f;                     \n"

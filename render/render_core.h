@@ -20,14 +20,23 @@ typedef struct render_handle
     u64 u64[1];
 } render_handle;
 
+// WARN: Should not exist (byte_string)
 typedef struct shader_source
 {
     read_only u8 *Data;
               u64 Size;
 } shader_source;
 
+// NOTE: Must be padded to match 16 bytes alignment.
+typedef struct render_rect
+{
+    vec4_f32 RectBounds;
+    vec4_f32 Color;
+} render_rect;
+
 // Batch types
-// A batch is a linked list of data.
+// A batch is a linked list of raw byte data
+
 typedef struct render_batch
 {
     u8 *Memory;
@@ -56,13 +65,12 @@ typedef struct render_batch_list
 // Group are logical grouping of batches as well as specific
 // parameters that must be set by the rendering backend before
 // drawing those batches.
+
 typedef struct render_rect_group_node render_rect_group_node;
 struct render_rect_group_node
 {
     render_rect_group_node *Next;
     render_batch_list       BatchList;
-
-    matrix_3x3 Transform;
 };
 
 // Params Types
@@ -97,9 +105,8 @@ typedef struct render_pass
     RenderPass_Type Type;
     union
     {
-        void                  *Params;
-        render_pass_params_ui *UI;
-    } Params;
+        render_pass_params_ui *UIParams;
+    };
 } render_pass;
 
 typedef struct render_pass_node render_pass_node;
@@ -111,10 +118,11 @@ struct render_pass_node
 
 typedef struct render_context
 {
-    // UI
     render_pass_ui_stats UIStats;
-    memory_arena        *UIPassArena;
-    render_pass_node    *UIPassNode;
+
+    memory_arena     *PassArena[RenderPass_Type_Count];
+    render_pass_node *FirstPassNode[RenderPass_Type_Count];
+    render_pass_node *LastPassNode[RenderPass_Type_Count];
 } render_context;
 
 // [Globals]
@@ -125,10 +133,21 @@ read_only global u32 UIPassDefaultPassCount        = 5;
 read_only global u32 UIPassDefaultRenderedDataSize = Kilobyte(50);
 read_only global u32 UIPassPaddingSize             = Kilobyte(25);
 
+read_only global u64 RenderPassDataSizeTable[] =
+{
+    {sizeof(render_rect)}, // Inputs to UI pass.
+};
+
 // [CORE API]
 
 internal void BeginRenderingContext  (render_context *Context);
 internal b32  IsValidRenderHandle    (render_handle Handle);
+
+// WARN: Highly possible that some of these functions shouldn't be here. Also, this is a really unstable
+// API.
+internal render_batch      *BeginRenderBatch  (u64 Size, render_batch_list *BatchList, memory_arena *Arena);
+internal render_batch_list *GetBatchList      (render_context *Context, RenderPass_Type Pass);
+internal render_rect       *AllocateRect      (render_batch *Batch);
 
 // [PER-RENDERER API]
 

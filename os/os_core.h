@@ -48,7 +48,7 @@ internal void ProccessInputMessage(os_button_state *NewState, b32 IsDown);
 // Per-OS Functions.
 
 internal os_system_info *OSGetSystemInfo  (void);
-internal vec2_i32        OSGetClientSize  (os_handle Window);
+internal vec2_i32        OSGetClientSize  (void);
 
 internal void *OSReserveMemory  (u64 Size);
 internal b32   OSCommitMemory   (void *Memory, u64 Size);
@@ -57,4 +57,5 @@ internal void  OSRelease        (void *Memory);
 internal b32   OSUpdateWindow  (void);
 internal void  OSSleep         (u32 Milliseconds);
 
-internal void OSAbort  (i32 ExitCode);
+internal void OSAbort             (i32 ExitCode);
+internal void OSGraphicalMessage  (b32 IsFatal, byte_string Title, byte_string Message);

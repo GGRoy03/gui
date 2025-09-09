@@ -18,6 +18,7 @@
 #define read_only     const
 
 #define UNUSED(x) (void)(x)
+#define ArrayCount(Array) (sizeof(Array) / sizeof(Array[0]))
 
 // [Units]
 
@@ -28,6 +29,7 @@
 // [Alignment]
 
 #define AlignPow2(x,b) (((x) + (b) - 1)&(~((b) - 1)))
+#define AlignMultiple(Value, Multiple) (Value += Multiple - 1); (Value -= Value % Multiple);
 
 #ifdef MSVC_COMPILER
 #define AlignOf(T) __alignof(T)
@@ -81,25 +83,3 @@ typedef int       i32;
 typedef long long i64;
 
 typedef uint32_t  bit_field;
-
-// NOTE: These are math related.
-
-typedef struct vec2_f32
-{
-    f32 X, Y;
-} vec2_f32;
-
-typedef struct vec4_f32
-{
-    f32 X, Y, Z, W;
-} vec4_f32;
-
-typedef struct vec2_i32
-{
-    i32 X, Y;
-} vec2_i32;
-
-typedef struct mat3x3_f32
-{
-    void *Data;
-} mat3x3_f32;

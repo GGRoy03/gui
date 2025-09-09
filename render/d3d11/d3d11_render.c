@@ -161,6 +161,11 @@ InitializeRenderer(memory_arena *StaticArena)
                                0, 0, &VShaderSrcBlob, &VShaderErrBlob);
             if(FAILED(Error))
             {
+                u8 *String = VShaderErrBlob->lpVtbl->GetBufferPointer(VShaderErrBlob);
+                u64 Size   = VShaderErrBlob->lpVtbl->GetBufferSize(VShaderErrBlob);
+
+                byte_string ErrorString = ByteString(String, Size);
+
                 OSAbort(1);
             }
 
@@ -172,7 +177,8 @@ InitializeRenderer(memory_arena *StaticArena)
                 OSAbort(1);
             }
 
-            Error = Device->lpVtbl->CreateInputLayout(Device, 0, 0,
+            d3d11_input_layout Layout = D3D11ILayoutTable[Type];
+            Error = Device->lpVtbl->CreateInputLayout(Device, Layout.Desc, Layout.Count,
                                                       ByteCode, ByteSize,
                                                       &ILayout);
             if(FAILED(Error))
@@ -215,15 +221,22 @@ InitializeRenderer(memory_arena *StaticArena)
             ID3D11Buffer *Buffer = 0;
 
             D3D11_BUFFER_DESC Desc = {0};
-            Desc.ByteWidth      = 0;
+            Desc.ByteWidth      = D3D11UniformBufferSizeTable[Type];
             Desc.Usage          = D3D11_USAGE_DYNAMIC;
             Desc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
             Desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+            AlignMultiple(Desc.ByteWidth, 16);
 
             Device->lpVtbl->CreateBuffer(Device, &Desc, 0, &Buffer);
 
             Backend->UBuffers[Type] = Buffer;
         }
+    }
+
+    // Default State
+    {
+        Backend->LastResolution = OSGetClientSize();
     }
 
     Result.u64[0] = (u64)Backend;
@@ -237,6 +250,28 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
     ID3D11DeviceContext    *DeviceContext = Backend->DeviceContext;
     ID3D11RenderTargetView *RenderView    = Backend->RenderView; 
     IDXGISwapChain1        *SwapChain     = Backend->SwapChain;
+
+    // Update State
+    vec2_i32 Resolution = Backend->LastResolution;
+    {
+        // NOTE: Probably don't want to call this every frame. We can check a boolean that is
+        // set by WM_SIZE. Maybe it's OKAY?
+
+        vec2_i32 CurrentResolution = OSGetClientSize();
+
+        if (!Vec2I32IsEqual(Resolution, CurrentResolution))
+        {
+            // TODO: Resize swap chain and whatever else we need.
+
+            Resolution = CurrentResolution;
+        }
+    }
+
+    // Render Game
+    {
+        const FLOAT ClearColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+        DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderView, ClearColor);
+    }
 
     // Render UI
     {
@@ -267,6 +302,19 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
                 }
 
                 // Uniform Buffers
+                ID3D11Buffer *UniformBuffer = Backend->UBuffers[RenderPass_UI];
+                {
+                    d3d11_rect_uniform_buffer Uniform = { 0 };
+                    Uniform.Transform[0] = ToVec4F32(1, 0, 0, 0);
+                    Uniform.Transform[0] = ToVec4F32(0, 1, 0, 0);
+                    Uniform.Transform[0] = ToVec4F32(0, 0, 1, 0);
+                    Uniform.ViewportSize = ToVec2F32((f32)Resolution.X, (f32)Resolution.Y);
+
+                    D3D11_MAPPED_SUBRESOURCE Resource = { 0 };
+                    DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)UniformBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
+                    MemoryCopy(Resource.pData, &Uniform, sizeof(Uniform));
+                    DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)UniformBuffer, 0);
+                }
 
                 // Pipeline Info
                 ID3D11InputLayout  *ILayout = Backend->ILayouts[RenderPass_UI];
@@ -274,25 +322,22 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
                 ID3D11PixelShader  *PShader = Backend->PShaders[RenderPass_UI];
 
                 // IA
-                u32 Stride = 0;
+                u32 Stride = BatchList.BytesPerInstance;
                 u32 Offset = 0;
                 DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VBuffer, &Stride, &Offset);
                 DeviceContext->lpVtbl->IASetInputLayout(DeviceContext, ILayout);
+                DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
                 // Shaders
                 DeviceContext->lpVtbl->VSSetShader(DeviceContext, VShader, 0, 0);
                 DeviceContext->lpVtbl->PSSetShader(DeviceContext, PShader, 0, 0);
+                DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &UniformBuffer);
 
                 // Draw
+                u32 InstanceCount = (u32)(BatchList.ByteCount / BatchList.BytesPerInstance);
+                DeviceContext->lpVtbl->DrawInstanced(DeviceContext, 4, InstanceCount, 0, 0);
             }
         }
-    }
-
-    // Render Game
-    {
-        const FLOAT ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
-        DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderView, ClearColor);
-
     }
 
     // Present

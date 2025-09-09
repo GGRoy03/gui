@@ -62,7 +62,7 @@ struct render_rect_group_node
     render_rect_group_node *Next;
     render_batch_list       BatchList;
 
-    mat3x3_f32 Transform;
+    matrix_3x3 Transform;
 };
 
 // Params Types
@@ -119,11 +119,11 @@ typedef struct render_context
 
 // [Globals]
 
-global u32 UIPassDefaultBatchCount       = 10;
-global u32 UIPassDefaultGroupCount       = 20;
-global u32 UIPassDefaultPassCount        = 5;
-global u32 UIPassDefaultRenderedDataSize = Kilobyte(50);
-global u32 UIPassPaddingSize             = Kilobyte(25);
+read_only global u32 UIPassDefaultBatchCount       = 10;
+read_only global u32 UIPassDefaultGroupCount       = 20;
+read_only global u32 UIPassDefaultPassCount        = 5;
+read_only global u32 UIPassDefaultRenderedDataSize = Kilobyte(50);
+read_only global u32 UIPassPaddingSize             = Kilobyte(25);
 
 // [CORE API]
 

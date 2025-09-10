@@ -14,6 +14,11 @@ typedef enum OSMouseButton_Type
 
 // [Core Types]
 
+typedef struct os_handle
+{
+    u64 u64[1];
+} os_handle;
+
 typedef struct os_system_info
 {
     u64 PageSize;
@@ -34,10 +39,12 @@ typedef struct os_inputs
     os_button_state MouseButtons[OS_MouseButtonCount];
 } os_inputs;
 
-typedef struct os_handle
+typedef struct os_file
 {
-    u64 u64[1];
-} os_handle;
+    byte_string Content;
+    u64         At;
+    b32         FullyRead;
+} os_file;
 
 // [Core API]
 
@@ -45,10 +52,18 @@ typedef struct os_handle
 
 internal void ProccessInputMessage(os_button_state *NewState, b32 IsDown);
 
+internal b32  OSIsValidFile        (os_file *File);
+internal void OSIgnoreWhiteSpaces  (os_file *File);
+internal u8   OSGetFileChar        (os_file *File);
+internal u8   OSGetNextFileChar    (os_file *File);
+
 // Per-OS Functions.
 
 internal os_system_info *OSGetSystemInfo  (void);
 internal vec2_i32        OSGetClientSize  (void);
+
+internal os_handle OSFindFile  (byte_string Path);
+internal os_file   OSReadFile  (os_handle Handle, memory_arena *Arena);
 
 internal void *OSReserveMemory  (u64 Size);
 internal b32   OSCommitMemory   (void *Memory, u64 Size);

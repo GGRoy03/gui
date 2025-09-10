@@ -1,5 +1,10 @@
 #pragma once
 
+// [STD-LIB]
+
+#include "stdio.h"
+#include "stdarg.h"
+
 // [Detect Compiler]
 
 #if defined(_MSC_VER)
@@ -17,6 +22,7 @@
 #define local_persist static
 #define read_only     const
 
+#define Assert(Cond) do { if (!(Cond)) __debugbreak(); } while (0)
 #define UNUSED(x) (void)(x)
 #define ArrayCount(Array) (sizeof(Array) / sizeof(Array[0]))
 
@@ -59,7 +65,7 @@
 
 #define ForEachEnum(Type, It) for(Type It = (Type)0; It < Type##_Count; It = (Type)(It + 1))
 
-// [Disabling Warnings]
+// [Compiler Warnings]
 
 #if defined(MSVC_COMPILER)
 #define DisableWarning(Code) __pragma (warning(disable: Code))

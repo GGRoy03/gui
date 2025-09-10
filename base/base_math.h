@@ -2,14 +2,24 @@
 
 // [Core Types]
 
+DisableWarning(4201)
 typedef struct vec2_f32
 {
-	f32 X, Y;
+	union
+	{
+		f32 X, Y;
+		f32 Values[2];
+	};
 } vec2_f32;
 
+DisableWarning(4201)
 typedef struct vec4_f32
 {
-	f32 X, Y, Z, W;
+	union
+	{
+		f32 X, Y, Z, W;
+		f32 Values[4];
+	};
 } vec4_f32;
 
 typedef struct vec2_i32
@@ -34,10 +44,16 @@ typedef struct matrix_4x4
 
 // [API]
 
-// [Helpers]
+// [Constructors]
 
-#define ToVec2F32(X, Y)       (vec2_f32){(X), (Y)}
-#define ToVec4F32(X, Y, Z, W) (vec4_f32){(X), (Y), (Z), (W)}
+internal vec2_f32 Vec2F32  (f32 X, f32 Y);
+internal vec4_f32 Vec4F32  (f32 X, f32 Y, f32 Z, f32 W);
+
+// [Helpers]
 
 internal b32 Vec2I32IsEqual(vec2_i32 Vec1, vec2_i32 Vec2);
 internal b32 Vec2F32IsEqual(vec2_f32 Vec1, vec2_f32 Vec2);
+
+// [Misc]
+
+internal vec4_f32 NormalizeColors(vec4_f32 Vector);

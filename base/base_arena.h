@@ -30,9 +30,13 @@ global u64 ArenaDefaultReserveSize = Megabyte(64);
 global u64 ArenaDefaultCommitSize  = Kilobyte(64);
 
 internal memory_arena *AllocateArena  (memory_arena_params Params);
-internal void         *PushArena      (memory_arena *Arena, u64 Size, u64 Align);
-internal void          ClearArena     (memory_arena *Arena);
-internal void          PopArenaTo     (memory_arena *Arena, u64 Position);
+
+internal void *PushArena   (memory_arena *Arena, u64 Size, u64 Align);
+internal void  ClearArena  (memory_arena *Arena);
+internal void  PopArenaTo  (memory_arena *Arena, u64 Position);
+internal void  PopArena    (memory_arena *Arena, u64 Amount);
+
+internal u64 PositionForArena(memory_arena *Arena);
 
 #define PushArrayNoZeroAligned(a, T, c, align) (T *)PushArena((a), sizeof(T)*(c), (align))
 #define PushArrayAligned(a, T, c, align) (T *)MemoryZero(PushArrayNoZeroAligned(a, T, c, align), sizeof(T)*(c))

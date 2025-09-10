@@ -108,3 +108,26 @@ PopArenaTo(memory_arena *Arena, u64 Position)
     Arena->Current           = Active;
     Arena->Current->Position = PoppedPos - Arena->Current->BasePosition;
 }
+
+internal void
+PopArena(memory_arena *Arena, u64 Amount)
+{
+    u64 OldPosition = PositionForArena(Arena);
+    u64 NewPosition = OldPosition;
+
+    if (Amount < OldPosition)
+    {
+        NewPosition = OldPosition - Amount;
+    }
+
+    PopArenaTo(Arena, NewPosition);
+}
+
+internal u64
+PositionForArena(memory_arena *Arena)
+{
+    memory_arena *Active = Arena->Current;
+
+    u64 Result = Active->BasePosition + Active->Position;
+    return Result;
+}

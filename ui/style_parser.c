@@ -1,12 +1,3 @@
-// [Macros]
-
-// TODO: Make these functions?
-
-#define CimTheme_MaxVectorSize 4
-#define CimTheme_ArrayToVec2(Array)  {Array[0], Array[1]}
-#define CimTheme_ArrayToVec4(Array)  {Array[0], Array[1], Array[2], Array[3]}
-#define CimTheme_ArrayToColor(Array) {Array[0] * 1/255, Array[1] * 1/255, Array[2] * 1/255, Array[3] * 1/255}
-
 // [Globals]
 
 // TODO: Remove this global.
@@ -625,15 +616,11 @@ WriteStyleErrorMessage(u32 LineInFile, OSMessage_Severity Severity, byte_string 
     __crt_va_start(Args, Format);
     __va_start(&Args, Format);
 
-    i32 Written;
     u8  Buffer[Kilobyte(2)];
 
-    byte_string ErrorString = ByteString(Buffer, sizeof(Buffer));
-
-    Written  = snprintf ((char *)Buffer, sizeof(Buffer), "[Parsing Error: Line=%u] ->", LineInFile);
-    Written += vsnprintf((char *)(Buffer + Written), sizeof(Buffer), (char *)Format.String, Args);
-
-    ErrorString.Size = Written;
+    byte_string ErrorString = ByteString(Buffer, 0);
+    ErrorString.Size  = snprintf ((char *) Buffer, sizeof(Buffer), "[Parsing Error: Line=%u] ->", LineInFile);
+    ErrorString.Size += vsnprintf((char *)(Buffer + ErrorString.Size), sizeof(Buffer), (char *)Format.String, Args);
 
     OSLogMessage(ErrorString, Severity);
 

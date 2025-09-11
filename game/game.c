@@ -32,11 +32,6 @@ GameEntryPoint()
     }
     State.RendererHandle = RendererHandle;
 
-    OSLogMessage(byte_string_literal("Logging Info")   , OSMessage_Info);
-    OSLogMessage(byte_string_literal("Logging Warning"), OSMessage_Warn);
-    OSLogMessage(byte_string_literal("Logging Error")  , OSMessage_Error);
-    OSLogMessage(byte_string_literal("Logging Fatal")  , OSMessage_Fatal);
-
     while(OSUpdateWindow())
     {
         BeginRendereringContext(&State.RenderContext);

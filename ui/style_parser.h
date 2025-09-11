@@ -8,17 +8,16 @@
 
 // [Enums]
 
-typedef enum UIThemeAttribute_Flag
+typedef enum UIStyleAttribute_Flag
 {
-    UIThemeAttribute_None        = 0,
-    UIThemeAttribute_Size        = 1 << 0,
-    UIThemeAttribute_Color       = 1 << 1,
-    UIThemeAttribute_Padding     = 1 << 2,
-    UIThemeAttribute_Spacing     = 1 << 3,
-    UIThemeAttribute_LayoutOrder = 1 << 4,
-    UIThemeAttribute_BorderColor = 1 << 5,
-    UIThemeAttribute_BorderWidth = 1 << 6,
-} UIThemeAttribute_Flag;
+    UIStyleAttribute_None        = 0,
+    UIStyleAttribute_Size        = 1 << 0,
+    UIStyleAttribute_Color       = 1 << 1,
+    UIStyleAttribute_Padding     = 1 << 2,
+    UIStyleAttribute_Spacing     = 1 << 3,
+    UIStyleAttribute_BorderColor = 1 << 4,
+    UIStyleAttribute_BorderWidth = 1 << 5,
+} UIStyleAttribute_Flag;
 
 typedef enum UIStyleToken_Type
 {
@@ -38,22 +37,14 @@ typedef enum UIStyleToken_Type
     UIStyleToken_ClickEffect = 1 << 16,
 } UIStyleToken_Type;
 
-typedef enum UITheme_Type
+typedef enum UIStyle_Type
 {
-    UITheme_None        = 0,
-    UITheme_Window      = 1,
-    UITheme_Button      = 2,
-    UITheme_EffectHover = 3,
-    UITheme_EffectClick = 4,
-} UITheme_Type;
-
-typedef enum UIThemeParsingError_Type
-{
-    ThemeParsingError_None     = 0,
-    ThemeParsingError_Syntax   = 1,
-    ThemeParsingError_Argument = 2,
-    ThemeParsingError_Internal = 3,
-} UIThemeParsingError_Type;
+    UIStyle_None        = 0,
+    UIStyle_Window      = 1,
+    UIStyle_Button      = 2,
+    UIStyle_EffectHover = 3,
+    UIStyle_EffectClick = 4,
+} UIStyle_Type;
 
 // [Types]
 
@@ -61,19 +52,6 @@ typedef struct style_id
 {
     u32 Value;
 } style_id;
-
-// NOTE: Change this. Too verbose.
-typedef struct style_parsing_error
-{
-    UIThemeParsingError_Type Type;
-    union
-    {
-        u32 LineInFile;
-        u32 ArgumentIndex;
-    };
-
-    char Message[ThemeErrorMessageLength];
-} style_parsing_error;
 
 typedef struct style_token
 {
@@ -93,7 +71,6 @@ typedef struct ui_window_style
 {
     style_id ThemeId;
 
-    // Attributes
     vec4_f32 Color;
     vec4_f32 BorderColor;
     u32      BorderWidth;
@@ -106,21 +83,20 @@ typedef struct ui_button_style
 {
     style_id ThemeId;
 
-    // Attributes
     vec4_f32 Color;
     vec4_f32 BorderColor;
-    u32     BorderWidth;
+    u32      BorderWidth;
     vec2_f32 Size;
 } ui_button_style;
 
 typedef struct ui_style
 {
-    UITheme_Type Type;
-    union
-    {
-        ui_window_style Window;
-        ui_button_style Button;
-    };
+    vec4_f32 Color;
+    vec4_f32 BorderColor;
+    u32      BorderWidth;
+    vec2_f32 Size;
+    vec2_f32 Spacing;
+    vec4_f32 Padding;
 
     style_id Id;
     style_id HoverTheme;
@@ -130,16 +106,17 @@ typedef struct ui_style
 typedef struct style_parser
 {
     u32           TokenCount;
+    u32           TokenCapacity;
     style_token  *TokenBuffer;
-    memory_arena *Arena;       // NOTE: When is this arena used exactly? Only for storing the tokens? If not, maybe use it like a scratch?
+
+    memory_arena *Arena;
 
     u32 AtLine;
     u32 AtToken;
 
-    // WARN: TERRIBLE.
-    style_token *ActiveThemeNameToken;
-    ui_style    *ActiveTheme;
-    ui_style    *ActiveEffectTheme;
+    byte_string  CurrentUserStyleName;
+    ui_style     CurrentStyle;
+    UIStyle_Type CurrentType;
 } style_parser;
 
 typedef struct style_info
@@ -157,25 +134,42 @@ typedef struct style_table
     u32        NextWriteIndex;
 } style_table;
 
+// [GLOBALS]
+
+read_only global bit_field StyleTokenValueMask = UIStyleToken_String | UIStyleToken_Number | UIStyleToken_Vector;
+
+read_only global bit_field StyleTypeValidAttributesTable[] =
+{
+    {0}, // None
+
+    // Window
+    {UIStyleAttribute_Size        | UIStyleAttribute_Padding     | UIStyleAttribute_Spacing |
+     UIStyleAttribute_BorderColor | UIStyleAttribute_BorderWidth | UIStyleAttribute_Color   },
+
+    // Button
+    {UIStyleAttribute_Size | UIStyleAttribute_BorderColor | UIStyleAttribute_BorderWidth |
+     UIStyleAttribute_Color                                                              },
+};
+
 // [API]
 
-internal ui_style       *GetUITheme      (read_only char *ThemeName, style_id *ComponentId);
+internal ui_style       *GetUIStyle      (read_only char *ThemeName, style_id *ComponentId);
 internal ui_window_style GetWindowTheme  (read_only char *ThemeName, style_id ThemeId);
 internal ui_button_style GetButtonTheme  (read_only char *ThemeName, style_id ThemeId);
 internal void            LoadThemeFiles  (byte_string *Files, u32 FileCount);
 
 // [Parsing]
 
-static style_token        *CreateStyleToken        (UIStyleToken_Type Type, style_parser *Parser);
-static style_parsing_error GetNextTokenBuffer      (os_file *File, style_parser *Parser);
-static style_parsing_error StoreAttributeInTheme   (UIThemeAttribute_Flag Attribute, style_token *Value, style_parser *Parser);
-static style_parsing_error ValidateAndStoreThemes  (style_parser *Parser);
+internal style_token          *CreateStyleToken                     (UIStyleToken_Type Type, style_parser *Parser);
+internal b32                   TokenizeStyleFile                    (os_file *File, style_parser *Parser);
+internal void                  WriteStyleAttribute                  (UIStyleAttribute_Flag Attribute, style_token ValueToken, style_parser *Parser);
+internal b32                   ParseStyleTokens                     (style_parser *Parser);
+internal UIStyleAttribute_Flag GetStyleAttributeFlagFromIdentifier  (byte_string Identifier);
 
 // [Error Handling]
 
-static read_only char *UIThemeAttributeToString  (UIThemeAttribute_Flag Flag);
-static void            WriteErrorMessage         (style_parsing_error *Error, read_only char *Format, ...);
-static void            HandleThemeError          (style_parsing_error *Error, u8 *FileName, read_only char *PublicAPIFunctionName);
+internal read_only char *UIStyleAttributeToString  (UIStyleAttribute_Flag Flag);
+internal void            WriteStyleErrorMessage    (u32 LineInFile, OSMessage_Severity Severity, byte_string Format, ...);
 
 // [Queries]
 internal ui_window_style GetWindowTheme  (read_only char *ThemeName, style_id ThemeId);

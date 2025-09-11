@@ -175,6 +175,7 @@ OSLogMessage(byte_string ANSISequence, OSMessage_Severity Severity)
     {
         OSWin32SetConsoleColor(byte_string_literal("\x1b[97;41m"), FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY | BACKGROUND_RED);
         OSWin32WriteToConsole(ANSISequence);
+        OSAbort(1);
     } break;
 
     }

@@ -81,6 +81,6 @@ internal void  OSRelease        (void *Memory);
 internal b32   OSUpdateWindow  (void);
 internal void  OSSleep         (u32 Milliseconds);
 
-internal void OSWriteToConsole  (byte_string ANSISequence, OSMessage_Severity Severity);
+internal void OSLogMessage  (byte_string ANSISequence, OSMessage_Severity Severity);
 
 internal void OSAbort  (i32 ExitCode);

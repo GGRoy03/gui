@@ -4,11 +4,16 @@ AllocateArena(memory_arena_params Params)
     u64 ReserveSize = AlignPow2(Params.ReserveSize, OSGetSystemInfo()->PageSize);
     u64 CommitSize  = AlignPow2(Params.CommitSize , OSGetSystemInfo()->PageSize);
 
+    if (CommitSize > ReserveSize)
+    {
+        CommitSize = ReserveSize;
+    }
+
     void *HeapBase     = OSReserveMemory(ReserveSize);
     b32   CommitResult = OSCommitMemory(HeapBase, CommitSize);
     if(!HeapBase || !CommitResult)
     {
-        OSAbort(1);
+        OSLogMessage(byte_string_literal("FAILED TO COMMIT MEMORY(WIN32)."), OSMessage_Fatal);
     }
 
     memory_arena *Arena = (memory_arena*)HeapBase;

@@ -56,4 +56,4 @@ internal b32 Vec2F32IsEqual(vec2_f32 Vec1, vec2_f32 Vec2);
 
 // [Misc]
 
-internal vec4_f32 NormalizeColors(vec4_f32 Vector);
+internal vec4_f32 NormalizedColor(vec4_f32 Vector);

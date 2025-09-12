@@ -85,7 +85,7 @@ PushArena(memory_arena *Arena, u64 Size, u64 Alignment)
     void *Result = 0;
     if(Active->CommitSize >= PostPosition)
     {
-        Result          = (u8*)Active + PostPosition;
+        Result          = (u8*)Active + PrePosition;
         Active->Position = PostPosition;
     }
 

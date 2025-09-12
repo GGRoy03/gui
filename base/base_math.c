@@ -43,7 +43,7 @@ Vec2F32IsEqual(vec2_f32 Vec1, vec2_f32 Vec2)
 // [Misc]
 
 internal vec4_f32 
-NormalizeColors(vec4_f32 Vector)
+NormalizedColor(vec4_f32 Vector)
 {
 	f32      Inverse = 1.f / 255;
 	vec4_f32 Result  = Vec4F32(Vector.X * Inverse, Vector.Y * Inverse, Vector.Z * Inverse, Vector.W * Inverse);

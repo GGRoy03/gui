@@ -64,7 +64,8 @@ LoadThemeFiles(byte_string *Files, u32 FileCount, ui_style_registery *Registery)
 
     for (u32 FileIdx = 0; FileIdx < FileCount; FileIdx++)
     {
-        Parser.AtLine = 1;
+        Parser.AtLine     = 1;
+        Parser.TokenCount = 0;
 
         byte_string FileName     = Files[FileIdx];
         os_handle   OSFileHandle = OSFindFile(FileName);
@@ -93,7 +94,8 @@ LoadThemeFiles(byte_string *Files, u32 FileCount, ui_style_registery *Registery)
         PopArenaTo(Parser.Arena, 0);
     }
 
-    // TODO: Release the allocated data.
+    ReleaseArena(&Parser.Arena);
+    OSRelease(Parser.TokenBuffer);
 }
 
 // [Internal Implementation]
@@ -384,9 +386,9 @@ CacheStyle(ui_style Style, byte_string Name, ui_style_registery *Registery)
 {
     if (Name.Size <= ThemeNameLength)
     {
-        ui_style_name *CachedName = UIGetCachedNameFromStyleName(Name, Registery);
+        ui_style_name CachedName = UIGetCachedNameFromStyleName(Name, Registery);
 
-        if (!CachedName)
+        if (!CachedName.Value.String || !CachedName.Value.Size)
         {
             ui_cached_style *Sentinel = UIGetStyleSentinel(Name, Registery);
 
@@ -395,10 +397,10 @@ CacheStyle(ui_style Style, byte_string Name, ui_style_registery *Registery)
             CachedStyle->Index = Registery->Count;
             CachedStyle->Next  = Sentinel->Next;
 
-            CachedName = Registery->CachedName + CachedStyle->Index;
-            CachedName->Value.String = PushArena(Registery->Arena, Name.Size + 1, AlignOf(u8));
-            CachedName->Value.Size   = Name.Size;
-            memcpy(CachedName->Value.String, Name.String, Name.Size);
+            ui_style_name *NewName = Registery->CachedName + CachedStyle->Index;
+            NewName->Value.String = PushArena(Registery->Arena, Name.Size + 1, AlignOf(u8));
+            NewName->Value.Size   = Name.Size;
+            memcpy(NewName->Value.String, Name.String, Name.Size);
 
             Sentinel->Next   = CachedStyle;
             Registery->Count += 1;

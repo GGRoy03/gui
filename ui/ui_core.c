@@ -12,10 +12,14 @@ UIWindow(ui_style_name StyleName, ui_layout_tree *LayoutTree, ui_style_registery
     LayoutBox.Height  = Style.Size.Y;
     LayoutBox.Padding = Style.Padding;
     LayoutBox.Spacing = Style.Spacing;
-    LayoutBox.Color   = Style.Color;
     LayoutBox.Flags   = UILayoutBox_DrawBackground | UILayoutBox_FlowColumn;
 
-    UICreateLayoutNode(Vec2F32(400.f, 400.f), LayoutBox, 0, LayoutTree);
+    // WARN: This is a huge red flag but it allows me to experiment with borders.
+
+    ui_layout_node *Node = UICreateLayoutNode(Vec2F32(400.f, 400.f), LayoutBox, 0, LayoutTree);
+    Node->BorderColor = Style.BorderColor;
+    Node->Color       = Style.Color;
+    Node->BorderWidth = Style.BorderWidth;
 }
 
 internal void
@@ -28,10 +32,14 @@ UIButton(ui_style_name StyleName, ui_layout_tree *LayoutTree, ui_style_registery
     LayoutBox.Height  = Style.Size.Y;
     LayoutBox.Padding = Style.Padding;
     LayoutBox.Spacing = Style.Spacing;
-    LayoutBox.Color   = Style.Color;
-    LayoutBox.Flags   = UILayoutBox_DrawBackground | UILayoutBox_FlowRow;
+    LayoutBox.Flags   = UILayoutBox_DrawBackground | UILayoutBox_DrawBorders | UILayoutBox_FlowRow;
 
-    UICreateLayoutNode(Vec2F32(0, 0), LayoutBox, 1, LayoutTree);
+    // WARN: This is a huge red flag but it allows me to experiment with borders.
+
+    ui_layout_node *Node = UICreateLayoutNode(Vec2F32(0.f, 0.f), LayoutBox, 1, LayoutTree);
+    Node->BorderColor = Style.BorderColor;
+    Node->Color       = Style.Color;
+    Node->BorderWidth = Style.BorderWidth;
 }
 
 // [Style]
@@ -140,43 +148,47 @@ UIAllocateLayoutTree(ui_layout_tree_params Params)
     return Result;
 }
 
-internal void
+internal ui_layout_node *
 UICreateLayoutNode(vec2_f32 Position, ui_layout_box LayoutBox, b32 IsAlwaysLeaf, ui_layout_tree *Tree)
 {
+    ui_layout_node *Result = 0;
+
     if(Tree->NodeCount < Tree->NodeCapacity)
     {
-        ui_layout_node *Node = Tree->Nodes + Tree->NodeCount++;
-        Node->First     = 0;
-        Node->Last      = 0;
-        Node->Next      = 0;
-        Node->Parent    = UIGetParentForLayoutNode(Tree);
-        Node->LayoutBox = LayoutBox;
-        Node->ClientX   = Position.X;
-        Node->ClientY   = Position.Y;
+        Result = Tree->Nodes + Tree->NodeCount++;
+        Result->First     = 0;
+        Result->Last      = 0;
+        Result->Next      = 0;
+        Result->Parent    = UIGetParentForLayoutNode(Tree);
+        Result->LayoutBox = LayoutBox;
+        Result->ClientX   = Position.X;
+        Result->ClientY   = Position.Y;
 
-        ui_layout_node *Parent = Node->Parent;
+        ui_layout_node *Parent = Result->Parent;
         if(Parent)
         {
-            Node->Prev = Parent->Last;
+            Result->Prev = Parent->Last;
 
             if (!Parent->First)
             {
-                Parent->First = Node;
+                Parent->First = Result;
             }
 
             if (Parent->Last)
             {
-                Parent->Last->Next = Node;
+                Parent->Last->Next = Result;
             }
 
-            Parent->Last = Node;
+            Parent->Last = Result;
         }
 
         if (!IsAlwaysLeaf)
         {
-            Tree->ParentStack[Tree->ParentTop++] = Node;
+            Tree->ParentStack[Tree->ParentTop++] = Result;
         }
     }
+
+    return Result;
 }
 
 internal void
@@ -246,19 +258,31 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
             }
             else
             {
-
+                OSLogMessage(byte_string_literal("Invalid layout provided."), OSMessage_Warn);
             }
         }
 
         // Drawing
         {
+            // NOTE: It is highly possible that instead of drawing directly we instead emit a draw call.
+            // To some other way of drawing. As it appears right now, both things are mixing together.
+
+            render_batch_list *BatchList = GetUIBatchList(RenderContext);
+
             if (Box->Flags & UILayoutBox_DrawBackground)
             {
-                render_batch_list *BatchList = GetUIBatchList(RenderContext);
-                render_rect       *Rect      = PushDataInBatchList(RenderContext->UIArena, BatchList);
-                
-                Rect->RectBounds = Vec4F32(Current->ClientX, Current->ClientY, Current->ClientX + Box->Width, Current->ClientY + Box->Height);
-                Rect->Color      = Box->Color;
+                render_rect *Rect = PushDataInBatchList(RenderContext->UIArena, BatchList);         
+                Rect->RectBounds  = Vec4F32(Current->ClientX, Current->ClientY, Current->ClientX + Box->Width, Current->ClientY + Box->Height);
+                Rect->Color       = Current->Color;
+                Rect->BorderWidth = 0;
+            }
+
+            if (Box->Flags & UILayoutBox_DrawBorders)
+            {
+                render_rect *Rect = PushDataInBatchList(RenderContext->UIArena, BatchList);
+                Rect->RectBounds  = Vec4F32(Current->ClientX, Current->ClientY, Current->ClientX + Box->Width, Current->ClientY + Box->Height);
+                Rect->Color       = Current->BorderColor;
+                Rect->BorderWidth = Current->BorderWidth;
             }
         }
 

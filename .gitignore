@@ -1,11 +1,12 @@
 # Unrelated Diretories
 legacy/
-styles/
+style/
 .vs/
 .vscode/
 
 # Misc Files
 *.txt
+*.cim
 
 # Visual Studio
 *.sln

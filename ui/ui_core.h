@@ -6,6 +6,7 @@ typedef enum UILayoutBox_Flag
     UILayoutBox_FlowRow        = 1 << 0,
     UILayoutBox_FlowColumn     = 1 << 1,
     UILayoutBox_DrawBackground = 1 << 2,
+    UILayoutBox_DrawBorders    = 1 << 3,
 } UILayoutBox_Flag;
 
 // [CORE TYPES]
@@ -16,7 +17,6 @@ typedef struct ui_layout_box
     f32       Height;
     vec2_f32  Spacing;
     vec4_f32  Padding;
-    vec4_f32  Color;
     
     bit_field Flags;
 } ui_layout_box;
@@ -33,6 +33,11 @@ struct ui_layout_node
     ui_layout_node *Last;
     ui_layout_node *Next;
     ui_layout_node *Prev;
+
+    // NOTE: Adds quite a lot of memory... And is not directly related to a layout. It is possible that we use some other way of drawing stuff.1
+    vec4_f32 Color;
+    vec4_f32 BorderColor;
+    f32      BorderWidth;
 };
 
 typedef struct ui_layout_tree_params
@@ -118,5 +123,5 @@ internal ui_style          UIGetStyleFromCachedName      (ui_style_name Name, ui
 internal ui_layout_tree   UIAllocateLayoutTree      (ui_layout_tree_params Params);
 internal ui_layout_node * UIGetParentForLayoutNode  (ui_layout_tree *Tree);
 internal void             UIPopParentLayoutNode     (ui_layout_tree *Tree);
-internal void             UICreateLayoutNode        (vec2_f32 Position, ui_layout_box LayoutBox, b32 IsAlwaysLeaf, ui_layout_tree *Tree);
+internal ui_layout_node * UICreateLayoutNode        (vec2_f32 Position, ui_layout_box LayoutBox, b32 IsAlwaysLeaf, ui_layout_tree *Tree);
 internal void             UIComputeLayout           (ui_layout_tree *Tree, render_context *RenderContext);

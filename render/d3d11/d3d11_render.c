@@ -152,7 +152,7 @@ InitializeRenderer(memory_arena *Arena)
 
         ForEachEnum(RenderPass_Type, Type)
         {
-            byte_string Source = D3D11VShaderSourceTable[Type];
+            byte_string Source = D3D11ShaderSourceTable[Type];
 
             ID3DBlob *VShaderSrcBlob = 0;
             ID3DBlob *VShaderErrBlob = 0;
@@ -161,6 +161,7 @@ InitializeRenderer(memory_arena *Arena)
                                0, 0, &VShaderSrcBlob, &VShaderErrBlob);
             if(FAILED(Error))
             {
+                OSLogMessage(ByteString(VShaderErrBlob->lpVtbl->GetBufferPointer(VShaderErrBlob), VShaderErrBlob->lpVtbl->GetBufferSize(VShaderErrBlob)), OSMessage_Error);
                 OSLogMessage(byte_string_literal("Failed to compile D3D11 vertex shader."), OSMessage_Fatal);
             }
 
@@ -189,7 +190,7 @@ InitializeRenderer(memory_arena *Arena)
 
         ForEachEnum(RenderPass_Type, Type)
         {
-            byte_string Source = D3D11PShaderSourceTable[Type];
+            byte_string Source = D3D11ShaderSourceTable[Type];
 
             ID3DBlob *PShaderSrcBlob = 0;
             ID3DBlob *PShaderErrBlob = 0;
@@ -198,7 +199,8 @@ InitializeRenderer(memory_arena *Arena)
                                0, 0, &PShaderSrcBlob, &PShaderErrBlob);
             if(FAILED(Error))
             {
-                OSAbort(1);
+                OSLogMessage(ByteString(PShaderErrBlob->lpVtbl->GetBufferPointer(PShaderErrBlob), PShaderErrBlob->lpVtbl->GetBufferSize(PShaderErrBlob)), OSMessage_Error);
+                OSLogMessage(byte_string_literal("Failed to compile D3D11 pixel shader."), OSMessage_Fatal);
             }
 
             void *ByteCode = PShaderSrcBlob->lpVtbl->GetBufferPointer(PShaderSrcBlob);
@@ -206,7 +208,7 @@ InitializeRenderer(memory_arena *Arena)
             Error = Device->lpVtbl->CreatePixelShader(Device, ByteCode, ByteSize, 0, &PShader);
             if (FAILED(Error))
             {
-                OSAbort(1);
+                OSLogMessage(byte_string_literal("Failed to create D3D11 pixel shader."), OSMessage_Fatal);
             }
 
             PShaderSrcBlob->lpVtbl->Release(PShaderSrcBlob);

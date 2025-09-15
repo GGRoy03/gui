@@ -242,6 +242,21 @@ InitializeRenderer(memory_arena *Arena)
     // Default State
     {
         Backend->LastResolution = OSGetClientSize();
+
+        D3D11_BLEND_DESC BlendDesc = {0};
+        BlendDesc.RenderTarget[0].BlendEnable           = TRUE;
+        BlendDesc.RenderTarget[0].SrcBlend              = D3D11_BLEND_SRC_ALPHA;
+        BlendDesc.RenderTarget[0].DestBlend             = D3D11_BLEND_INV_SRC_ALPHA;
+        BlendDesc.RenderTarget[0].BlendOp               = D3D11_BLEND_OP_ADD;
+        BlendDesc.RenderTarget[0].SrcBlendAlpha         = D3D11_BLEND_ONE;
+        BlendDesc.RenderTarget[0].DestBlendAlpha        = D3D11_BLEND_ZERO;
+        BlendDesc.RenderTarget[0].BlendOpAlpha          = D3D11_BLEND_OP_ADD;
+        BlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+        if (FAILED(Backend->Device->lpVtbl->CreateBlendState(Backend->Device, &BlendDesc, &Backend->DefaultBlendState)))
+        {
+            OSLogMessage(byte_string_literal("D3D11: Failed to create default blend state."), OSMessage_Error);
+        }
     }
 
     Result.u64[0] = (u64)Backend;
@@ -329,6 +344,7 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
 
             // OM
             DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &Backend->RenderView, 0);
+            DeviceContext->lpVtbl->OMSetBlendState(DeviceContext, Backend->DefaultBlendState, 0, 0xFFFFFFFF);
 
             // IA
             u32 Stride = (u32)BatchList.BytesPerInstance;

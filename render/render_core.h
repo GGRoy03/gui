@@ -25,7 +25,8 @@ typedef struct render_rect
 {
     vec4_f32 RectBounds;
     vec4_f32 Color;
-    f32      BorderWidth, _P0, _P1, _P2; // Style Params
+    vec4_f32 CornerRadii;
+    f32      BorderWidth, Softness, _P1, _P2; // Style Params
 } render_rect;
 
 // Batch types

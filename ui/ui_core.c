@@ -12,14 +12,14 @@ UIWindow(ui_style_name StyleName, ui_layout_tree *LayoutTree, ui_style_registery
     LayoutBox.Height  = Style.Size.Y;
     LayoutBox.Padding = Style.Padding;
     LayoutBox.Spacing = Style.Spacing;
-    LayoutBox.Flags   = UILayoutBox_DrawBackground | UILayoutBox_FlowColumn;
+    LayoutBox.Flags   = UILayoutBox_DrawBackground | UILayoutBox_DrawBorders | UILayoutBox_FlowColumn;
 
     // WARN: This is a huge red flag but it allows me to experiment with borders.
 
     ui_layout_node *Node = UICreateLayoutNode(Vec2F32(400.f, 400.f), LayoutBox, 0, LayoutTree);
     Node->BorderColor = Style.BorderColor;
     Node->Color       = Style.Color;
-    Node->BorderWidth = Style.BorderWidth;
+    Node->BorderWidth = (f32)Style.BorderWidth;
 }
 
 internal void
@@ -32,14 +32,14 @@ UIButton(ui_style_name StyleName, ui_layout_tree *LayoutTree, ui_style_registery
     LayoutBox.Height  = Style.Size.Y;
     LayoutBox.Padding = Style.Padding;
     LayoutBox.Spacing = Style.Spacing;
-    LayoutBox.Flags   = UILayoutBox_DrawBackground | UILayoutBox_DrawBorders | UILayoutBox_FlowRow;
+    LayoutBox.Flags   = UILayoutBox_DrawBackground;
 
     // WARN: This is a huge red flag but it allows me to experiment with borders.
 
     ui_layout_node *Node = UICreateLayoutNode(Vec2F32(0.f, 0.f), LayoutBox, 1, LayoutTree);
     Node->BorderColor = Style.BorderColor;
     Node->Color       = Style.Color;
-    Node->BorderWidth = Style.BorderWidth;
+    Node->BorderWidth = (f32)Style.BorderWidth;
 }
 
 // [Style]
@@ -256,16 +256,14 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
                     QueueTail        = (QueueTail + 1) % Tree->NodeCount;
                 }
             }
-            else
-            {
-                OSLogMessage(byte_string_literal("Invalid layout provided."), OSMessage_Warn);
-            }
         }
 
         // Drawing
         {
             // NOTE: It is highly possible that instead of drawing directly we instead emit a draw call.
             // To some other way of drawing. As it appears right now, both things are mixing together.
+            // Yeah, because there is starting to be a lot of data inside of here that does not relate to
+            // the layouts.
 
             render_batch_list *BatchList = GetUIBatchList(RenderContext);
 
@@ -275,6 +273,8 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
                 Rect->RectBounds  = Vec4F32(Current->ClientX, Current->ClientY, Current->ClientX + Box->Width, Current->ClientY + Box->Height);
                 Rect->Color       = Current->Color;
                 Rect->BorderWidth = 0;
+                Rect->Softness    = 1.f;
+                Rect->CornerRadii = Vec4F32(5.f, 5.f, 5.f, 5.f);
             }
 
             if (Box->Flags & UILayoutBox_DrawBorders)
@@ -283,6 +283,8 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
                 Rect->RectBounds  = Vec4F32(Current->ClientX, Current->ClientY, Current->ClientX + Box->Width, Current->ClientY + Box->Height);
                 Rect->Color       = Current->BorderColor;
                 Rect->BorderWidth = Current->BorderWidth;
+                Rect->Softness    = 1.f;
+                Rect->CornerRadii = Vec4F32(5.f, 5.f, 5.f, 5.f);
             }
         }
 

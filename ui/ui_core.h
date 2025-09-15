@@ -60,6 +60,24 @@ typedef struct ui_layout_tree
     u32 MaximumDepth;
 } ui_layout_tree;
 
+typedef struct ui_background_style
+{
+    vec4_f32 Color;
+} ui_background_style;
+
+typedef struct ui_border_style
+{
+    vec4_f32 BorderWidth;
+    vec4_f32 BorderColor;
+} ui_border_style;
+
+typedef struct ui_layout_style
+{ 
+    vec2_f32 Size;
+    vec4_f32 Spacing;
+    vec4_f32 Padding;
+} ui_layout_style;
+
 typedef struct ui_style
 {
     vec4_f32 Color;

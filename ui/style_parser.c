@@ -330,12 +330,14 @@ WriteStyleAttribute(UIStyleAttribute_Flag Attribute, style_token ValueToken, sty
         WriteStyleErrorMessage(Parser->AtLine, OSMessage_Error, byte_string_literal("Invalid style supplied"));
     } break;
 
-    case UIStyleAttribute_Size:        Parser->CurrentStyle.Size        = Vec2F32(ValueToken.Vector.X, ValueToken.Vector.Y);  break;
-    case UIStyleAttribute_Color:       Parser->CurrentStyle.Color       = NormalizedColor(ValueToken.Vector);                 break;
-    case UIStyleAttribute_Padding:     Parser->CurrentStyle.Padding     = ValueToken.Vector;                                  break;
-    case UIStyleAttribute_Spacing:     Parser->CurrentStyle.Spacing     = Vec2F32(ValueToken.Vector.X, ValueToken.Vector.Y);  break;
-    case UIStyleAttribute_BorderColor: Parser->CurrentStyle.BorderColor = NormalizedColor(ValueToken.Vector);                 break;
-    case UIStyleAttribute_BorderWidth: Parser->CurrentStyle.BorderWidth = ValueToken.UInt32;                                  break;
+    case UIStyleAttribute_Size:           Parser->CurrentStyle.Size           = Vec2F32(ValueToken.Vector.X, ValueToken.Vector.Y);  break;
+    case UIStyleAttribute_Color:          Parser->CurrentStyle.Color          = NormalizedColor(ValueToken.Vector);                 break;
+    case UIStyleAttribute_Padding:        Parser->CurrentStyle.Padding        = ValueToken.Vector;                                  break;
+    case UIStyleAttribute_Spacing:        Parser->CurrentStyle.Spacing        = Vec2F32(ValueToken.Vector.X, ValueToken.Vector.Y);  break;
+    case UIStyleAttribute_BorderColor:    Parser->CurrentStyle.BorderColor    = NormalizedColor(ValueToken.Vector);                 break;
+    case UIStyleAttribute_BorderWidth:    Parser->CurrentStyle.BorderWidth    = ValueToken.UInt32;                                  break;
+    case UIStyleAttribute_BorderRadius:   Parser->CurrentStyle.BorderRadius   = ValueToken.Vector;                                  break;
+    case UIStyleAttribute_BorderSoftness: Parser->CurrentStyle.BorderSoftness = (f32)ValueToken.UInt32;                             break;
 
     }
 }

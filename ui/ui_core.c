@@ -17,9 +17,11 @@ UIWindow(ui_style_name StyleName, ui_layout_tree *LayoutTree, ui_style_registery
     // WARN: This is a huge red flag but it allows me to experiment with borders.
 
     ui_layout_node *Node = UICreateLayoutNode(Vec2F32(400.f, 400.f), LayoutBox, 0, LayoutTree);
-    Node->BorderColor = Style.BorderColor;
-    Node->Color       = Style.Color;
-    Node->BorderWidth = (f32)Style.BorderWidth;
+    Node->BorderColor    = Style.BorderColor;
+    Node->Color          = Style.Color;
+    Node->BorderWidth    = (f32)Style.BorderWidth;
+    Node->BorderRadius   = Style.BorderRadius;
+    Node->BorderSoftness = Style.BorderSoftness;
 }
 
 internal void
@@ -32,14 +34,16 @@ UIButton(ui_style_name StyleName, ui_layout_tree *LayoutTree, ui_style_registery
     LayoutBox.Height  = Style.Size.Y;
     LayoutBox.Padding = Style.Padding;
     LayoutBox.Spacing = Style.Spacing;
-    LayoutBox.Flags   = UILayoutBox_DrawBackground;
+    LayoutBox.Flags   = UILayoutBox_DrawBackground | UILayoutBox_DrawBorders;
 
     // WARN: This is a huge red flag but it allows me to experiment with borders.
 
     ui_layout_node *Node = UICreateLayoutNode(Vec2F32(0.f, 0.f), LayoutBox, 1, LayoutTree);
-    Node->BorderColor = Style.BorderColor;
-    Node->Color       = Style.Color;
-    Node->BorderWidth = (f32)Style.BorderWidth;
+    Node->BorderColor    = Style.BorderColor;
+    Node->Color          = Style.Color;
+    Node->BorderWidth    = (f32)Style.BorderWidth;
+    Node->BorderRadius   = Style.BorderRadius;
+    Node->BorderSoftness = Style.BorderSoftness;
 }
 
 // [Style]
@@ -273,8 +277,8 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
                 Rect->RectBounds  = Vec4F32(Current->ClientX, Current->ClientY, Current->ClientX + Box->Width, Current->ClientY + Box->Height);
                 Rect->Color       = Current->Color;
                 Rect->BorderWidth = 0;
-                Rect->Softness    = 1.f;
-                Rect->CornerRadii = Vec4F32(10.f, 10.f, 10.f, 10.f);
+                Rect->Softness    = Current->BorderSoftness;;
+                Rect->CornerRadii = Current->BorderRadius;
             }
 
             if (Box->Flags & UILayoutBox_DrawBorders)
@@ -283,8 +287,8 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
                 Rect->RectBounds  = Vec4F32(Current->ClientX, Current->ClientY, Current->ClientX + Box->Width, Current->ClientY + Box->Height);
                 Rect->Color       = Current->BorderColor;
                 Rect->BorderWidth = Current->BorderWidth;
-                Rect->Softness    = 1.f;
-                Rect->CornerRadii = Vec4F32(10.f, 10.f, 10.f, 10.f);
+                Rect->Softness    = Current->BorderSoftness;
+                Rect->CornerRadii = Current->BorderRadius;
             }
         }
 

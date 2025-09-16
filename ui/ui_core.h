@@ -37,6 +37,8 @@ struct ui_layout_node
     // NOTE: Adds quite a lot of memory... And is not directly related to a layout. It is possible that we use some other way of drawing stuff.1
     vec4_f32 Color;
     vec4_f32 BorderColor;
+    vec4_f32 BorderRadius;
+    f32      BorderSoftness;
     f32      BorderWidth;
 };
 
@@ -82,6 +84,8 @@ typedef struct ui_style
 {
     vec4_f32 Color;
     vec4_f32 BorderColor;
+    vec4_f32 BorderRadius;
+    f32      BorderSoftness;
     u32      BorderWidth;
     vec2_f32 Size;
     vec2_f32 Spacing;

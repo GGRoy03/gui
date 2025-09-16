@@ -373,3 +373,118 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
     }
     DeviceContext->lpVtbl->ClearState(DeviceContext);
 }
+
+// [Text]
+
+internal b32
+CreateGlyphCache(render_handle BackendHandle, vec2_i32 Size, gpu_font_objects *FontObjects)
+{
+    b32            Result  = 0;
+    HRESULT        Error   = S_OK;
+    d3d11_backend *Backend = (d3d11_backend *)BackendHandle.u64[0];
+
+    if (Backend && FontObjects)
+    {
+        D3D11_TEXTURE2D_DESC Desc = { 0 };
+        Desc.Width            = Size.X;
+        Desc.Height           = Size.Y;
+        Desc.MipLevels        = 1;
+        Desc.ArraySize        = 1;
+        Desc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
+        Desc.SampleDesc.Count = 1;
+        Desc.Usage            = D3D11_USAGE_DEFAULT;
+        Desc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
+
+        Error = Backend->Device->lpVtbl->CreateTexture2D(Backend->Device, &Desc, 0, &FontObjects->GlyphCache);
+        if (SUCCEEDED(Error))
+        {
+            Error  = Backend->Device->lpVtbl->CreateShaderResourceView(Backend->Device, (ID3D11Resource *)FontObjects->GlyphCache, 0, &FontObjects->GlyphCacheView);
+            Result = (FontObjects->GlyphCacheView != 0);
+        }
+    }
+
+    if (FAILED(Error))
+    {
+        ReleaseGlyphCache(FontObjects);
+    }
+
+    return Result;
+}
+
+internal void
+ReleaseGlyphCache(gpu_font_objects *FontObjects)
+{
+    if (FontObjects)
+    {
+        if (FontObjects->GlyphCache)
+        {
+            FontObjects->GlyphCache->lpVtbl->Release(FontObjects->GlyphCache);
+            FontObjects->GlyphCache = 0;
+        }
+
+        if (FontObjects->GlyphCacheView)
+        {
+            FontObjects->GlyphCacheView->lpVtbl->Release(FontObjects->GlyphCacheView);
+            FontObjects->GlyphCacheView = 0;
+        }
+    }
+}
+
+internal b32
+CreateGlyphTransfer(render_handle BackendHandle, vec2_i32 Size, gpu_font_objects *FontObjects)
+{
+    b32            Result  = 0;
+    HRESULT        Error   = S_OK;
+    d3d11_backend *Backend = (d3d11_backend *)BackendHandle.u64[0];
+
+    if (Backend && FontObjects)
+    {
+        D3D11_TEXTURE2D_DESC Desc = {0};
+        Desc.Width            = Size.X;
+        Desc.Height           = Size.Y;
+        Desc.MipLevels        = 1;
+        Desc.ArraySize        = 1;
+        Desc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
+        Desc.SampleDesc.Count = 1;
+        Desc.Usage            = D3D11_USAGE_DEFAULT;
+        Desc.BindFlags        = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+
+        Error = Backend->Device->lpVtbl->CreateTexture2D(Backend->Device, &Desc, 0, &FontObjects->GlyphTransfer);
+        if (SUCCEEDED(Error))
+        {
+            Error = Backend->Device->lpVtbl->CreateShaderResourceView(Backend->Device, (ID3D11Resource *)FontObjects->GlyphTransfer, 0, &FontObjects->GlyphTransferView);
+            if (SUCCEEDED(Error))
+            {
+                Error  = FontObjects->GlyphTransfer->lpVtbl->QueryInterface(FontObjects->GlyphTransfer, &IID_IDXGISurface, (void **)&FontObjects->GlyphTransferSurface);
+                Result = (FontObjects->GlyphTransferSurface != 0);
+            }
+        }
+    }
+
+    return Result;
+}
+
+internal void
+ReleaseGlyphTransfer(gpu_font_objects *FontObjects)
+{
+    if (FontObjects)
+    {
+        if (FontObjects->GlyphTransfer)
+        {
+            FontObjects->GlyphTransfer->lpVtbl->Release(FontObjects->GlyphTransfer);
+            FontObjects->GlyphTransfer = 0;
+        }
+
+        if (FontObjects->GlyphTransferView)
+        {
+            FontObjects->GlyphTransferView->lpVtbl->Release(FontObjects->GlyphTransferView);
+            FontObjects->GlyphTransferView = 0;
+        }
+
+        if (FontObjects->GlyphTransferSurface)
+        {
+            FontObjects->GlyphTransferSurface->lpVtbl->Release(FontObjects->GlyphTransferSurface);
+            FontObjects->GlyphTransferSurface = 0;
+        }
+    }
+}

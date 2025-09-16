@@ -124,21 +124,21 @@ TokenizeStyleFile(os_file *File, style_parser *Parser)
 {
     b32 Success = 0;
 
-    while(OSIsValidFile(File))
+    while(OSFileIsValid(File))
     {
-        OSIgnoreWhiteSpaces(File);
+        OSFileIgnoreWhiteSpaces(File);
 
-        u8  Char    = OSGetFileChar(File);
+        u8  Char    = OSFileGetChar(File);
         u64 StartAt = File->At;
 
         if (IsAlpha(Char))
         {
-            while (OSIsValidFile(File) && (IsAlpha(Char) || IsNumber(Char)))
+            while (OSFileIsValid(File) && (IsAlpha(Char) || IsNumber(Char)))
             {
-                Char = OSGetNextFileChar(File);
+                Char = OSFileGetNextChar(File);
             }
 
-            if(!OSIsValidFile(File))
+            if(!OSFileIsValid(File))
             {
                 WriteStyleErrorMessage(Parser->AtLine, OSMessage_Error, byte_string_literal("Unexpected end of file."));
                 return Success;
@@ -170,18 +170,18 @@ TokenizeStyleFile(os_file *File, style_parser *Parser)
         {
             style_token *Token = CreateStyleToken(UIStyleToken_Number, Parser);
 
-            Char = OSGetFileChar(File);
-            while (OSIsValidFile(File) && IsNumber(Char))
+            Char = OSFileGetChar(File);
+            while (OSFileIsValid(File) && IsNumber(Char))
             {
                 Token->UInt32 = (Token->UInt32 * 10) + (Char - '0');
 
-                Char = OSGetNextFileChar(File);
+                Char = OSFileGetNextChar(File);
             }
         }
         else if (Char == '\r' || Char == '\n')
         {
-            u8 NextChar = OSGetNextFileChar(File);
-            Char = OSGetFileChar(File);
+            u8 NextChar = OSFileGetNextChar(File);
+            Char = OSFileGetChar(File);
             if (Char == '\r' && !NextChar == '\n')
             {
                 --File->At; // We peeked when we shouldn't have.
@@ -194,7 +194,7 @@ TokenizeStyleFile(os_file *File, style_parser *Parser)
         {
             ++File->At;
 
-            if (OSIsValidFile(File) && OSGetFileChar(File) == '=')
+            if (OSFileIsValid(File) && OSFileGetChar(File) == '=')
             {
                 CreateStyleToken(UIStyleToken_Assignment, Parser);
                 ++File->At;
@@ -213,23 +213,23 @@ TokenizeStyleFile(os_file *File, style_parser *Parser)
 
             u32 DigitCount   = 0;
             u32 MaximumDigit = 4;
-            while (DigitCount < MaximumDigit && OSIsValidFile(File))
+            while (DigitCount < MaximumDigit && OSFileIsValid(File))
             {
-                OSIgnoreWhiteSpaces(File);
+                OSFileIgnoreWhiteSpaces(File);
 
                 u32 Idx = DigitCount;
-                for (Char = OSGetFileChar(File); OSIsValidFile(File) && IsNumber(Char); Char = OSGetNextFileChar(File))
+                for (Char = OSFileGetChar(File); OSFileIsValid(File) && IsNumber(Char); Char = OSFileGetNextChar(File))
                 {
                     Token->Vector.Values[Idx] = (Token->Vector.Values[Idx] * 10) + (Char - '0');
                 }
 
-                if (!OSIsValidFile(File))
+                if (!OSFileIsValid(File))
                 {
                     WriteStyleErrorMessage(Parser->AtLine, OSMessage_Error, byte_string_literal("Unexpected end of file."));
                     return Success;
                 }
 
-                OSIgnoreWhiteSpaces(File);
+                OSFileIgnoreWhiteSpaces(File);
 
                 if (Char == ',')
                 {
@@ -260,12 +260,12 @@ TokenizeStyleFile(os_file *File, style_parser *Parser)
             style_token *Token = CreateStyleToken(UIStyleToken_String, Parser);
             Token->Identifier = ByteString(File->Content.String + File->At + 1, 0);
 
-            while (OSIsValidFile(File) && OSGetNextFileChar(File) != '\"') 
+            while (OSFileIsValid(File) && OSFileGetNextChar(File) != '\"') 
             {
                 ++Token->Identifier.Size;
             };
 
-            if (!OSIsValidFile(File))
+            if (!OSFileIsValid(File))
             {
                 WriteStyleErrorMessage(Parser->AtLine, OSMessage_Error, byte_string_literal("Unexpected end of file."));
                 return Success;
@@ -276,7 +276,7 @@ TokenizeStyleFile(os_file *File, style_parser *Parser)
         else if (Char == '@')
         {
             byte_string EffectString = ByteString(File->Content.String + File->At + 1, 0);
-            while (OSIsValidFile(File) && IsAlpha(OSGetNextFileChar(File)))
+            while (OSFileIsValid(File) && IsAlpha(OSFileGetNextChar(File)))
             {
                 EffectString.Size += 1;
             }

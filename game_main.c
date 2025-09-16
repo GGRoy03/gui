@@ -1,3 +1,7 @@
+// [General Notes]
+// 1) Functions marked as 'internal' are only used from within files included in this file.
+// 2) Functions marked as 'external' are both used from within files included in this file AND compiled outside of this file.
+
 // [Headers]
 #include "base/base_inc.h"
 #include "os/os_inc.h"

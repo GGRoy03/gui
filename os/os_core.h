@@ -55,32 +55,47 @@ typedef struct os_file
     b32         FullyRead;
 } os_file;
 
-// [Core API]
+// [FORWARD DECLARATION]
 
-// OS-Agnostic Functions.
+typedef struct gpu_font_objects gpu_font_objects;
+typedef struct os_font_objects  os_font_objects;
+typedef struct os_text_backend  os_text_backend;
+
+// [CORE API]
+
+// [Inputs]
 
 internal void ProccessInputMessage(os_button_state *NewState, b32 IsDown);
 
-internal b32  OSIsValidFile        (os_file *File);
-internal void OSIgnoreWhiteSpaces  (os_file *File);
-internal u8   OSGetFileChar        (os_file *File);
-internal u8   OSGetNextFileChar    (os_file *File);
+// [Files]
 
-// Per-OS Functions.
+internal b32  OSFileIsValid            (os_file *File);
+internal void OSFileIgnoreWhiteSpaces  (os_file *File);
+internal u8   OSFileGetChar            (os_file *File);
+internal u8   OSFileGetNextChar        (os_file *File);
+
+internal os_handle OSFindFile  (byte_string Path);
+internal os_file   OSReadFile  (os_handle Handle, memory_arena *Arena);
+
+// [Info]
 
 internal os_system_info *OSGetSystemInfo  (void);
 internal vec2_i32        OSGetClientSize  (void);
 
-internal os_handle OSFindFile  (byte_string Path);
-internal os_file   OSReadFile  (os_handle Handle, memory_arena *Arena);
+// [Memory]
 
 internal void *OSReserveMemory  (u64 Size);
 internal b32   OSCommitMemory   (void *Memory, u64 Size);
 internal void  OSRelease        (void *Memory);
 
+// [Misc]
+
 internal b32   OSUpdateWindow  (void);
 internal void  OSSleep         (u32 Milliseconds);
+external void  OSLogMessage    (byte_string ANSISequence, OSMessage_Severity Severity);
+internal void  OSAbort         (i32 ExitCode);
 
-internal void OSLogMessage  (byte_string ANSISequence, OSMessage_Severity Severity);
+// [Text]
 
-internal void OSAbort  (i32 ExitCode);
+b32  OSAcquireFontObjects  (byte_string Name, f32 Size, gpu_font_objects *GPUObjects, os_font_objects *OSObjects);
+void OSReleaseFontObjects  (os_font_objects *Objects);

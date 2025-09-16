@@ -3,6 +3,7 @@
 // [Macros and linking]
 
 #define COBJMACROS
+#define D3D11_NO_HELPERS
 DisableWarning(4201)
 #include <d3d11.h>
 #include <d3dcompiler.h>
@@ -14,6 +15,16 @@ DisableWarning(4201)
 #pragma comment (lib, "d3dcompiler")
 
 // [Core Types]
+
+typedef struct gpu_font_objects
+{
+    ID3D11Texture2D          *GlyphCache;
+    ID3D11ShaderResourceView *GlyphCacheView;
+
+    ID3D11Texture2D          *GlyphTransfer;
+    ID3D11ShaderResourceView *GlyphTransferView;
+    IDXGISurface             *GlyphTransferSurface;
+} gpu_font_objects;
 
 typedef struct d3d11_rect_uniform_buffer
 {

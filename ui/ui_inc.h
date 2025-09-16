@@ -1,2 +1,3 @@
 #include "ui_core.h"
-#include "style_parser.h"
+#include "ui_style_parser.h"
+#include "ui_text.h"

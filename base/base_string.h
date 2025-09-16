@@ -25,7 +25,7 @@ typedef struct unicode_decode
 #define byte_string_literal(String) ByteString((u8 *)String, sizeof(String) - 1)
 #define byte_string_compile(String) {(u8 *)String, sizeof(String)}
 
-internal byte_string ByteString  (u8  *String, u64 Size);
+external byte_string ByteString  (u8  *String, u64 Size);
 internal wide_string WideString  (u16 *String, u64 Size);
 
 // [Character Utilities]
@@ -43,4 +43,4 @@ internal u32            EncodeWideString  (u16 *WideString, u32 CodePoint);
 
 // [Conversion]
 
-internal wide_string ByteStringToWideString(memory_arena *Arena, byte_string Input);
+external wide_string ByteStringToWideString(memory_arena *Arena, byte_string Input);

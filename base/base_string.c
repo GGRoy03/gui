@@ -2,7 +2,7 @@
 
 // [Constructors]
 
-internal byte_string 
+external byte_string 
 ByteString(u8 *String, u64 Size)
 {
     byte_string Result = { String, Size };
@@ -201,7 +201,7 @@ EncodeWideString(u16 *WideString, u32 CodePoint)
 
 // [Conversion]
 
-internal wide_string 
+external wide_string 
 ByteStringToWideString(memory_arena *Arena, byte_string Input)
 {
     wide_string Result = WideString(0, 0);

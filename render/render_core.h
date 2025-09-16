@@ -131,6 +131,10 @@ read_only global u64 RenderPassDataSizeTable[] =
     {sizeof(render_rect)}, // Inputs to UI pass.
 };
 
+// [FORWARD DECLARATIONS]
+
+typedef struct gpu_font_objects gpu_font_objects;
+
 // [CORE API]
 
 // [Misc]
@@ -147,3 +151,10 @@ internal render_batch_list * GetUIBatchList       (render_context *Context);
 internal render_handle InitializeRenderer    (memory_arena *Arena);
 internal void          EndRendererFrame      (void);
 internal void          SubmitRenderCommands  (render_context *RenderContext, render_handle BackendHandle);
+
+// [Text]
+
+internal b32  CreateGlyphCache      (render_handle BackendHandle, vec2_i32 Size, gpu_font_objects *FontObjects);
+internal void ReleaseGlyphCache     (gpu_font_objects *FontObjects);
+internal b32  CreateGlyphTransfer   (render_handle Backend, vec2_i32 Size, gpu_font_objects *FontObjects);
+internal void ReleaseGlyphTransfer  (gpu_font_objects *FontObjects);

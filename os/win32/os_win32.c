@@ -1,3 +1,7 @@
+// [GLOBALS]
+
+os_win32_state OSWin32State;
+
 // [Internal Implementation]
 
 internal void
@@ -140,6 +144,11 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
         }
     }
 
+    // Text
+    {
+        OSWin32AcquireTextBackend();
+    }
+
     GameEntryPoint();
 
     return 0;
@@ -147,7 +156,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
 
 // [Per-OS Logging Implementation]
 
-internal void
+external void
 OSLogMessage(byte_string ANSISequence, OSMessage_Severity Severity)
 {
     switch (Severity)

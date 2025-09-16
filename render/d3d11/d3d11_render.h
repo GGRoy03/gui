@@ -93,11 +93,11 @@ read_only global u8 D3D11RectVShader[] =
 "                                                                                                \n"
 "// [Helpers]                                                                                    \n"
 "                                                                                                \n"
-"float RectSDF(float2 SamplePosition, float2 RectHalfSize, float Radius)                         \n"
+"float RectSDF(float2 SamplePosition, float2 RectHalfSize, float Radius)                         \n" // Everything is solved in the first quadrant because of symmetry on both axes.
 "{                                                                                               \n"
-"    float2 FirstQuadrantPos = abs(SamplePosition) - RectHalfSize + Radius;                      \n"
-"    float  OuterDistance    = length(max(FirstQuadrantPos, 0.0));                               \n"
-"    float  InnerDistance    = min(max(FirstQuadrantPos.x, FirstQuadrantPos.y), 0.0);            \n"
+"    float2 FirstQuadrantPos = abs(SamplePosition) - RectHalfSize + Radius;                      \n" // Quadrant Folding Inwards offset by corner radius | > 0 == Outside
+"    float  OuterDistance    = length(max(FirstQuadrantPos, 0.0));                               \n" // > 0 == Outside, on each axis. Length(p) == Closest Edge from outside
+"    float  InnerDistance    = min(max(FirstQuadrantPos.x, FirstQuadrantPos.y), 0.0);            \n" // < = == Inside. If any axis > 0, Inner == 0.
 "                                                                                                \n"
 "    return OuterDistance + InnerDistance - Radius;                                              \n"
 "}                                                                                               \n"
@@ -151,14 +151,15 @@ read_only global u8 D3D11RectVShader[] =
 "    if(Input.BorderWidth_Pixel > 0)                                                             \n"
 "    {                                                                                           \n"
 "        float2 SamplePosition = Input.SDFSamplePos;                                             \n"
-"        float2 RectHalfSize   = Input.RectHalfSize_Pixel - Input.BorderWidth_Pixel;             \n"
-"        float  Radius         = max(Input.CornerRadius_Pixel - Input.BorderWidth_Pixel, 0);     \n"
+"        float2 Softness       = float2(2.f * Input.Softness_Pixel, 2.f * Input.Softness_Pixel); \n"
+"        float2 RectHalfSize   = Input.RectHalfSize_Pixel - Input.BorderWidth_Pixel - Softness;  \n"
+"        float  Radius         = max(Input.CornerRadius_Pixel - Input.BorderWidth_Pixel, 0);     \n" // Prevent negative radius
 "                                                                                                \n"
 "        BorderSDF = RectSDF(SamplePosition, RectHalfSize, Radius);                              \n"
-"        BorderSDF = smoothstep(0, 2 * Input.Softness_Pixel, BorderSDF);                         \n"
+"        BorderSDF = smoothstep(0, 2 * Input.Softness_Pixel, BorderSDF);                         \n" // 0->1 clamping based on softness. BorderSDF == 0 if inside, BorderSDF == 1 if far.
 "    }                                                                                           \n"
 "                                                                                                \n"
-"    if(BorderSDF < 0.001f) discard;                                                             \n" // NOTE: If it is not part of the border mask discard it (Hollow Center)
+"    if(BorderSDF < 0.001f) discard;                                                             \n" // If it is not part of the border mask discard it (Hollow Center)
 "                                                                                                \n"
 "    float CornerSDF = 1;                                                                        \n"
 "    if(Input.CornerRadius_Pixel > 0 || Input.Softness_Pixel > 0.75f)                            \n"
@@ -169,7 +170,7 @@ read_only global u8 D3D11RectVShader[] =
 "        float  CornerRadius   = Input.CornerRadius_Pixel;                                       \n"
 "                                                                                                \n"
 "        CornerSDF = RectSDF(SamplePosition, RectHalfSize, CornerRadius);                        \n"
-"        CornerSDF = 1.0 - smoothstep(0, 2 * Input.Softness_Pixel, CornerSDF);                   \n" // NOTE:
+"        CornerSDF = 1.0 - smoothstep(0, 2 * Input.Softness_Pixel, CornerSDF);                   \n" // 0->1 clamping based on softness. == 1 if inside, < 1 if outside.
 "    }                                                                                           \n"
 "                                                                                                \n"
 "    float4 Output = Input.Col;                                                                  \n"

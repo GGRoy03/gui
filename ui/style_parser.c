@@ -340,45 +340,89 @@ WriteStyleAttribute(UIStyleAttribute_Flag Attribute, style_token ValueToken, sty
     }
 }
 
+internal b32
+IsAttributeFormattedCorrectly(UIStyleToken_Type TokenType, UIStyleAttribute_Flag AttributeFlag)
+{
+    b32 Result = 0;
+
+    switch (TokenType)
+    {
+
+    case UIStyleToken_Number:
+    {
+        Result = (AttributeFlag & UIStyleAttribute_BorderWidth   ) ||
+                 (AttributeFlag & UIStyleAttribute_BorderSoftness);
+    } break;
+
+    case UIStyleToken_Vector:
+    {
+        Result = (AttributeFlag & UIStyleAttribute_BorderColor ) ||
+                 (AttributeFlag & UIStyleAttribute_BorderRadius) ||
+                 (AttributeFlag & UIStyleAttribute_Padding     ) ||
+                 (AttributeFlag & UIStyleAttribute_Spacing     ) ||
+                 (AttributeFlag & UIStyleAttribute_Color       ) ||
+                 (AttributeFlag & UIStyleAttribute_Size        );
+    } break;
+
+    default:
+    {
+
+    } break;
+
+    }
+
+    return Result;
+}
+
 internal UIStyleAttribute_Flag
 GetStyleAttributeFlagFromIdentifier(byte_string Identifier)
 {
-    UIStyleAttribute_Flag AttributeFlag = UIStyleAttribute_None;
-    
-    // Valid Types
-    byte_string Size        = byte_string_literal("size");
-    byte_string Color       = byte_string_literal("color");
-    byte_string Padding     = byte_string_literal("padding");
-    byte_string Spacing     = byte_string_literal("spacing");
-    byte_string BorderWidth = byte_string_literal("borderwidth");
-    byte_string BorderColor = byte_string_literal("bordercolor");
-    
+    UIStyleAttribute_Flag Result = UIStyleAttribute_None;
+
+    // Valid Types (Clearer as a non-table)
+    byte_string Size           = byte_string_literal("size");
+    byte_string Color          = byte_string_literal("color");
+    byte_string Padding        = byte_string_literal("padding");
+    byte_string Spacing        = byte_string_literal("spacing");
+    byte_string BorderWidth    = byte_string_literal("borderwidth");
+    byte_string BorderColor    = byte_string_literal("bordercolor");
+    byte_string BorderRadius   = byte_string_literal("borderradius");
+    byte_string BorderSoftness = byte_string_literal("bordersoftness");
+
     if (ByteStringMatches(Identifier, Size))
     {
-        AttributeFlag = UIStyleAttribute_Size;
+        Result = UIStyleAttribute_Size;
     }
     else if (ByteStringMatches(Identifier, Color))
     {
-        AttributeFlag = UIStyleAttribute_Color;
+        Result = UIStyleAttribute_Color;
     }
     else if (ByteStringMatches(Identifier, Padding))
     {
-        AttributeFlag = UIStyleAttribute_Padding;
+        Result = UIStyleAttribute_Padding;
     }
     else if (ByteStringMatches(Identifier, Spacing))
     {
-        AttributeFlag = UIStyleAttribute_Spacing;
+        Result = UIStyleAttribute_Spacing;
     }
     else if (ByteStringMatches(Identifier, BorderWidth))
     {
-        AttributeFlag = UIStyleAttribute_BorderWidth;
+        Result = UIStyleAttribute_BorderWidth;
     }
     else if (ByteStringMatches(Identifier, BorderColor))
     {
-        AttributeFlag = UIStyleAttribute_BorderColor;
+        Result = UIStyleAttribute_BorderColor;
     }
-    
-    return AttributeFlag;
+    else if (ByteStringMatches(Identifier, BorderRadius))
+    {
+        Result = UIStyleAttribute_BorderRadius;
+    }
+    else if (ByteStringMatches(Identifier, BorderSoftness))
+    {
+        Result = UIStyleAttribute_BorderSoftness;
+    }
+
+    return Result;
 }
 
 internal void
@@ -452,7 +496,7 @@ ParseStyleTokens(style_parser *Parser, ui_style_registery *Registery)
                 return Success;
             }
 
-            // Valid types.
+            // Valid types (Function this?)
             byte_string WindowString = byte_string_literal("window");
             byte_string ButtonString = byte_string_literal("button");
 
@@ -505,6 +549,12 @@ ParseStyleTokens(style_parser *Parser, ui_style_registery *Registery)
             if (PeekTokens[0].Type != UIStyleToken_Assignment || !(PeekTokens[1].Type & StyleTokenValueMask) ||PeekTokens[2].Type != ';')
             {
                 WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting. Should be: {Attribute} := {Value}{;} ."));
+                return Success;
+            }
+
+            if (!IsAttributeFormattedCorrectly(PeekTokens[1].Type, AttributeFlag))
+            {
+                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting for attribute."));
                 return Success;
             }
 
@@ -571,14 +621,16 @@ UIStyleAttributeToString(UIStyleAttribute_Flag Flag)
     switch (Flag)
     {
 
-    case UIStyleAttribute_None:        return "None";
-    case UIStyleAttribute_Size:        return "Size";
-    case UIStyleAttribute_Color:       return "Color";
-    case UIStyleAttribute_Padding:     return "Padding";
-    case UIStyleAttribute_Spacing:     return "Spacing";
-    case UIStyleAttribute_BorderColor: return "BorderColor";
-    case UIStyleAttribute_BorderWidth: return "BorderWidth";
-    default:                           return "Unknown";
+    case UIStyleAttribute_None:           return "None";
+    case UIStyleAttribute_Size:           return "Size";
+    case UIStyleAttribute_Color:          return "Color";
+    case UIStyleAttribute_Padding:        return "Padding";
+    case UIStyleAttribute_Spacing:        return "Spacing";
+    case UIStyleAttribute_BorderColor:    return "BorderColor";
+    case UIStyleAttribute_BorderWidth:    return "BorderWidth";
+    case UIStyleAttribute_BorderRadius:   return "BorderRadius";
+    case UIStyleAttribute_BorderSoftness: return "BorderSoftness";
+    default:                              return "Unknown";
 
     }
 }
@@ -593,7 +645,7 @@ WriteStyleErrorMessage(u32 LineInFile, OSMessage_Severity Severity, byte_string 
     u8  Buffer[Kilobyte(2)];
 
     byte_string ErrorString = ByteString(Buffer, 0);
-    ErrorString.Size  = snprintf ((char *) Buffer, sizeof(Buffer), "[Parsing Error: Line=%u] ->", LineInFile);
+    ErrorString.Size  = snprintf ((char *) Buffer, sizeof(Buffer), "[Parsing Error: Line=%u] -> ", LineInFile);
     ErrorString.Size += vsnprintf((char *)(Buffer + ErrorString.Size), sizeof(Buffer), (char *)Format.String, Args);
 
     OSLogMessage(ErrorString, Severity);

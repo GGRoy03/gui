@@ -274,7 +274,7 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
                 Rect->Color       = Current->Color;
                 Rect->BorderWidth = 0;
                 Rect->Softness    = 1.f;
-                Rect->CornerRadii = Vec4F32(5.f, 5.f, 5.f, 5.f);
+                Rect->CornerRadii = Vec4F32(10.f, 10.f, 10.f, 10.f);
             }
 
             if (Box->Flags & UILayoutBox_DrawBorders)
@@ -284,7 +284,7 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
                 Rect->Color       = Current->BorderColor;
                 Rect->BorderWidth = Current->BorderWidth;
                 Rect->Softness    = 1.f;
-                Rect->CornerRadii = Vec4F32(5.f, 5.f, 5.f, 5.f);
+                Rect->CornerRadii = Vec4F32(10.f, 10.f, 10.f, 10.f);
             }
         }
 

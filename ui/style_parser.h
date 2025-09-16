@@ -1,5 +1,15 @@
 #pragma once
 
+// TO ADD NEW STYLES, FOLLOW THIS GUIDE.
+// 1) Add the attribute flag in UIStyleAttribute_Flag.
+// 2) Add the valid style types which may have this new attribute in this table: StyleTypeValidAttributesTable.
+// 3) Add the check for the new attribute in GetStyleAttributeFlagFromIdentifier and return the correct value.
+// 4) Add the appropriate fields in ui_style.
+// 5) Add the format check in IsAttributeFormattedCorrectly
+// 6) Add the WriteStyleAttribute implementation for the new type (must convert to the correct format if needed)
+
+// NOTE: Is there no way to make this way simpler? With a single 'key' per type, the type itself?
+
 // [Globals]
 
 #define ThemeNameLength 64
@@ -9,13 +19,17 @@
 
 typedef enum UIStyleAttribute_Flag
 {
-    UIStyleAttribute_None        = 0,
-    UIStyleAttribute_Size        = 1 << 0,
-    UIStyleAttribute_Color       = 1 << 1,
-    UIStyleAttribute_Padding     = 1 << 2,
-    UIStyleAttribute_Spacing     = 1 << 3,
-    UIStyleAttribute_BorderColor = 1 << 4,
-    UIStyleAttribute_BorderWidth = 1 << 5,
+    UIStyleAttribute_None           = 0,
+    UIStyleAttribute_Size           = 1 << 0,
+    UIStyleAttribute_Color          = 1 << 1,
+    UIStyleAttribute_Padding        = 1 << 2,
+    UIStyleAttribute_Spacing        = 1 << 3,
+    UIStyleAttribute_BorderColor    = 1 << 4,
+    UIStyleAttribute_BorderWidth    = 1 << 5,
+    UIStyleAttribute_BorderRadius   = 1 << 6,
+    UIStyleAttribute_BorderSoftness = 1 << 7,
+
+    UIStyleAttribute_Flag_Count = 8,
 } UIStyleAttribute_Flag;
 
 typedef enum UIStyleToken_Type
@@ -38,9 +52,11 @@ typedef enum UIStyleToken_Type
 
 typedef enum UIStyle_Type
 {
-    UIStyle_None        = 0,
-    UIStyle_Window      = 1,
-    UIStyle_Button      = 2,
+    UIStyle_None   = 0,
+    UIStyle_Window = 1,
+    UIStyle_Button = 2,
+
+    // Unused.
     UIStyle_EffectHover = 3,
     UIStyle_EffectClick = 4,
 } UIStyle_Type;
@@ -89,12 +105,13 @@ read_only global bit_field StyleTypeValidAttributesTable[] =
     {0}, // None
 
     // Window
-    {UIStyleAttribute_Size        | UIStyleAttribute_Padding     | UIStyleAttribute_Spacing |
-     UIStyleAttribute_BorderColor | UIStyleAttribute_BorderWidth | UIStyleAttribute_Color   },
+    {UIStyleAttribute_Size           | UIStyleAttribute_Padding     | UIStyleAttribute_Spacing |
+     UIStyleAttribute_BorderColor    | UIStyleAttribute_BorderWidth | UIStyleAttribute_Color   |
+     UIStyleAttribute_BorderSoftness | UIStyleAttribute_BorderRadius                           },
 
     // Button
-    {UIStyleAttribute_Size | UIStyleAttribute_BorderColor | UIStyleAttribute_BorderWidth |
-     UIStyleAttribute_Color                                                              },
+    {UIStyleAttribute_Size  | UIStyleAttribute_BorderColor    | UIStyleAttribute_BorderWidth   |
+     UIStyleAttribute_Color | UIStyleAttribute_BorderSoftness | UIStyleAttribute_BorderRadius  },
 };
 
 // [API]
@@ -108,6 +125,7 @@ internal b32                   TokenizeStyleFile                    (os_file *Fi
 internal void                  WriteStyleAttribute                  (UIStyleAttribute_Flag Attribute, style_token ValueToken, style_parser *Parser);
 internal b32                   ParseStyleTokens                     (style_parser *Parser, ui_style_registery *Registery);
 internal UIStyleAttribute_Flag GetStyleAttributeFlagFromIdentifier  (byte_string Identifier);
+internal b32                   IsAttributeFormattedCorrectly        (UIStyleToken_Type TokenType, UIStyleAttribute_Flag AttributeFlag);
 internal void                  CacheStyle                           (ui_style Style, byte_string Name, ui_style_registery *Registery);
 
 // [Error Handling]

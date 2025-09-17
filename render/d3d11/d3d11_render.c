@@ -54,7 +54,7 @@ InitializeRenderer(memory_arena *Arena)
     HRESULT        Error   = S_OK;
 
     {
-        UINT CreateFlags = 0;
+        UINT CreateFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
         #ifndef NDEBUG
         CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
         #endif

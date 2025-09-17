@@ -122,14 +122,6 @@ typedef struct ui_state
     ui_style_registery StyleRegistery;
 } ui_state;
 
-typedef struct ui_font
-{
-    render_handle GlyphCache;
-    render_handle GlyphTransfer;
-
-    memory_arena *Arena;
-} ui_font;
-
 // [Globals]
 
 read_only global u32 LayoutTreeDefaultCapacity = 500;
@@ -155,7 +147,3 @@ internal ui_layout_node * UIGetParentForLayoutNode  (ui_layout_tree *Tree);
 internal void             UIPopParentLayoutNode     (ui_layout_tree *Tree);
 internal ui_layout_node * UICreateLayoutNode        (vec2_f32 Position, ui_layout_box LayoutBox, b32 IsAlwaysLeaf, ui_layout_tree *Tree);
 internal void             UIComputeLayout           (ui_layout_tree *Tree, render_context *RenderContext);
-
-// [Text]
-
-internal ui_font UILoadFont(byte_string Name, f32 Size, render_handle BackendHandle, memory_arena *Arena);

@@ -52,6 +52,7 @@ internal vec4_f32 Vec4F32  (f32 X, f32 Y, f32 Z, f32 W);
 // [Helpers]
 
 internal b32 Vec2I32IsEqual(vec2_i32 Vec1, vec2_i32 Vec2);
+internal b32 Vec2I32IsEmpty(vec2_i32 Vec);
 internal b32 Vec2F32IsEqual(vec2_f32 Vec1, vec2_f32 Vec2);
 
 // [Misc]

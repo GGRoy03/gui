@@ -7,12 +7,15 @@ typedef struct ui_test
 	ui_style_name WindowStyle;
 	ui_style_name ButtonStyle;
 
+	// Fonts
+	ui_font Font;
+
 	// Misc
 	b32 IsInitialized;
 } ui_test;
 
 internal void
-TestUI(ui_state *UIState, render_context *RenderContext)
+TestUI(ui_state *UIState, render_context *RenderContext, render_handle RendererHandle, memory_arena *Arena)
 {
 	local_persist ui_test UITest;
 
@@ -26,6 +29,7 @@ TestUI(ui_state *UIState, render_context *RenderContext)
 		UITest.LayoutTree  = UIAllocateLayoutTree(Params);
 		UITest.WindowStyle = UIGetCachedNameFromStyleName(byte_string_literal("TestWindow"), &UIState->StyleRegistery);
 		UITest.ButtonStyle = UIGetCachedNameFromStyleName(byte_string_literal("TestButton"), &UIState->StyleRegistery);
+		UITest.Font        = UILoadFont(byte_string_literal("Consolas"), 15, RendererHandle, Arena);
 
 		// Layout
 		UIWindow(UITest.WindowStyle, &UITest.LayoutTree, &UIState->StyleRegistery);

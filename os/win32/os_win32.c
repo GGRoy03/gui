@@ -146,6 +146,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
 
     // Text
     {
+        OSWin32State.TextBackend = PushArena(OSWin32State.Arena, sizeof(os_text_backend), AlignOf(os_text_backend));
         OSWin32AcquireTextBackend();
     }
 

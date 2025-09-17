@@ -46,6 +46,50 @@ UIButton(ui_style_name StyleName, ui_layout_tree *LayoutTree, ui_style_registery
     Node->BorderSoftness = Style.BorderSoftness;
 }
 
+internal void
+UILabel(byte_string Text, ui_layout_tree *LayoutTree, ui_font *Font)
+{
+    f32 TextWidth  = 0;
+    f32 TextHeight = 0;
+
+    for (u32 Idx = 0; Idx < Text.Size; Idx++)
+    {
+        u8 Character = Text.String[Idx];
+
+        glyph_state State = FindGlyphEntryByDirectAccess((u32)Character, Font->GlyphTable);
+        if (!State.RasterizeInfo.IsRasterized)
+        {
+            os_glyph_layout GlyphLayout = OSGetGlyphLayout(Character, Font);
+
+            // Rect..
+
+            // Pack..
+
+            // Rasterize..
+
+            // Update..
+        }
+        else
+        {
+            TextWidth += State.Layout.Size.X;
+            TextHeight = State.Layout.Size.Y > TextHeight ? State.Layout.Size.Y : TextHeight;
+        }
+    }
+
+    // LayoutBox can be very flexible here and it looks very easy to add
+    // different ways to render the text directly from the styling. But right
+    // now we have none of that so we just render the text horizontally.
+
+    ui_layout_box LayoutBox = { 0 };
+    LayoutBox.Width  = TextWidth;
+    LayoutBox.Height = TextHeight;
+    LayoutBox.Flags  = UILayoutBox_DrawBorders;
+
+    ui_layout_node *Node = UICreateLayoutNode(Vec2F32(0.f, 0.f), LayoutBox, 1, LayoutTree);
+    Node->BorderColor = NormalizedColor(Vec4F32(255.f, 0.f, 0.f, 255.f));
+    Node->BorderWidth = 3.f;
+}
+
 // [Style]
 
 internal ui_cached_style *
@@ -266,8 +310,8 @@ UIComputeLayout(ui_layout_tree *Tree, render_context *RenderContext)
         {
             // NOTE: It is highly possible that instead of drawing directly we instead emit a draw call.
             // To some other way of drawing. As it appears right now, both things are mixing together.
-            // Yeah, because there is starting to be a lot of data inside of here that does not relate to
-            // the layouts.
+            // Because there is  a lot of data inside of here that does not relate to the layouts.
+            // at all and are beging processed here.
 
             render_batch_list *BatchList = GetUIBatchList(RenderContext);
 

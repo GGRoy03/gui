@@ -29,6 +29,14 @@ typedef struct render_rect
     f32      BorderWidth, Softness, _P1, _P2; // Style Params
 } render_rect;
 
+typedef struct texture_coord
+{
+    f32 u0;
+    f32 v0;
+    f32 u1;
+    f32 v1;
+} texture_coord;
+
 // Batch types
 // A batch is a linked list of raw byte data
 

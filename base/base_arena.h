@@ -34,8 +34,8 @@ internal void          ReleaseArena   (memory_arena *Arena);
 
 internal void *PushArena   (memory_arena *Arena, u64 Size, u64 Align);
 internal void  ClearArena  (memory_arena *Arena);
-internal void  PopArenaTo  (memory_arena *Arena, u64 Position);
-internal void  PopArena    (memory_arena *Arena, u64 Amount);
+external void  PopArenaTo  (memory_arena *Arena, u64 Position);
+external void  PopArena    (memory_arena *Arena, u64 Amount);
 
 internal u64 PositionForArena(memory_arena *Arena);
 

@@ -38,7 +38,7 @@ GameEntryPoint()
         BeginRendereringContext(&GameState.RenderContext);
 
         {
-            TestUI(&UIState, &GameState.RenderContext, GameState.RendererHandle, GameState.StaticArena);
+            TestUI(&UIState, &GameState.RenderContext, GameState.RendererHandle);
         }
 
         SubmitRenderCommands(&GameState.RenderContext, GameState.RendererHandle);

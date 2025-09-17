@@ -109,7 +109,7 @@ ClearArena(memory_arena *Arena)
     PopArenaTo(Arena, 0);
 }
 
-internal void
+external void
 PopArenaTo(memory_arena *Arena, u64 Position)
 {
     memory_arena *Active    = Arena->Current;
@@ -125,7 +125,7 @@ PopArenaTo(memory_arena *Arena, u64 Position)
     Arena->Current->Position = PoppedPos - Arena->Current->BasePosition;
 }
 
-internal void
+external void
 PopArena(memory_arena *Arena, u64 Amount)
 {
     u64 OldPosition = PositionForArena(Arena);

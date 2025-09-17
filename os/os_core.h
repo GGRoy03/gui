@@ -55,11 +55,19 @@ typedef struct os_file
     b32         FullyRead;
 } os_file;
 
+typedef struct os_glyph_layout
+{
+    vec2_i32 Size;
+    vec2_f32 Offset;
+    f32      AdvanceX;
+} os_glyph_layout;
+
 // [FORWARD DECLARATION]
 
 typedef struct gpu_font_objects gpu_font_objects;
 typedef struct os_font_objects  os_font_objects;
 typedef struct os_text_backend  os_text_backend;
+typedef struct ui_font          ui_font;
 
 // [CORE API]
 
@@ -97,5 +105,6 @@ internal void  OSAbort         (i32 ExitCode);
 
 // [Text]
 
-b32  OSAcquireFontObjects  (byte_string Name, f32 Size, gpu_font_objects *GPUObjects, os_font_objects *OSObjects);
-void OSReleaseFontObjects  (os_font_objects *Objects);
+external b32             OSAcquireFontObjects  (byte_string Name, f32 Size, gpu_font_objects *GPUObjects, os_font_objects *OSObjects);
+external void            OSReleaseFontObjects  (os_font_objects *Objects);
+external os_glyph_layout OSGetGlyphLayout      (u8 Character, ui_font *Font);

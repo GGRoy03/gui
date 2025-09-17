@@ -8,16 +8,10 @@ typedef enum UIFontCoverage_Type
 
 // [CORE TYPES]
 
-typedef struct glyph_rasterize_info
-{
-    b32           IsRasterized;
-    texture_coord TextureCoord;
-} glyph_rasterize_info;
-
 typedef struct glyph_state
 {
-    os_glyph_layout      Layout;
-    glyph_rasterize_info RasterizeInfo;
+    os_glyph_layout         Layout;
+    os_glyph_rasterize_info RasterizeInfo;
 } glyph_state;
 
 typedef struct glyph_table_params
@@ -47,9 +41,14 @@ typedef struct ui_font
     memory_arena    *Arena;
 
     // Info
-    vec2_i32 TextureSize;
-    f32      LineHeight;
-    f32      Size;
+    vec2_i32            TextureSize;
+    f32                 LineHeight;
+    f32                 Size;
+    UIFontCoverage_Type Coverage;
+
+    // 2D Allocator
+    stbrp_context AtlasContext;
+    stbrp_node *AtlasNodes;
 
     // Tables
     direct_glyph_table *GlyphTable;
@@ -66,3 +65,4 @@ internal ui_font * UILoadFont  (byte_string Name, f32 Size, render_handle Backen
 internal size_t               GetDirectGlyphTableFootprint   (glyph_table_params Params);
 internal glyph_state          FindGlyphEntryByDirectAccess   (u32 CodePoint, direct_glyph_table *Table);
 internal direct_glyph_table * PlaceDirectGlyphTableInMemory  (glyph_table_params Params, void *Memory);
+internal void                 UpdateDirectGlyphTableEntry    (u32 CodePoint, os_glyph_layout NewLayout, os_glyph_rasterize_info NewRasterizeInfo, direct_glyph_table *Table);

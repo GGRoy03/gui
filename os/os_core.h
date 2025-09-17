@@ -62,6 +62,12 @@ typedef struct os_glyph_layout
     f32      AdvanceX;
 } os_glyph_layout;
 
+typedef struct os_glyph_rasterize_info
+{
+    b32           IsRasterized;
+    texture_coord TextureCoord;
+} os_glyph_rasterize_info;
+
 // [FORWARD DECLARATION]
 
 typedef struct gpu_font_objects gpu_font_objects;
@@ -105,6 +111,7 @@ internal void  OSAbort         (i32 ExitCode);
 
 // [Text]
 
-external b32             OSAcquireFontObjects  (byte_string Name, f32 Size, gpu_font_objects *GPUObjects, os_font_objects *OSObjects);
-external void            OSReleaseFontObjects  (os_font_objects *Objects);
-external os_glyph_layout OSGetGlyphLayout      (u8 Character, ui_font *Font);
+external b32                     OSAcquireFontObjects  (byte_string Name, f32 Size, gpu_font_objects *GPUObjects, os_font_objects *OSObjects);
+external void                    OSReleaseFontObjects  (os_font_objects *Objects);
+external os_glyph_layout         OSGetGlyphLayout      (u8 Character, os_font_objects *FontObjects, vec2_i32 TextureSize, f32 Size);
+external os_glyph_rasterize_info OSRasterizeGlyph      (u8 Character, rect Rect, vec2_i32 TextureSize, os_font_objects *OSFontObjects, gpu_font_objects *GPUFontObjects);

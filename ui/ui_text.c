@@ -10,8 +10,9 @@ UILoadFont(byte_string Name, f32 Size, render_handle BackendHandle, UIFontCovera
         TableParams.EntryCount = Coverage == UIFontCoverage_ASCIIOnly ? 255 : 0;
     }
 
-    size_t Footprint      = sizeof(ui_font);
-    size_t TableFootprint = 0;
+    vec2_i32 TextureSize    = OSGetClientSize();
+    size_t   Footprint      = sizeof(ui_font);
+    size_t   TableFootprint = 0;
     {
         if (Coverage == UIFontCoverage_ASCIIOnly)
         {
@@ -19,6 +20,7 @@ UILoadFont(byte_string Name, f32 Size, render_handle BackendHandle, UIFontCovera
         }
 
         Footprint += TableFootprint;
+        Footprint += TextureSize.X * sizeof(stbrp_node);
     }
 
     memory_arena *Arena = 0;
@@ -43,8 +45,13 @@ UILoadFont(byte_string Name, f32 Size, render_handle BackendHandle, UIFontCovera
 
             Result              = (ui_font*)(HeapBase + TableFootprint);
             Result->GlyphTable  = Table;
-            Result->TextureSize = OSGetClientSize();
+            Result->TextureSize = TextureSize;
             Result->Size        = Size;
+            Result->Coverage    = Coverage;
+            Result->Arena       = Arena;
+            Result->AtlasNodes  = (stbrp_node *)(Result + 1);
+
+            stbrp_init_target(&Result->AtlasContext, TextureSize.X, TextureSize.Y, Result->AtlasNodes, TextureSize.X);
             
             IsValid = CreateGlyphCache(BackendHandle, Result->TextureSize, &Result->GPUFontObjects);
             if (IsValid)
@@ -124,4 +131,16 @@ PlaceDirectGlyphTableInMemory(glyph_table_params Params, void *Memory)
     }
 
     return Result;
+}
+
+internal void
+UpdateDirectGlyphTableEntry(u32 CodePoint, os_glyph_layout NewLayout, os_glyph_rasterize_info NewRasterInfo, direct_glyph_table *Table)
+{Assert(Table);
+
+    if (CodePoint < Table->EntryCount)
+    {
+        glyph_state *State = Table->Entries + CodePoint;
+        State->Layout        = NewLayout;
+        State->RasterizeInfo = NewRasterInfo;
+    }
 }

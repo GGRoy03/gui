@@ -8,7 +8,7 @@ typedef struct os_font_objects
 {
     IDWriteTextFormat    *TextFormat;
     IDWriteFontFace      *FontFace;
-    ID2D1RenderTarget    *DWriteTarget;
+    ID2D1RenderTarget    *RenderTarget;
     ID2D1SolidColorBrush *FillBrush;
 } os_font_objects;
 

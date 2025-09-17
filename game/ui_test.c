@@ -36,6 +36,8 @@ TestUI(ui_state *UIState, render_context *RenderContext, render_handle RendererH
 		UIButton(UITest.ButtonStyle, &UITest.LayoutTree, &UIState->StyleRegistery);
 		UIButton(UITest.ButtonStyle, &UITest.LayoutTree, &UIState->StyleRegistery);
 
+		UILabel(byte_string_literal("This is a label."), &UITest.LayoutTree, UITest.Font);
+
 		UITest.IsInitialized = 1;
 	}
 

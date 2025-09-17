@@ -46,6 +46,9 @@ UIButton(ui_style_name StyleName, ui_layout_tree *LayoutTree, ui_style_registery
     Node->BorderSoftness = Style.BorderSoftness;
 }
 
+// NOTE: Only supports direct glyph access for now.
+// NOTE: Only supports extended ASCII for now.
+
 internal void
 UILabel(byte_string Text, ui_layout_tree *LayoutTree, ui_font *Font)
 {
@@ -59,15 +62,31 @@ UILabel(byte_string Text, ui_layout_tree *LayoutTree, ui_font *Font)
         glyph_state State = FindGlyphEntryByDirectAccess((u32)Character, Font->GlyphTable);
         if (!State.RasterizeInfo.IsRasterized)
         {
-            os_glyph_layout GlyphLayout = OSGetGlyphLayout(Character, Font);
+            os_glyph_layout GlyphLayout = OSGetGlyphLayout(Character, &Font->OSFontObjects, Font->TextureSize, Font->Size);
 
-            // Rect..
+            stbrp_rect STBRect = {0};
+            STBRect.w = (u16)GlyphLayout.Size.X; Assert(STBRect.w == GlyphLayout.Size.X);
+            STBRect.h = (u16)GlyphLayout.Size.Y; Assert(STBRect.h == GlyphLayout.Size.Y);
+            stbrp_pack_rects(&Font->AtlasContext, &STBRect, 1);
 
-            // Pack..
+            if (STBRect.was_packed)
+            {
+                rect Rect;
+                Rect.MinX = (f32)STBRect.x;
+                Rect.MinY = (f32)STBRect.y;
+                Rect.MaxX = (f32)STBRect.x + STBRect.w;
+                Rect.MaxY = (f32)STBRect.y + STBRect.h;
+                os_glyph_rasterize_info RasterInfo = OSRasterizeGlyph(Character, Rect, Font->TextureSize, &Font->OSFontObjects, &Font->GPUFontObjects);
 
-            // Rasterize..
+                UpdateDirectGlyphTableEntry((u32)Character, GlyphLayout, RasterInfo, Font->GlyphTable);
+            }
+            else
+            {
+                OSLogMessage(byte_string_literal("Failed to pack rect."), OSMessage_Error);
+            }
 
-            // Update..
+            TextWidth += GlyphLayout.Size.X;
+            TextHeight = GlyphLayout.Size.Y > TextHeight ? GlyphLayout.Size.Y : TextHeight;
         }
         else
         {

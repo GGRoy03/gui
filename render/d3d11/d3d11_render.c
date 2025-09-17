@@ -488,3 +488,24 @@ ReleaseGlyphTransfer(gpu_font_objects *FontObjects)
         }
     }
 }
+
+external void
+TransferGlyph(rect Rect, render_handle RendererHandle, gpu_font_objects *FontObjects)
+{
+    d3d11_backend *Backend = (d3d11_backend *)RendererHandle.u64[0];;
+
+    if (Backend && FontObjects)
+    {
+        D3D11_BOX SourceBox;
+        SourceBox.left   = 0;
+        SourceBox.top    = 0;
+        SourceBox.front  = 0;
+        SourceBox.right  = (u32)Rect.MaxX;
+        SourceBox.bottom = (u32)Rect.MaxY;
+        SourceBox.back   = 1;
+
+        Backend->DeviceContext->lpVtbl->CopySubresourceRegion(Backend->DeviceContext, (ID3D11Resource *)FontObjects->GlyphCache,
+                                                              0, (u32)Rect.MinX, (u32)Rect.MinY, 0, (ID3D11Resource *)FontObjects->GlyphTransfer,
+                                                              0, &SourceBox);
+    }
+}

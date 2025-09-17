@@ -13,6 +13,10 @@ typedef enum RenderPass_Type
     RenderPass_Type_Count = 1,
 } RenderPass_Type;
 
+// [FORWARD DECLARATIONS]
+
+typedef struct direct_glyph_table direct_glyph_table;
+
 // [CORE TYPES]
 
 typedef struct render_handle
@@ -28,14 +32,6 @@ typedef struct render_rect
     vec4_f32 CornerRadii;
     f32      BorderWidth, Softness, _P1, _P2; // Style Params
 } render_rect;
-
-typedef struct texture_coord
-{
-    f32 u0;
-    f32 v0;
-    f32 u1;
-    f32 v1;
-} texture_coord;
 
 // Batch types
 // A batch is a linked list of raw byte data
@@ -166,3 +162,4 @@ internal b32  CreateGlyphCache      (render_handle BackendHandle, vec2_i32 Size,
 internal void ReleaseGlyphCache     (gpu_font_objects *FontObjects);
 internal b32  CreateGlyphTransfer   (render_handle Backend, vec2_i32 Size, gpu_font_objects *FontObjects);
 internal void ReleaseGlyphTransfer  (gpu_font_objects *FontObjects);
+external void TransferGlyph         (rect Rect, render_handle RendererHandle, gpu_font_objects *FontObjects);

@@ -90,3 +90,19 @@ typedef int       i32;
 typedef long long i64;
 
 typedef uint32_t  bit_field;
+
+typedef struct texture_coord
+{
+    f32 u0;
+    f32 v0;
+    f32 u1;
+    f32 v1;
+} texture_coord;
+
+typedef struct rect
+{
+    f32 MinX;
+    f32 MinY;
+    f32 MaxX;
+    f32 MaxY;
+} rect;

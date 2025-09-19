@@ -129,14 +129,18 @@ typedef struct ui_pipeline
     ui_tree            StyleTree;
     ui_tree            LayoutTree;
     ui_style_registery StyleRegistery;
+    memory_arena      *FrameArena;
 } ui_pipeline;
 
 DEFINE_TYPED_QUEUE(Node, node, ui_node *);
 
 // [Globals]
 
+read_only global u32 InvalidNodeId = 0xFFFFFFFF;
+
 read_only global u32 LayoutTreeDefaultCapacity = 500;
 read_only global u32 LayoutTreeDefaultDepth    = 16;
+
 
 // [API]
 
@@ -165,9 +169,12 @@ internal ui_node * UIGetNextNode          (ui_tree *Tree, UINode_Type Type);
 
 internal b32  IsParallelUINode  (ui_node *Node1, ui_node *Node2);
 internal b32  IsUINodeALeaf     (UINode_Type Type);
+internal void UILinkNodes       (ui_node *Node, ui_node *Parent);
 
-internal ui_pipeline UICreatePipeline           (ui_pipeline_params Params);
-internal void        UIPipelineExecute          (ui_pipeline *Pipeline);
-internal void        UIPipelineSynchronize      (ui_pipeline *Pipeline, ui_node *Root);
-internal void        UIPipelineTopDownLayout    (ui_pipeline *Pipeline);
-internal void        UIPipelineCollectDrawList  (ui_pipeline *Pipeline, render_pass *Pass, ui_node *Root);
+internal ui_pipeline UICreatePipeline   (ui_pipeline_params Params);
+internal void        UIPipelineBegin    (ui_pipeline *Pipeline);
+internal void        UIPipelineExecute  (ui_pipeline *Pipeline, render_pass_list *PassList);
+
+internal void        UIPipelineSynchronize    (ui_pipeline *Pipeline, ui_node *Root);
+internal void        UIPipelineTopDownLayout  (ui_pipeline *Pipeline);
+internal void        UIPipelineBuildDrawList  (ui_pipeline *Pipeline, render_pass *Pass, ui_node *Root);

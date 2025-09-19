@@ -77,12 +77,12 @@ PushArena(memory_arena *Arena, u64 Size, u64 Alignment)
 
     if(Active->Committed < PostPosition)
     {
-        u64 CommitPostAligned = PostPosition + (Active->Committed - 1);
-        CommitPostAligned    -= CommitPostAligned % Active->Committed;
+        u64 CommitPostAligned = PostPosition;
+        AlignMultiple(CommitPostAligned, Active->CommitSize);
 
-        u64 CommitPostClamped = ClampTop(CommitPostAligned, Active->ReserveSize);
-        u64 CommitSize        = CommitPostClamped - Active->CommitSize;
-        u8 *CommitPointer     = (u8*)Active + Active->CommitSize;
+        u64 CommitPostClamped = ClampTop(CommitPostAligned, Active->Reserved);
+        u64 CommitSize        = CommitPostClamped - Active->Committed;
+        u8 *CommitPointer     = (u8*)Active + Active->Committed;
 
         b32 CommitResult = OSCommitMemory(CommitPointer, CommitSize);
         if(!CommitResult)
@@ -90,11 +90,11 @@ PushArena(memory_arena *Arena, u64 Size, u64 Alignment)
             OSAbort(1);
         }
 
-        Active->CommitSize = CommitPostClamped;
+        Active->Committed = CommitPostClamped;
     }
 
     void *Result = 0;
-    if(Active->CommitSize >= PostPosition)
+    if(Active->Committed >= PostPosition)
     {
         Result          = (u8*)Active + PrePosition;
         Active->Position = PostPosition;

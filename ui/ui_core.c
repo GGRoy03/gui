@@ -1,31 +1,7 @@
 // [Components]
 
-//LayoutNode = GetNextLayoutNode(&Pipeline->LayoutTree);
-//LayoutNode->Base.Id = Root->Base.Id;
-//
-//
-//u32 ParentId = ((ui_layout_node *)(Root->Base.Parent))->Base.Id;
-//if (ParentId < Pipeline->StyleTree.NodeCount)
-//{
-//    ui_layout_node *Parent = Pipeline->LayoutTree.LayoutNodes + ParentId;
-//    if (Parent)
-//    {
-//        ui_layout_node **First = (ui_layout_node **)&Parent->Base.First;
-//        if (!First)
-//        {
-//            *First = LayoutNode;
-//        }
-//
-//        ui_layout_node **Last = (ui_layout_node **)&Parent->Base.Last;
-//        if (Last)
-//        {
-//            *Last = LayoutNode;
-//        }
-//
-//        LayoutNode->Base.Prev = Parent->Base.Last;
-//        Parent->Base.Last = LayoutNode;
-//    }
-//}
+// NOTE: Temporary global ID tracker. Obviously, this is not good.
+global i32 NextId;
 
 internal void
 UIWindow(ui_style_name StyleName, ui_pipeline *Pipeline)
@@ -38,9 +14,11 @@ UIWindow(ui_style_name StyleName, ui_pipeline *Pipeline)
         if (Node)
         {
             Node->Style = Style;
-
-            // TODO: Link the base somewhow.
+            Node->Id    = NextId++;
+            UILinkNodes(Node, GetParentNodeFromTree(&Pipeline->StyleTree));
         }
+
+        PushParentNodeInTree(Node, &Pipeline->StyleTree);
     }
 }
 
@@ -51,12 +29,12 @@ UIButton(ui_style_name StyleName, ui_pipeline *Pipeline)
 
     // Style Node
     {
-        ui_node *Node = UIGetNextNode(&Pipeline->LayoutTree, UINode_Button);
+        ui_node *Node = UIGetNextNode(&Pipeline->StyleTree, UINode_Button);
         if (Node)
         {
             Node->Style = Style;
-
-            // TODO: Link the base somewhow.
+            Node->Id    = NextId++;
+            UILinkNodes(Node, GetParentNodeFromTree(&Pipeline->StyleTree));
         }
     }
 }
@@ -237,20 +215,20 @@ AllocateUITree(ui_tree_params Params)
     memory_arena *Arena = 0;
     {
         size_t Footprint =  0;
-        Footprint += Params.Depth * sizeof(void *);
+        Footprint += Params.Depth * sizeof(ui_node *);           // Parent Stack
 
         switch(Params.Type)
         {
 
         case UITree_Style:
         {
-            Footprint += Params.NodeCount * sizeof(ui_style);         // Node Array
+            Footprint += Params.NodeCount * sizeof(ui_node);     // Node Array
         } break;
 
         case UITree_Layout:
         {
-            Footprint += Params.NodeCount * sizeof(ui_layout_box);    // Node Array
-            Footprint += Params.NodeCount * sizeof(ui_node *);        // Layout Queue
+            Footprint += Params.NodeCount * sizeof(ui_node );    // Node Array
+            Footprint += Params.NodeCount * sizeof(ui_node*);    // Layout Queue
         } break;
 
         default:
@@ -272,7 +250,7 @@ AllocateUITree(ui_tree_params Params)
     if(Arena)
     {
         Result.Arena        = Arena;
-        Result.Nodes        = PushArray(Arena, ui_node, Params.NodeCount);
+        Result.Nodes        = PushArray(Arena, ui_node  , Params.NodeCount);
         Result.ParentStack  = PushArray(Arena, ui_node *, Params.Depth    );
         Result.MaximumDepth = Params.Depth;
         Result.NodeCapacity = Params.NodeCount;
@@ -298,12 +276,50 @@ IsUINodeALeaf(UINode_Type Type)
     return Result;
 }
 
+internal void
+UILinkNodes(ui_node *Node, ui_node *Parent)
+{
+    Node->Last   = 0;
+    Node->Next   = 0;
+    Node->First  = 0;
+    Node->Parent = Parent;
+
+    if (Parent)
+    {
+        ui_node **First = (ui_node **)&Parent->First;
+        if (!*First)
+        {
+            *First = Node;
+        }
+
+        ui_node **Last = (ui_node **)&Parent->Last;
+        if (*Last)
+        {
+            (*Last)->Next = Node;
+        }
+
+        Node->Prev   = Parent->Last;
+        Parent->Last = Node;
+    }
+}
+
 // [Pipeline]
 
 internal ui_pipeline
 UICreatePipeline(ui_pipeline_params Params)
 {
     ui_pipeline Result = {0};
+
+    // Arena
+    {
+        memory_arena_params ArenaParams = {0};
+        ArenaParams.AllocatedFromFile = __FILE__;
+        ArenaParams.AllocatedFromLine = __LINE__;
+        ArenaParams.ReserveSize       = Megabyte(1);
+        ArenaParams.CommitSize        = Kilobyte(1);
+
+        Result.FrameArena = AllocateArena(ArenaParams);
+    }
 
     // Trees
     {
@@ -324,6 +340,16 @@ UICreatePipeline(ui_pipeline_params Params)
 
             Result.LayoutTree = AllocateUITree(TreeParams);
         }
+
+        for (u32 Idx = 0; Idx < Result.StyleTree.NodeCapacity; Idx++)
+        {
+            Result.StyleTree.Nodes[Idx].Id = InvalidNodeId;
+        }
+
+        for (u32 Idx = 0; Idx < Result.LayoutTree.NodeCapacity; Idx++)
+        {
+            Result.LayoutTree.Nodes[Idx].Id = InvalidNodeId;
+        }
     }
 
     // Registery
@@ -335,25 +361,30 @@ UICreatePipeline(ui_pipeline_params Params)
 }
 
 internal void
-UIPipelineExecute(ui_pipeline *Pipeline)
+UIPipelineBegin(ui_pipeline *Pipeline)
+{   Assert(Pipeline);
+
+    ClearArena(Pipeline->FrameArena);
+}
+
+internal void
+UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
 {   Assert(Pipeline);
 
     // Unpacking
     ui_node     *Root       = &Pipeline->StyleTree.Nodes[0];
-    render_pass *RenderPass = GetRenderPass(0, 0, RenderPass_UI);
+    render_pass *RenderPass = GetRenderPass(Pipeline->FrameArena, PassList, RenderPass_UI);
 
     UIPipelineSynchronize(Pipeline, Root);
 
     UIPipelineTopDownLayout(Pipeline);
 
-    UIPipelineCollectDrawList(Pipeline, RenderPass, Root);
+    UIPipelineBuildDrawList(Pipeline, RenderPass, Root);
 }
 
 internal void
 UIPipelineSynchronize(ui_pipeline *Pipeline, ui_node *Root)
 {
-    // Unpacking
-
     ui_node *LNode       = &Pipeline->LayoutTree.Nodes[Root->Id];
     ui_node *SNodeParent = (ui_node *)Root->Parent;
 
@@ -361,29 +392,13 @@ UIPipelineSynchronize(ui_pipeline *Pipeline, ui_node *Root)
     {
         LNode = UIGetNextNode(&Pipeline->LayoutTree, Root->Type);
         LNode->Id = Root->Id;
-  
-        u32 ParentId = SNodeParent->Id;
-        if (ParentId < Pipeline->StyleTree.NodeCount)
+
+        ui_node *LNodeParent = 0;
+        if (SNodeParent && SNodeParent->Id < Pipeline->StyleTree.NodeCount)
         {
-            ui_node *Parent = Pipeline->LayoutTree.Nodes + ParentId;
-            if (Parent)
-            {
-                ui_node **First = (ui_node **)&Parent->First;
-                if (!First)
-                {
-                    *First = LNode;
-                }
-
-                ui_node **Last = (ui_node **)&Parent->Last;
-                if (Last)
-                {
-                    *Last = LNode;
-                }
-
-                LNode->Prev  = *Last;
-                Parent->Last = LNode;
-            }
+            LNodeParent = Pipeline->LayoutTree.Nodes + SNodeParent->Id;
         }
+        UILinkNodes(LNode, LNodeParent);
     }
 
     // NOTE: This looks a bit stupid at first glance..
@@ -396,7 +411,7 @@ UIPipelineSynchronize(ui_pipeline *Pipeline, ui_node *Root)
         LNode->Layout.Height  = Root->Style.Size.Y;
         LNode->Layout.Padding = Root->Style.Padding;
         LNode->Layout.Spacing = Root->Style.Spacing;
-        LNode->Layout.Flags   = UILayoutBox_DrawBackground; // TODO: Where are these coming from?
+        LNode->Layout.Flags   = UILayoutBox_DrawBackground | UILayoutBox_FlowColumn; // TODO: Where are these coming from?
     }
 
     for (ui_node *Child = Root->First; Child != 0; Child = Child->Next)
@@ -419,7 +434,7 @@ UIPipelineTopDownLayout(ui_pipeline *Pipeline)
             typed_queue_params Params = { 0 };
             Params.QueueSize = LayoutTree->NodeCount;
 
-            Queue = BeginNodeQueue(Params, StyleTree->Arena);
+            Queue = BeginNodeQueue(Params, LayoutTree->Arena);
         }
 
         if (Queue.Data)
@@ -493,15 +508,16 @@ UIPipelineTopDownLayout(ui_pipeline *Pipeline)
 }
 
 internal void
-UIPipelineCollectDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *Root)
+UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *Root)
 {
     ui_style      *Style = &Root->Style;
     ui_layout_box *Box   = &Pipeline->LayoutTree.Nodes[Root->Id].Layout;
 
-    render_batch_list *List = 0;
-    rect_group_node   *Node = 0;
+    render_batch_list     *List   = 0;
+    rect_group_node       *Node   = 0;
+    render_pass_params_ui *Params = &Pass->Params.UI.Params;
     {
-        Node = Pass->Params.UI.Params.Last;
+        Node = Params->Last;
 
         // TODO: Merge Check
         b32 CanMerge = 1;
@@ -518,8 +534,20 @@ UIPipelineCollectDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *Roo
         {
             if (!Node || !CanMerge)
             {
-                Node = PushArray(0, rect_group_node, 1);
+                Node = PushArray(Pipeline->FrameArena, rect_group_node, 1);
                 Node->BatchList.BytesPerInstance = sizeof(render_rect);
+
+                if (!Params->First)
+                {
+                    Params->First = Node;
+                }
+
+                if (Params->Last)
+                {
+                    Params->Last->Next = Node;
+                }
+
+                Params->Last = Node;
             }
         }
 
@@ -528,7 +556,7 @@ UIPipelineCollectDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *Roo
 
     if (Box->Flags & UILayoutBox_DrawBackground)
     {
-        render_rect *Rect = PushDataInBatchList(0, List);
+        render_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);
 
         // Rect
         {
@@ -543,7 +571,7 @@ UIPipelineCollectDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *Roo
 
     if (Box->Flags & UILayoutBox_DrawBorders)
     {
-        render_rect *Rect = PushDataInBatchList(0, List);
+        render_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);
 
         // Rect
         {
@@ -558,6 +586,6 @@ UIPipelineCollectDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *Roo
 
     for (ui_node *Child = Root->First; Child != 0; Child = Child->Next)
     {
-        UIPipelineCollectDrawList(Pipeline, Pass, Child);
+        UIPipelineBuildDrawList(Pipeline, Pass, Child);
     }
 }

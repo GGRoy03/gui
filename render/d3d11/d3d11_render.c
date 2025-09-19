@@ -278,7 +278,7 @@ InitializeRenderer(memory_arena *Arena)
         Desc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
         Desc.MaxLOD         = D3D11_FLOAT32_MAX;
 
-        Error = Backend->Device->lpVtbl->CreateSamplerState(Backend->Device, &Desc, 0);
+        Error = Backend->Device->lpVtbl->CreateSamplerState(Backend->Device, &Desc, &Backend->AtlasSamplerState);
         if (FAILED(Error))
         {
             OSLogMessage(byte_string_literal("D3D11: Failed to create font atlas sampler state."), OSMessage_Error);
@@ -392,10 +392,10 @@ SubmitRenderCommands(render_pass_list *RenderPassList, render_handle BackendHand
                 
                 // Shaders
                 DeviceContext->lpVtbl->VSSetShader(DeviceContext, VShader, 0, 0);
-                DeviceContext->lpVtbl->PSSetShader(DeviceContext, PShader, 0, 0);
                 DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &UniformBuffer);
-                DeviceContext->lpVtbl->VSSetShaderResources(DeviceContext, 0, 1, &AtlasView);
-                DeviceContext->lpVtbl->VSSetSamplers(DeviceContext, 0, 1, &Backend->AtlasSamplerState);
+                DeviceContext->lpVtbl->PSSetShader(DeviceContext, PShader, 0, 0);
+                DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &AtlasView);
+                DeviceContext->lpVtbl->PSSetSamplers(DeviceContext, 0, 1, &Backend->AtlasSamplerState);
                 
                 // Draw
                 u32 InstanceCount = (u32)(BatchList.ByteCount / BatchList.BytesPerInstance);
@@ -413,6 +413,10 @@ SubmitRenderCommands(render_pass_list *RenderPassList, render_handle BackendHand
         OSAbort(1);
     }
     DeviceContext->lpVtbl->ClearState(DeviceContext);
+
+    // Clear
+    RenderPassList->First = 0;
+    RenderPassList->Last  = 0;
 }
 
 // [Text]

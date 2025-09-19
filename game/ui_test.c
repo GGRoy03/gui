@@ -15,7 +15,7 @@ typedef struct ui_test
 } ui_test;
 
 internal void
-TestUI(void)
+TestUI(render_pass_list *PassList)
 {
 	local_persist ui_test UITest;
 
@@ -54,5 +54,6 @@ TestUI(void)
 		UITest.IsInitialized = 1;
 	}
 
-	UIPipelineExecute(Pipeline);
+	UIPipelineBegin(Pipeline);
+	UIPipelineExecute(Pipeline, PassList);
 }

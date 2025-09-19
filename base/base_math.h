@@ -52,9 +52,10 @@ typedef struct rect_f32
 
 // [Constructors]
 
-internal vec2_f32   Vec2F32     (f32 X, f32 Y);
-internal vec4_f32   Vec4F32     (f32 X, f32 Y, f32 Z, f32 W);
-internal matrix_3x3 Mat3x3Zero  (void);
+internal vec2_f32   Vec2F32         (f32 X, f32 Y);
+internal vec4_f32   Vec4F32         (f32 X, f32 Y, f32 Z, f32 W);
+internal matrix_3x3 Mat3x3Zero      (void);
+internal matrix_3x3 Mat3x3Identity  (void);
 
 // [Rect]
 

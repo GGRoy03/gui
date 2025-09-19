@@ -31,6 +31,23 @@ Mat3x3Zero(void)
 	return Result;
 }
 
+internal matrix_3x3
+Mat3x3Identity(void)
+{
+	matrix_3x3 Result;
+	Result.c0r0 = 1;
+	Result.c0r1 = 0;
+	Result.c0r2 = 0;
+	Result.c1r0 = 0;
+	Result.c1r1 = 1;
+	Result.c1r2 = 0;
+	Result.c2r0 = 0;
+	Result.c2r1 = 0;
+	Result.c2r2 = 1;
+
+	return Result;
+}
+
 // [Rect]
 
 internal rect_f32

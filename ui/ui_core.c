@@ -401,17 +401,12 @@ UIPipelineSynchronize(ui_pipeline *Pipeline, ui_node *Root)
         UILinkNodes(LNode, LNodeParent);
     }
 
-    // NOTE: This looks a bit stupid at first glance..
-    // But it allows to completely separate the layout from the styling tree?
-    // In some of the passes, at least. Uhmmm, it does make it so that
-    // the style tree is the unique source of truth again... Seems
-    // really cheap as well? Just need to figure out the flags then...
     {
         LNode->Layout.Width   = Root->Style.Size.X;
         LNode->Layout.Height  = Root->Style.Size.Y;
         LNode->Layout.Padding = Root->Style.Padding;
         LNode->Layout.Spacing = Root->Style.Spacing;
-        LNode->Layout.Flags   = UILayoutBox_DrawBackground | UILayoutBox_FlowColumn; // TODO: Where are these coming from?
+        LNode->Layout.Flags   = UILayoutBox_DrawBackground | UILayoutBox_DrawBorders | UILayoutBox_FlowColumn; // TODO: Where are these coming from?
     }
 
     for (ui_node *Child = Root->First; Child != 0; Child = Child->Next)
@@ -548,6 +543,10 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *Root)
                 }
 
                 Params->Last = Node;
+
+                Node->Params.AtlasTextureSize = Vec2F32(0.f, 0.f);
+                Node->Params.AtlasTextureView = RenderHandle(0);
+                Node->Params.Transform        = Mat3x3Identity();;
             }
         }
 

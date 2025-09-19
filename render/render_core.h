@@ -28,9 +28,10 @@ typedef struct render_handle
 typedef struct render_rect
 {
     vec4_f32 RectBounds;
+    vec4_f32 AtlasSampleSource;
     vec4_f32 Color;
     vec4_f32 CornerRadii;
-    f32      BorderWidth, Softness, _P1, _P2; // Style Params
+    f32      BorderWidth, Softness, SampleAtlas, _P0; // Style Params
 } render_rect;
 
 // Batch types
@@ -60,16 +61,28 @@ typedef struct render_batch_list
     u64 BytesPerInstance;
 } render_batch_list;
 
+// Params Types
+// Specific parameters that must be set by the rendering 
+// backend before drawing the corresponding batch.
+
+typedef struct rect_group_params
+{
+    vec2_f32      AtlasTextureSize;
+    matrix_3x3    Transform;
+    render_handle AtlasTextureView;
+} rect_group_params;
+
 // Group Types
 // Group are logical grouping of batches as well as specific
 // parameters that must be set by the rendering backend before
 // drawing those batches.
 
-typedef struct render_rect_group_node render_rect_group_node;
-struct render_rect_group_node
+typedef struct rect_group_node rect_group_node;
+struct rect_group_node
 {
-    render_rect_group_node *Next;
-    render_batch_list       BatchList;
+    rect_group_node  *Next;
+    render_batch_list BatchList;
+    rect_group_params Params;
 };
 
 // Params Types
@@ -77,14 +90,12 @@ struct render_rect_group_node
 
 typedef struct render_pass_params_ui
 {
-    render_rect_group_node *First;
-    render_rect_group_node *Last;
+    rect_group_node *First;
+    rect_group_node *Last;
 } render_pass_params_ui;
 
 // Stats Types
-// Used to infer the size of the allocated arena at the beginning of every frame.
-// This structure must be filled correctly throughout the frame to achieve better
-// allocations. Also useful for the user.
+// Used to track resource usage per-pass/per-type.
 
 typedef struct render_pass_ui_stats
 {
@@ -104,7 +115,11 @@ typedef struct render_pass
     RenderPass_Type Type;
     union
     {
-        render_pass_params_ui *UI;
+        struct
+        {
+            render_pass_params_ui Params;
+            render_pass_ui_stats  Stats;
+        } UI;
     } Params;
 } render_pass;
 
@@ -112,15 +127,14 @@ typedef struct render_pass_node render_pass_node;
 struct render_pass_node
 {
     render_pass_node *Next;
-    render_pass       Pass;
+    render_pass       Value;
 };
 
-typedef struct render_context
+typedef struct render_pass_list
 {
-    render_pass_ui_stats  UIStats;
-    memory_arena         *UIArena;
-    render_pass_params_ui UIParams;
-} render_context;
+    render_pass_node *First;
+    render_pass_node *Last;
+} render_pass_list;
 
 // [Globals]
 
@@ -142,19 +156,24 @@ typedef struct gpu_font_objects gpu_font_objects;
 // [CORE API]
 
 // [Misc]
-internal void BeginRenderingContext  (render_context *Context);
-internal b32  IsValidRenderHandle    (render_handle Handle);
+internal void          BeginRenderingContext  (render_pass_list *List);
+
+// [Handles]
+
+internal b32           IsValidRenderHandle    (render_handle Handle);
+internal render_handle RenderHandle           (u64 Handle);
+internal b32           RenderHandleMacthes    (render_handle H1, render_handle H2);
 
 // [Batches]
 
-internal void              * PushDataInBatchList  (memory_arena *Arena, render_batch_list *BatchList);
-internal render_batch_list * GetUIBatchList       (render_context *Context);
+internal void        * PushDataInBatchList  (memory_arena *Arena, render_batch_list *BatchList);
+internal render_pass * GetRenderPass        (memory_arena *Arena, render_pass_list *List, RenderPass_Type Type);
 
 // [PER-RENDERER API]
 
 internal render_handle InitializeRenderer    (memory_arena *Arena);
 internal void          EndRendererFrame      (void);
-internal void          SubmitRenderCommands  (render_context *RenderContext, render_handle BackendHandle);
+internal void          SubmitRenderCommands  (render_pass_list *List, render_handle BackendHandle);
 
 // [Text]
 
@@ -162,4 +181,4 @@ internal b32  CreateGlyphCache      (render_handle BackendHandle, vec2_i32 Size,
 internal void ReleaseGlyphCache     (gpu_font_objects *FontObjects);
 internal b32  CreateGlyphTransfer   (render_handle Backend, vec2_i32 Size, gpu_font_objects *FontObjects);
 internal void ReleaseGlyphTransfer  (gpu_font_objects *FontObjects);
-external void TransferGlyph         (rect Rect, render_handle RendererHandle, gpu_font_objects *FontObjects);
+external void TransferGlyph         (rect_f32 Rect, render_handle RendererHandle, gpu_font_objects *FontObjects);

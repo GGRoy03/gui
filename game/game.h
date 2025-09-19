@@ -7,8 +7,8 @@ typedef struct game_state
     memory_arena *FrameArena;
 
     // Rendering
-    render_context RenderContext;
-    render_handle  RendererHandle;
+    render_pass_list RenderPassList;
+    render_handle    RendererHandle;
 } game_state;
 
 // [Core API]

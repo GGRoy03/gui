@@ -114,4 +114,4 @@ internal void  OSAbort         (i32 ExitCode);
 external b32                     OSAcquireFontObjects  (byte_string Name, f32 Size, gpu_font_objects *GPUObjects, os_font_objects *OSObjects);
 external void                    OSReleaseFontObjects  (os_font_objects *Objects);
 external os_glyph_layout         OSGetGlyphLayout      (u8 Character, os_font_objects *FontObjects, vec2_i32 TextureSize, f32 Size);
-external os_glyph_rasterize_info OSRasterizeGlyph      (u8 Character, rect Rect, vec2_i32 TextureSize, os_font_objects *OSFontObjects, gpu_font_objects *GPUFontObjects);
+external os_glyph_rasterize_info OSRasterizeGlyph      (u8 Character, rect_f32 Rect, vec2_i32 TextureSize, os_font_objects *OSFontObjects, gpu_font_objects *GPUFontObjects);

@@ -98,11 +98,3 @@ typedef struct texture_coord
     f32 u1;
     f32 v1;
 } texture_coord;
-
-typedef struct rect
-{
-    f32 MinX;
-    f32 MinY;
-    f32 MaxX;
-    f32 MaxY;
-} rect;

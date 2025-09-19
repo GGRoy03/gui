@@ -1,4 +1,11 @@
-// [Internal Renderer API]
+// [HELPERS]
+
+internal ID3D11ShaderResourceView *
+D3D11GetShaderViewFromHandle(render_handle Handle)
+{
+    ID3D11ShaderResourceView *Result = (ID3D11ShaderResourceView *)Handle.u64[0];
+    return Result;
+}
 
 internal void
 D3D11Release(d3d11_backend *Backend)
@@ -110,6 +117,7 @@ InitializeRenderer(memory_arena *Arena)
         }
     }
 
+    // Render Target View
     {
         ID3D11Texture2D *BackBuffer = 0;
         Error = IDXGISwapChain1_GetBuffer(Backend->SwapChain, 0, &IID_ID3D11Texture2D, (void **)&BackBuffer);
@@ -259,12 +267,30 @@ InitializeRenderer(memory_arena *Arena)
         }
     }
 
+    // Samplers
+    {
+        D3D11_SAMPLER_DESC Desc = {0};
+        Desc.Filter         = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+        Desc.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
+        Desc.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
+        Desc.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
+        Desc.MaxAnisotropy  = 1;
+        Desc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+        Desc.MaxLOD         = D3D11_FLOAT32_MAX;
+
+        Error = Backend->Device->lpVtbl->CreateSamplerState(Backend->Device, &Desc, 0);
+        if (FAILED(Error))
+        {
+            OSLogMessage(byte_string_literal("D3D11: Failed to create font atlas sampler state."), OSMessage_Error);
+        }
+    }
+
     Result.u64[0] = (u64)Backend;
     return Result;
 }
 
 internal void 
-SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
+SubmitRenderCommands(render_pass_list *RenderPassList, render_handle BackendHandle)
 {
     d3d11_backend          *Backend       = (d3d11_backend *)BackendHandle.u64[0];
     ID3D11DeviceContext    *DeviceContext = Backend->DeviceContext;
@@ -287,83 +313,98 @@ SubmitRenderCommands(render_context *RenderContext, render_handle BackendHandle)
         }
     }
 
-    // Render Game
+    // Temporary Clear Screen
     {
         const FLOAT ClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
         DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderView, ClearColor);
     }
 
-    // Render UI (Single Pass)
+    for (render_pass_node *PassNode = RenderPassList->First; PassNode != 0; PassNode = PassNode->Next)
     {
-        render_pass_params_ui Params = RenderContext->UIParams;
-
-        // Rasterizer
-        D3D11_VIEWPORT Viewport = {0.0f, 0.0f, (f32)Resolution.X, (f32)Resolution.Y, 0.0f, 1.0f};
-        DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
-
-        for (render_rect_group_node *RectGroupNode = Params.First; RectGroupNode != 0; RectGroupNode = RectGroupNode->Next)
+        render_pass Pass = PassNode->Value;
+        
+        switch (Pass.Type)
         {
-            render_batch_list BatchList = RectGroupNode->BatchList;
 
-            ID3D11Buffer *VBuffer = D3D11GetVertexBuffer(BatchList.ByteCount, Backend);
+        case RenderPass_UI:
+        {
+            render_pass_params_ui Params = Pass.Params.UI.Params;
+
+            // Rasterizer
+            D3D11_VIEWPORT Viewport = { 0.0f, 0.0f, (f32)Resolution.X, (f32)Resolution.Y, 0.0f, 1.0f };
+            DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
+
+            for (rect_group_node *Node = Params.First; Node != 0; Node = Node->Next)
             {
-                D3D11_MAPPED_SUBRESOURCE Resource = {0};
-                DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource*)VBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
+                render_batch_list BatchList  = Node->BatchList;
+                rect_group_params NodeParams = Node->Params;
 
-                u8 *WritePointer = Resource.pData;
-                u64 WriteOffset  = 0;
-                for(render_batch_node *Batch = BatchList.First; Batch != 0; Batch = Batch->Next)
+                // Vertex Buffer
+                ID3D11Buffer *VBuffer = D3D11GetVertexBuffer(BatchList.ByteCount, Backend);
                 {
-                    u64 WriteSize = Batch->Value.ByteCount;
-                    MemoryCopy(WritePointer + WriteOffset, Batch->Value.Memory, WriteSize);
-                    WriteOffset += WriteSize;
+                    D3D11_MAPPED_SUBRESOURCE Resource = { 0 };
+                    DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)VBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
+
+                    u8 *WritePointer = Resource.pData;
+                    u64 WriteOffset  = 0;
+                    for (render_batch_node *Batch = BatchList.First; Batch != 0; Batch = Batch->Next)
+                    {
+                        u64 WriteSize = Batch->Value.ByteCount;
+                        MemoryCopy(WritePointer + WriteOffset, Batch->Value.Memory, WriteSize);
+                        WriteOffset += WriteSize;
+                    }
+
+                    DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)VBuffer, 0);
                 }
 
-                DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)VBuffer, 0);
+                // Uniform Buffers
+                ID3D11Buffer *UniformBuffer = Backend->UBuffers[RenderPass_UI];
+                {
+                    d3d11_rect_uniform_buffer Uniform = { 0 };
+                    Uniform.Transform[0]        = Vec4F32(NodeParams.Transform.c0r0, NodeParams.Transform.c0r1, NodeParams.Transform.c0r2, 0);
+                    Uniform.Transform[1]        = Vec4F32(NodeParams.Transform.c1r0, NodeParams.Transform.c1r1, NodeParams.Transform.c1r2, 0);
+                    Uniform.Transform[2]        = Vec4F32(NodeParams.Transform.c2r0, NodeParams.Transform.c2r1, NodeParams.Transform.c2r2, 0);
+                    Uniform.ViewportSizeInPixel = Vec2F32((f32)Resolution.X, (f32)Resolution.Y);
+                    Uniform.AtlasSizeInPixel    = NodeParams.AtlasTextureSize;
+
+                    D3D11_MAPPED_SUBRESOURCE Resource = { 0 };
+                    DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)UniformBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
+                    MemoryCopy(Resource.pData, &Uniform, sizeof(Uniform));
+                    DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)UniformBuffer, 0);
+                }
+
+                // Pipeline Info
+                ID3D11InputLayout        *ILayout   = Backend->ILayouts[RenderPass_UI];
+                ID3D11VertexShader       *VShader   = Backend->VShaders[RenderPass_UI];
+                ID3D11PixelShader        *PShader   = Backend->PShaders[RenderPass_UI];
+                ID3D11ShaderResourceView *AtlasView = D3D11GetShaderViewFromHandle(NodeParams.AtlasTextureView);
+
+                // OM
+                DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &Backend->RenderView, 0);
+                DeviceContext->lpVtbl->OMSetBlendState(DeviceContext, Backend->DefaultBlendState, 0, 0xFFFFFFFF);
+                
+                // IA
+                u32 Stride = (u32)BatchList.BytesPerInstance;
+                u32 Offset = 0;
+                DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VBuffer, &Stride, &Offset);
+                DeviceContext->lpVtbl->IASetInputLayout(DeviceContext, ILayout);
+                DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+                
+                // Shaders
+                DeviceContext->lpVtbl->VSSetShader(DeviceContext, VShader, 0, 0);
+                DeviceContext->lpVtbl->PSSetShader(DeviceContext, PShader, 0, 0);
+                DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &UniformBuffer);
+                DeviceContext->lpVtbl->VSSetShaderResources(DeviceContext, 0, 1, &AtlasView);
+                DeviceContext->lpVtbl->VSSetSamplers(DeviceContext, 0, 1, &Backend->AtlasSamplerState);
+                
+                // Draw
+                u32 InstanceCount = (u32)(BatchList.ByteCount / BatchList.BytesPerInstance);
+                DeviceContext->lpVtbl->DrawInstanced(DeviceContext, 4, InstanceCount, 0, 0);
             }
+        } break;
 
-            // Uniform Buffers
-            ID3D11Buffer *UniformBuffer = Backend->UBuffers[RenderPass_UI];
-            {
-                d3d11_rect_uniform_buffer Uniform = { 0 };
-                Uniform.Transform[0] = Vec4F32(1, 0, 0, 0);
-                Uniform.Transform[1] = Vec4F32(0, 1, 0, 0);
-                Uniform.Transform[2] = Vec4F32(0, 0, 1, 0);
-                Uniform.ViewportSize = Vec2F32((f32)Resolution.X, (f32)Resolution.Y);
-
-                D3D11_MAPPED_SUBRESOURCE Resource = { 0 };
-                DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)UniformBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
-                MemoryCopy(Resource.pData, &Uniform, sizeof(Uniform));
-                DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)UniformBuffer, 0);
-            }
-
-            // Pipeline Info
-            ID3D11InputLayout  *ILayout = Backend->ILayouts[RenderPass_UI];
-            ID3D11VertexShader *VShader = Backend->VShaders[RenderPass_UI];
-            ID3D11PixelShader  *PShader = Backend->PShaders[RenderPass_UI];
-
-            // OM
-            DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &Backend->RenderView, 0);
-            DeviceContext->lpVtbl->OMSetBlendState(DeviceContext, Backend->DefaultBlendState, 0, 0xFFFFFFFF);
-
-            // IA
-            u32 Stride = (u32)BatchList.BytesPerInstance;
-            u32 Offset = 0;
-            DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VBuffer, &Stride, &Offset);
-            DeviceContext->lpVtbl->IASetInputLayout(DeviceContext, ILayout);
-            DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-
-            // Shaders
-            DeviceContext->lpVtbl->VSSetShader(DeviceContext, VShader, 0, 0);
-            DeviceContext->lpVtbl->PSSetShader(DeviceContext, PShader, 0, 0);
-            DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &UniformBuffer);
-
-            // Draw
-            u32 InstanceCount = (u32)(BatchList.ByteCount / BatchList.BytesPerInstance);
-            DeviceContext->lpVtbl->DrawInstanced(DeviceContext, 4, InstanceCount, 0, 0);
         }
     }
-    
 
     // Present
     HRESULT Error = SwapChain->lpVtbl->Present(SwapChain, 0, 0);
@@ -490,7 +531,7 @@ ReleaseGlyphTransfer(gpu_font_objects *FontObjects)
 }
 
 external void
-TransferGlyph(rect Rect, render_handle RendererHandle, gpu_font_objects *FontObjects)
+TransferGlyph(rect_f32 Rect, render_handle RendererHandle, gpu_font_objects *FontObjects)
 {
     d3d11_backend *Backend = (d3d11_backend *)RendererHandle.u64[0];;
 
@@ -500,12 +541,12 @@ TransferGlyph(rect Rect, render_handle RendererHandle, gpu_font_objects *FontObj
         SourceBox.left   = 0;
         SourceBox.top    = 0;
         SourceBox.front  = 0;
-        SourceBox.right  = (u32)Rect.MaxX;
-        SourceBox.bottom = (u32)Rect.MaxY;
+        SourceBox.right  = (u32)Rect.Max.X;
+        SourceBox.bottom = (u32)Rect.Max.Y;
         SourceBox.back   = 1;
 
         Backend->DeviceContext->lpVtbl->CopySubresourceRegion(Backend->DeviceContext, (ID3D11Resource *)FontObjects->GlyphCache,
-                                                              0, (u32)Rect.MinX, (u32)Rect.MinY, 0, (ID3D11Resource *)FontObjects->GlyphTransfer,
+                                                              0, (u32)Rect.Min.X, (u32)Rect.Min.Y, 0, (ID3D11Resource *)FontObjects->GlyphTransfer,
                                                               0, &SourceBox);
     }
 }

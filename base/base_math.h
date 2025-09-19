@@ -42,18 +42,30 @@ typedef struct matrix_4x4
 	f32 c3r0, c3r1, c3r2, c3r3;
 } matrix_4x4;
 
+typedef struct rect_f32
+{
+	vec2_f32 Min;
+	vec2_f32 Max;
+} rect_f32;
+
 // [API]
 
 // [Constructors]
 
-internal vec2_f32 Vec2F32  (f32 X, f32 Y);
-internal vec4_f32 Vec4F32  (f32 X, f32 Y, f32 Z, f32 W);
+internal vec2_f32   Vec2F32     (f32 X, f32 Y);
+internal vec4_f32   Vec4F32     (f32 X, f32 Y, f32 Z, f32 W);
+internal matrix_3x3 Mat3x3Zero  (void);
+
+// [Rect]
+
+internal rect_f32 IntersectRectF32(rect_f32 R1, rect_f32 R2);
 
 // [Helpers]
 
 internal b32 Vec2I32IsEqual(vec2_i32 Vec1, vec2_i32 Vec2);
 internal b32 Vec2I32IsEmpty(vec2_i32 Vec);
 internal b32 Vec2F32IsEqual(vec2_f32 Vec1, vec2_f32 Vec2);
+internal b32 Vec2F32IsEmpty(vec2_f32 Vec);
 
 // [Misc]
 

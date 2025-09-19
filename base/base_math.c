@@ -24,6 +24,36 @@ Vec4F32(f32 X, f32 Y, f32 Z, f32 W)
 	return Result;
 }
 
+internal matrix_3x3 
+Mat3x3Zero(void)
+{
+	matrix_3x3 Result = {0};
+	return Result;
+}
+
+// [Rect]
+
+internal rect_f32
+IntersectRectF32(rect_f32 R1, rect_f32 R2)
+{
+	rect_f32 Result;
+
+	Result.Min.X = max(R1.Min.X, R2.Min.X);
+	Result.Min.Y = max(R1.Min.Y, R2.Min.Y);
+	Result.Max.X = min(R1.Max.X, R2.Max.X);
+	Result.Max.Y = min(R1.Max.Y, R2.Max.Y);
+
+	if (Result.Max.X <= Result.Min.X || Result.Max.Y <= Result.Min.Y)
+	{
+		Result.Min.X = 0;
+		Result.Min.Y = 0;
+		Result.Max.X = 0;
+		Result.Max.Y = 0;
+	}
+	
+	return Result;
+}
+
 // [Helpers]
 
 internal b32
@@ -44,6 +74,13 @@ internal b32
 Vec2F32IsEqual(vec2_f32 Vec1, vec2_f32 Vec2)
 {
 	b32 Result = (Vec1.X == Vec2.X) && (Vec1.Y == Vec2.Y);
+	return Result;
+}
+
+internal b32
+Vec2F32IsEmpty(vec2_f32 Vec)
+{
+	b32 Result = (Vec.X == 0) && (Vec.Y == 0);
 	return Result;
 }
 

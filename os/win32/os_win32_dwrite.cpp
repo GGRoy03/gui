@@ -234,7 +234,7 @@ OSGetGlyphLayout(u8 Character, os_font_objects *FontObjects, vec2_i32 TextureSiz
 // NOTE: Only handles extended ASCII right now.
 
 extern "C" os_glyph_rasterize_info
-OSRasterizeGlyph(u8 Character, rect Rect, vec2_i32 TextureSize, os_font_objects *OSFontObjects, gpu_font_objects *GPUFontObjects)
+OSRasterizeGlyph(u8 Character, rect_f32 Rect, vec2_i32 TextureSize, os_font_objects *OSFontObjects, gpu_font_objects *GPUFontObjects)
 {
     os_glyph_rasterize_info Result = {0};
 
@@ -251,8 +251,8 @@ OSRasterizeGlyph(u8 Character, rect Rect, vec2_i32 TextureSize, os_font_objects 
                 D2D1_RECT_F DrawRect;
                 DrawRect.left   = 0;
                 DrawRect.top    = 0;
-                DrawRect.right  = Rect.MaxX;
-                DrawRect.bottom = Rect.MaxY;
+                DrawRect.right  = Rect.Max.X;
+                DrawRect.bottom = Rect.Max.Y;
 
                 OSFontObjects->RenderTarget->SetTransform(D2D1::Matrix3x2F::Scale(D2D1::Size(1, 1), D2D1::Point2F(0.0f, 0.0f)));
                 OSFontObjects->RenderTarget->BeginDraw();
@@ -272,10 +272,10 @@ OSRasterizeGlyph(u8 Character, rect Rect, vec2_i32 TextureSize, os_font_objects 
 
                 {
                     texture_coord Tex;
-                    Tex.u0 = (f32) Rect.MinX  / TextureSize.X;
-                    Tex.v0 = (f32) Rect.MinY  / TextureSize.Y;
-                    Tex.u1 = (f32)(Rect.MaxX) / TextureSize.X;
-                    Tex.v1 = (f32)(Rect.MaxY) / TextureSize.Y;
+                    Tex.u0 = (f32) Rect.Min.X  / TextureSize.X;
+                    Tex.v0 = (f32) Rect.Min.Y  / TextureSize.Y;
+                    Tex.u1 = (f32)(Rect.Max.X) / TextureSize.X;
+                    Tex.v1 = (f32)(Rect.Max.Y) / TextureSize.Y;
 
                     Result.IsRasterized = true;
                     Result.TextureCoord = Tex;

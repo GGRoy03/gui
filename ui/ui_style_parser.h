@@ -36,7 +36,7 @@ typedef enum UIStyleToken_Type
 {
     // Extended ASCII... (0..255)
 
-    // Flags used when parsing values.
+    // Flags used when parsing values (unsure if they really need to be)
     UIStyleToken_String      = 1 << 8,
     UIStyleToken_Identifier  = 1 << 9,
     UIStyleToken_Number      = 1 << 10,
@@ -44,6 +44,7 @@ typedef enum UIStyleToken_Type
     UIStyleToken_Vector      = 1 << 12,
     UIStyleToken_Style       = 1 << 13,
     UIStyleToken_For         = 1 << 14,
+    UIStyleToken_EndOfFile   = 1 << 15,
 } UIStyleToken_Type;
 
 typedef enum UIStyle_Type
@@ -82,12 +83,13 @@ typedef struct style_tokenizer
 // TODO: Maybe separate this into a tokenizer and a parser.
 typedef struct style_parser
 {
-    u32          AtToken;
-    byte_string  CurrentUserStyleName;
-    ui_style     CurrentStyle;
-    UIStyle_Type CurrentType;
+    render_handle       Renderer;
+    ui_style_registery *Registery;
+    u32                 TokenIndex;
+    byte_string         StyleName;
+    UIStyle_Type        StyleType;
+    ui_style            Style;
 } style_parser;
-
 
 // [GLOBALS]
 
@@ -98,21 +100,25 @@ read_only global bit_field StyleTypeValidAttributesTable[] =
     {0}, // None
 
     // Window
-    {UIStyleAttribute_Size       |UIStyleAttribute_Padding     |UIStyleAttribute_Spacing |
-     UIStyleAttribute_BorderColor|UIStyleAttribute_BorderWidth |UIStyleAttribute_Color   |
-     UIStyleAttribute_Softness   |UIStyleAttribute_BorderRadius|UIStyleAttribute_FontName|
-     UIStyleAttribute_FontSize                                                           },
+    {
+        UIStyleAttribute_Size       |UIStyleAttribute_Padding     |UIStyleAttribute_Spacing |
+        UIStyleAttribute_BorderColor|UIStyleAttribute_BorderWidth |UIStyleAttribute_Color   |
+        UIStyleAttribute_Softness   |UIStyleAttribute_BorderRadius|UIStyleAttribute_FontName|
+        UIStyleAttribute_FontSize                                                           
+    },
 
     // Button
-    {UIStyleAttribute_Size    |UIStyleAttribute_BorderColor|UIStyleAttribute_BorderWidth |
-     UIStyleAttribute_Color   |UIStyleAttribute_Softness   |UIStyleAttribute_BorderRadius|
-     UIStyleAttribute_FontName|UIStyleAttribute_FontSize                                 },
+    {
+        UIStyleAttribute_Size    |UIStyleAttribute_BorderColor|UIStyleAttribute_BorderWidth |
+        UIStyleAttribute_Color   |UIStyleAttribute_Softness   |UIStyleAttribute_BorderRadius|
+        UIStyleAttribute_FontName|UIStyleAttribute_FontSize
+    },
 
     // Label
     {
         UIStyleAttribute_FontSize | UIStyleAttribute_FontName
     },
-};                                    
+};
 
 // [API]
 
@@ -128,11 +134,17 @@ internal b32          ReadVector         (os_file *File, u32 MinimumSize, u32 Ma
 
 // [Parsing]
 
-internal void                  WriteStyleAttribute                  (UIStyleAttribute_Flag Attribute, style_token ValueToken, style_parser *Parser);
-internal b32                   ParseStyleTokens                     (style_parser *Parser, style_token *Tokens, u32 TokenCount, ui_style_registery *Registery, render_handle RendererHandle);
-internal UIStyleAttribute_Flag GetStyleAttributeFlagFromIdentifier  (byte_string Identifier);
-internal b32                   IsAttributeFormattedCorrectly        (UIStyleToken_Type TokenType, UIStyleAttribute_Flag AttributeFlag);
-internal void                  CacheStyle                           (ui_style Style, byte_string Name, ui_style_registery *Registery, render_handle RendererHandle);
+internal void          ConsumeStyleTokens  (style_parser *Parser, u32 Count);
+internal style_token * PeekStyleToken      (style_token *Tokens, u32 TokenBufferSize, u32 Index, u32 Offset);
+
+internal b32 ParseStyleFile        (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize);
+internal b32 ParseStyleAttribute   (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize);
+internal b32 ParseStyleHeader      (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize);
+
+internal b32                   SaveStyleAttribute             (UIStyleAttribute_Flag Attribute, style_token *Value, style_parser *Parser);
+internal UIStyleAttribute_Flag GetStyleAttributeFlag          (byte_string Identifier);
+internal b32                   IsAttributeFormattedCorrectly  (UIStyleToken_Type TokenType, UIStyleAttribute_Flag AttributeFlag);
+internal void                  CacheStyle                     (ui_style Style, byte_string Name, ui_style_registery *Registery, render_handle RendererHandle);
 
 // [Error Handling]
 

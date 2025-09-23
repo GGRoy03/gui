@@ -3,7 +3,7 @@
 // [Public API Implementation]
 
 internal void
-LoadThemeFiles(byte_string *Files, u32 FileCount, ui_style_registery *Registery, render_handle RendererHandle)
+LoadThemeFiles(byte_string *Files, u32 FileCount, ui_style_registery *Registery, render_handle Renderer)
 {
     if (!Files)
     {
@@ -21,11 +21,13 @@ LoadThemeFiles(byte_string *Files, u32 FileCount, ui_style_registery *Registery,
         Params.CommitSize        = Kilobyte(64);
         Params.ReserveSize       = Megabyte(10);
 
-
         Tokenizer.Arena    = AllocateArena(Params);
         Tokenizer.Capacity = 10'000;
         Tokenizer.Buffer   = PushArray(Tokenizer.Arena, style_token, Tokenizer.Capacity);
         Tokenizer.AtLine   = 1;
+
+        Parser.Registery = Registery;
+        Parser.Renderer  = Renderer;
     }
 
     // NOTE: Basically an initialization routine... Probably move this?
@@ -76,7 +78,7 @@ LoadThemeFiles(byte_string *Files, u32 FileCount, ui_style_registery *Registery,
             continue;
         }
 
-        b32 ParseSuccess = ParseStyleTokens(&Parser, Tokenizer.Buffer, Tokenizer.Count, Registery, RendererHandle);
+        b32 ParseSuccess = ParseStyleFile(&Parser, Tokenizer.Buffer, Tokenizer.Count);
         if (!ParseSuccess)
         {
             WriteStyleErrorMessage(0, OSMessage_Warn, byte_string_literal("Failed to parse file. See error(s) above."));
@@ -306,91 +308,29 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
         AdvanceFile(File, 1);
     }
 
+    CreateStyleToken(UIStyleToken_EndOfFile, Tokenizer);
+
     return Success;
 }
 
-internal void
-WriteStyleAttribute(UIStyleAttribute_Flag Attribute, style_token ValueToken, style_parser *Parser)
-{
-    switch (Attribute)
-    {
-
-    default:
-    {
-        WriteStyleErrorMessage(ValueToken.LineInFile, OSMessage_Error, byte_string_literal("Invalid style supplied."));
-    } break;
-
-    case UIStyleAttribute_Size:         Parser->CurrentStyle.Size         = Vec2F32(ValueToken.Vector.X, ValueToken.Vector.Y); break;
-    case UIStyleAttribute_Color:        Parser->CurrentStyle.Color        = NormalizedColor(ValueToken.Vector);                break;
-    case UIStyleAttribute_Padding:      Parser->CurrentStyle.Padding      = ValueToken.Vector;                                 break;
-    case UIStyleAttribute_Spacing:      Parser->CurrentStyle.Spacing      = Vec2F32(ValueToken.Vector.X, ValueToken.Vector.Y); break;
-    case UIStyleAttribute_FontSize:     Parser->CurrentStyle.FontSize     = (f32)ValueToken.UInt32;                            break;
-    case UIStyleAttribute_FontName:     Parser->CurrentStyle.Font.Name    = ValueToken.Identifier;                             break;
-    case UIStyleAttribute_Softness:     Parser->CurrentStyle.Softness     = (f32)ValueToken.UInt32;                            break;
-    case UIStyleAttribute_BorderColor:  Parser->CurrentStyle.BorderColor  = NormalizedColor(ValueToken.Vector);                break;
-    case UIStyleAttribute_BorderWidth:  Parser->CurrentStyle.BorderWidth  = ValueToken.UInt32;                                 break;
-    case UIStyleAttribute_BorderRadius: Parser->CurrentStyle.CornerRadius = ValueToken.Vector;                                 break;
-    }
-}
-
-internal b32
-IsAttributeFormattedCorrectly(UIStyleToken_Type TokenType, UIStyleAttribute_Flag AttributeFlag)
-{
-    b32 Result = 0;
-
-    switch (TokenType)
-    {
-
-    case UIStyleToken_Number:
-    {
-        Result = (AttributeFlag & UIStyleAttribute_BorderWidth) ||
-                 (AttributeFlag & UIStyleAttribute_Softness   ) ||
-                 (AttributeFlag & UIStyleAttribute_FontSize   );
-    } break;
-
-    case UIStyleToken_Vector:
-    {
-        Result = (AttributeFlag & UIStyleAttribute_BorderColor ) ||
-                 (AttributeFlag & UIStyleAttribute_BorderRadius) ||
-                 (AttributeFlag & UIStyleAttribute_Padding     ) ||
-                 (AttributeFlag & UIStyleAttribute_Spacing     ) ||
-                 (AttributeFlag & UIStyleAttribute_Color       ) ||
-                 (AttributeFlag & UIStyleAttribute_Size        );
-    } break;
-
-    case UIStyleToken_String:
-    {
-        Result = (AttributeFlag & UIStyleAttribute_FontName);
-    } break;
-
-    default:
-    {
-
-    } break;
-
-    }
-
-    return Result;
-}
-
-// TODO: Perfect Hash? Or something similar?
+// [Parser]
 
 internal UIStyleAttribute_Flag
-GetStyleAttributeFlagFromIdentifier(byte_string Identifier)
+GetStyleAttributeFlag(byte_string Identifier)
 {
     UIStyleAttribute_Flag Result = UIStyleAttribute_None;
 
     // Valid Types (Clearer as a non-table)
-    byte_string Size           = byte_string_literal("size");
-    byte_string Color          = byte_string_literal("color");
-    byte_string Padding        = byte_string_literal("padding");
-    byte_string Spacing        = byte_string_literal("spacing");
-    byte_string FontSize       = byte_string_literal("fontsize");
-    byte_string FontName       = byte_string_literal("fontname");
-    byte_string Softness       = byte_string_literal("softness");
-    byte_string BorderWidth    = byte_string_literal("borderwidth");
-    byte_string BorderColor    = byte_string_literal("bordercolor");
-    byte_string BorderRadius   = byte_string_literal("borderradius");
+    byte_string Size         = byte_string_literal("size");
+    byte_string Color        = byte_string_literal("color");
+    byte_string Padding      = byte_string_literal("padding");
+    byte_string Spacing      = byte_string_literal("spacing");
+    byte_string FontSize     = byte_string_literal("fontsize");
+    byte_string FontName     = byte_string_literal("fontname");
+    byte_string Softness     = byte_string_literal("softness");
+    byte_string BorderWidth  = byte_string_literal("borderwidth");
+    byte_string BorderColor  = byte_string_literal("bordercolor");
+    byte_string BorderRadius = byte_string_literal("borderradius");
 
     if (ByteStringMatches(Identifier, Size))
     {
@@ -436,11 +376,309 @@ GetStyleAttributeFlagFromIdentifier(byte_string Identifier)
     return Result;
 }
 
+internal b32
+IsAttributeFormattedCorrectly(UIStyleToken_Type TokenType, UIStyleAttribute_Flag AttributeFlag)
+{
+    b32 Result = 0;
+
+    switch (TokenType)
+    {
+
+    case UIStyleToken_Number:
+    {
+        Result = (AttributeFlag & UIStyleAttribute_BorderWidth) ||
+                 (AttributeFlag & UIStyleAttribute_Softness   ) ||
+                 (AttributeFlag & UIStyleAttribute_FontSize   );
+    } break;
+
+    case UIStyleToken_Vector:
+    {
+        Result = (AttributeFlag & UIStyleAttribute_BorderColor ) ||
+                 (AttributeFlag & UIStyleAttribute_BorderRadius) ||
+                 (AttributeFlag & UIStyleAttribute_Padding     ) ||
+                 (AttributeFlag & UIStyleAttribute_Spacing     ) ||
+                 (AttributeFlag & UIStyleAttribute_Color       ) ||
+                 (AttributeFlag & UIStyleAttribute_Size        );
+    } break;
+
+    case UIStyleToken_String:
+    {
+        Result = (AttributeFlag & UIStyleAttribute_FontName);
+    } break;
+
+    default:
+    {
+
+    } break;
+
+    }
+
+    return Result;
+}
+
+internal b32
+SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_parser *Parser)
+{
+    switch (Attribute)
+    {
+
+    default:
+    {
+        WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid style supplied."));
+        return 0;
+    } break;
+
+    case UIStyleAttribute_Size:         Parser->Style.Size         = Vec2F32(Value->Vector.X, Value->Vector.Y); break;
+    case UIStyleAttribute_Color:        Parser->Style.Color        = NormalizedColor(Value->Vector);            break;
+    case UIStyleAttribute_Padding:      Parser->Style.Padding      = Value->Vector;                             break;
+    case UIStyleAttribute_Spacing:      Parser->Style.Spacing      = Vec2F32(Value->Vector.X, Value->Vector.Y); break;
+    case UIStyleAttribute_FontSize:     Parser->Style.FontSize     = (f32)Value->UInt32;                        break;
+    case UIStyleAttribute_FontName:     Parser->Style.Font.Name    = Value->Identifier;                         break;
+    case UIStyleAttribute_Softness:     Parser->Style.Softness     = (f32)Value->UInt32;                        break;
+    case UIStyleAttribute_BorderColor:  Parser->Style.BorderColor  = NormalizedColor(Value->Vector);            break;
+    case UIStyleAttribute_BorderWidth:  Parser->Style.BorderWidth  = Value->UInt32;                             break;
+    case UIStyleAttribute_BorderRadius: Parser->Style.CornerRadius = Value->Vector;                             break;
+
+    }
+
+    return 1;
+}
+
+internal style_token *
+PeekStyleToken(style_token *Tokens, u32 TokenBufferSize, u32 Index, u32 Offset)
+{
+    style_token *Result = 0;
+
+    u32 PostIndex = Index + Offset;
+    if(PostIndex < TokenBufferSize)
+    {
+        Result = Tokens + PostIndex;
+    }
+
+    return Result;
+}
+
+internal void
+ConsumeStyleTokens(style_parser *Parser, u32 Count)
+{
+    Parser->TokenIndex += Count;
+}
+
+internal b32
+ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize)
+{
+    UIStyleAttribute_Flag Flag = UIStyleAttribute_None;
+    {
+        style_token *AttributeName = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (AttributeName->Type != UIStyleToken_Identifier)
+        {
+            WriteStyleErrorMessage(AttributeName->LineInFile, OSMessage_Error, byte_string_literal("Expected: Attribute Name"));
+            return 0;
+        }
+
+        Flag = GetStyleAttributeFlag(AttributeName->Identifier);
+        if (Flag == UIStyleAttribute_None)
+        {
+            WriteStyleErrorMessage(AttributeName->LineInFile, OSMessage_Error, byte_string_literal("Invalid: Attribute Name"));
+            return 0;
+        }
+
+        ConsumeStyleTokens(Parser, 1);
+    }
+
+    {
+        style_token *Assignment = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (Assignment->Type != UIStyleToken_Assignment)
+        {
+            WriteStyleErrorMessage(Assignment->LineInFile, OSMessage_Error, byte_string_literal("Expected: Assignment"));
+            return 0;
+        }
+
+        ConsumeStyleTokens(Parser, 1);      
+    }
+
+    {
+        read_only bit_field ValueMask = UIStyleToken_String | UIStyleToken_Number | UIStyleToken_Vector;
+
+        style_token *Value = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (!(Value->Type & ValueMask))
+        {
+            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Expected: Value"));
+            return 0;
+        }
+
+        if (!(Flag & StyleTypeValidAttributesTable[Parser->StyleType]))
+        {
+            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid attribute supplied to a theme. Invalid: %s"), UIStyleAttributeToString(Flag));
+            return 0;
+        }
+
+        if (!IsAttributeFormattedCorrectly(Value->Type, Flag))
+        {
+            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting for %s"), UIStyleAttributeToString(Flag));
+            return 0;
+        }
+
+        b32 Saved = SaveStyleAttribute(Flag, Value, Parser);
+        if (!Saved)
+        {
+            return 0;
+        }
+
+        ConsumeStyleTokens(Parser, 1);
+    }
+
+    {
+        style_token *EndOfAttribute = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (EndOfAttribute->Type != ';')
+        {
+            WriteStyleErrorMessage(EndOfAttribute->LineInFile, OSMessage_Error, byte_string_literal("Expected: ';' after setting an attribute."));
+            return 0;
+        }
+
+        ConsumeStyleTokens(Parser, 1);
+    }
+
+    return 1;
+}
+
+internal b32
+ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize)
+{
+    {
+        style_token *Style = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (Style->Type != UIStyleToken_Style)
+        {
+            WriteStyleErrorMessage(Style->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'Style'"));
+            return 0;
+        }
+
+        ConsumeStyleTokens(Parser, 1);
+    }
+
+    {
+        style_token *Name = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (Name->Type != UIStyleToken_String)
+        {
+            WriteStyleErrorMessage(Name->LineInFile, OSMessage_Error, byte_string_literal("Expected: '\"style_name\""));
+            return 0;
+        }
+
+        ui_style_name CachedName = UIGetCachedNameFromStyleName(Name->Identifier, Parser->Registery);
+        if (IsValidByteString(CachedName.Value))
+        {
+            WriteStyleErrorMessage(Name->LineInFile, OSMessage_Error, byte_string_literal("A style with the same name already exists."));
+            return 0;
+        }
+
+        Parser->StyleName = Name->Identifier;
+
+        ConsumeStyleTokens(Parser, 1);
+    }
+
+    {
+        style_token *For = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (For->Type != UIStyleToken_For)
+        {
+            WriteStyleErrorMessage(For->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'For'"));
+            return 0;
+        }
+
+        ConsumeStyleTokens(Parser, 1);
+    }
+
+    {
+        style_token *Type = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (Type->Type != UIStyleToken_Identifier)
+        {
+            WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Expected: 'Type'"));
+            return 0;
+        }
+
+        byte_string WindowString = byte_string_literal("window");
+        byte_string ButtonString = byte_string_literal("button");
+        byte_string LabelString  = byte_string_literal("label");
+
+        if (ByteStringMatches(Type->Identifier, WindowString))
+        {
+            Parser->StyleType = UIStyle_Window;
+        }
+        else if (ByteStringMatches(Type->Identifier, ButtonString))
+        {
+            Parser->StyleType = UIStyle_Button;
+        }
+        else if (ByteStringMatches(Type->Identifier, LabelString))
+        {
+            Parser->StyleType = UIStyle_Label;
+        }
+        else
+        {
+            WriteStyleErrorMessage(Type->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'Type'"));
+            return 0;
+        }
+
+        ConsumeStyleTokens(Parser, 1);
+    }
+
+    {
+        style_token *NextToken = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (NextToken->Type != '{')
+        {
+            WriteStyleErrorMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Expect: '{' after style header."));
+            return 0;
+        }
+
+        ConsumeStyleTokens(Parser, 1);
+
+        while (NextToken->Type != '}')
+        {
+            if (NextToken == '\0')
+            {
+                WriteStyleErrorMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
+                return 0;
+            }
+
+            if (!ParseStyleAttribute(Parser, Tokens, TokenBufferSize))
+            {
+                WriteStyleErrorMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
+                return 0;
+            }
+
+            NextToken = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        }
+
+        ConsumeStyleTokens(Parser, 1);
+    }
+
+    return 1;
+}
+
+internal b32
+ParseStyleFile(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize)
+{
+    while (PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0)->Type != UIStyleToken_EndOfFile)
+    {
+        if (!ParseStyleHeader(Parser, Tokens, TokenBufferSize))
+        {
+            return 0;
+        }
+
+        CacheStyle(Parser->Style, Parser->StyleName, Parser->Registery, Parser->Renderer);
+
+        Parser->StyleName = ByteString(0, 0);
+        Parser->Style     = (ui_style){ 0 };
+        Parser->StyleType = UIStyle_None;
+    }
+
+    return 1;
+}
+
 internal void
 CacheStyle(ui_style Style, byte_string Name, ui_style_registery *Registery, render_handle RendererHandle)
 {
     if (Name.Size <= ThemeNameLength)
     {
+        // NOTE: I believe this check is now useless since it is caught way earlier?
         ui_style_name CachedName = UIGetCachedNameFromStyleName(Name, Registery);
 
         if (!IsValidByteString(CachedName.Value))
@@ -480,156 +718,8 @@ CacheStyle(ui_style Style, byte_string Name, ui_style_registery *Registery, rend
     }
     else
     {
-        WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Style name exceeds maximum length of 64"));
+        WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Style name exceeds maximum length of %u"), ThemeNameLength);
     }
-}
-
-internal b32
-ParseStyleTokens(style_parser *Parser, style_token *Tokens, u32 TokenCount, ui_style_registery *Registery, render_handle RendererHandle)
-{
-    b32 Success = {0};
-
-    while (Parser->AtToken < TokenCount)
-    {
-        style_token *Token = Tokens + Parser->AtToken;
-
-        switch (Token->Type)
-        {
-
-        case UIStyleToken_Style:
-        {
-            if (Parser->CurrentType != UIStyle_None)
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Unexpected style token. You must close a styling block before commencing a new one"));
-                return Success;
-            }
-
-            if (Parser->AtToken + 3 >= TokenCount)
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
-                return Success;
-            }
-
-            style_token PeekTokens[3] = { Token[1], Token[2], Token[3] }; // (String), (For), (Type)
-            if (PeekTokens[0].Type != UIStyleToken_String || PeekTokens[1].Type != UIStyleToken_For || PeekTokens[2].Type != UIStyleToken_Identifier)
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("A style must be set like this: Theme \"NameOfTheme\" for ComponentType"));
-                return Success;
-            }
-
-            // Valid types (Function this?)
-            byte_string WindowString = byte_string_literal("window");
-            byte_string ButtonString = byte_string_literal("button");
-            byte_string LabelString  = byte_string_literal("label");
-
-            if (ByteStringMatches(PeekTokens[2].Identifier, WindowString))
-            {
-                Parser->CurrentType = UIStyle_Window;
-            }
-            else if (ByteStringMatches(PeekTokens[2].Identifier, ButtonString))
-            {
-                Parser->CurrentType = UIStyle_Button;
-            }
-            else if (ByteStringMatches(PeekTokens[2].Identifier, LabelString))
-            {
-                Parser->CurrentType = UIStyle_Label;
-            }
-            else
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Invalid component type."));
-                return Success;
-            }
-
-            Parser->CurrentUserStyleName = PeekTokens[0].Identifier;
-            Parser->AtToken             += ArrayCount(PeekTokens) + 1;
-        } break;
-
-        case UIStyleToken_Identifier:
-        {
-            if (Parser->CurrentType == UIStyle_None)
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Found identifier outside of a styling block."));
-                return Success;
-            }
-
-            if (Parser->AtToken + 3 >= TokenCount)
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
-                return Success;
-            }
-
-            UIStyleAttribute_Flag AttributeFlag = GetStyleAttributeFlagFromIdentifier(Token->Identifier);
-            if (AttributeFlag == UIStyleAttribute_None)
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Invalid attribute name."));
-                return Success;
-            }
-
-            if (!(AttributeFlag & StyleTypeValidAttributesTable[Parser->CurrentType]))
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Invalid attribute supplied to a theme. Invalid: %s"), UIStyleAttributeToString(AttributeFlag));
-                return Success;
-            }
-
-            style_token PeekTokens[3] = {Token[1], Token[2], Token[3]}; // (Assignment), (Value), (;)
-            if (PeekTokens[0].Type != UIStyleToken_Assignment || !(PeekTokens[1].Type & StyleTokenValueMask) ||PeekTokens[2].Type != ';')
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting. Should be: {Attribute} := {Value}{;} ."));
-                return Success;
-            }
-
-            if (!IsAttributeFormattedCorrectly(PeekTokens[1].Type, AttributeFlag))
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting for attribute."));
-                return Success;
-            }
-
-            WriteStyleAttribute(AttributeFlag, PeekTokens[1], Parser);
-
-            Parser->AtToken += ArrayCount(PeekTokens) + 1;
-        } break;
-
-        DisableWarning(4063)
-        case '{':
-        {
-            Parser->AtToken++;
-
-            if (Parser->CurrentType == UIStyle_None)
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("You must end a block with '}' before beginning a new one with '{'."));
-                return Success;
-            }
-        } break;
-
-        DisableWarning(4063)
-        case '}':
-        {
-            Parser->AtToken++;
-
-            if (Parser->CurrentType == UIStyle_None)
-            {
-                WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("You must end a block with '}' before beginning a new one with '{'."));
-                return Success;
-            }
-
-            CacheStyle(Parser->CurrentStyle, Parser->CurrentUserStyleName, Registery, RendererHandle);
-
-            Parser->CurrentType          = UIStyle_None;
-            Parser->CurrentStyle         = (ui_style){ 0 };
-            Parser->CurrentUserStyleName = ByteString(0, 0);
-        } break;
-
-        default:
-        {
-            WriteStyleErrorMessage(Token->LineInFile, OSMessage_Error, byte_string_literal("Found invalid token in file: %c"), (char)Token->Type);
-            return Success;
-        } break;
-
-        }
-    }
-
-    Success = 1;
-    return Success;
 }
 
 // [Success Handling]

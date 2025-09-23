@@ -1,5 +1,3 @@
-// [Globals]
-
 // [Public API Implementation]
 
 internal void
@@ -444,6 +442,55 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
     return 1;
 }
 
+internal void
+CacheStyle(ui_style Style, byte_string Name, ui_style_registery *Registery, render_handle RendererHandle)
+{
+    if (Name.Size <= ThemeNameLength)
+    {
+        // NOTE: I believe this check is now useless since it is caught way earlier?
+        ui_style_name CachedName = UIGetCachedNameFromStyleName(Name, Registery);
+
+        if (!IsValidByteString(CachedName.Value))
+        {
+            // BUG: Doesn't check if it's an already referenced font.
+
+            // Load deferred data
+            if(IsValidByteString(Style.Font.Name))
+            {
+                Style.Font.Ref = UILoadFont(Style.Font.Name, Style.FontSize, RendererHandle, UIFontCoverage_ASCIIOnly);
+            }
+
+            ui_cached_style *Sentinel = UIGetStyleSentinel(Name, Registery);
+
+            ui_cached_style *CachedStyle = Registery->CachedStyles + Registery->Count;
+            CachedStyle->Style = Style;
+            CachedStyle->Index = Registery->Count;
+            CachedStyle->Next  = Sentinel->Next;
+
+            ui_style_name *NewName = Registery->CachedName + CachedStyle->Index;
+            NewName->Value.String = PushArena(Registery->Arena, Name.Size + 1, AlignOf(u8));
+            NewName->Value.Size   = Name.Size;
+            memcpy(NewName->Value.String, Name.String, Name.Size);
+
+            if (Sentinel->Next)
+            {
+                Sentinel->Next->Next = CachedStyle;
+            }
+            Sentinel->Next = CachedStyle;
+
+            Registery->Count += 1;
+        }
+        else
+        {
+            WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Two different styles cannot have the same name."));
+        }
+    }
+    else
+    {
+        WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Style name exceeds maximum length of %u"), ThemeNameLength);
+    }
+}
+
 internal style_token *
 PeekStyleToken(style_token *Tokens, u32 TokenBufferSize, u32 Index, u32 Offset)
 {
@@ -671,55 +718,6 @@ ParseStyleFile(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize)
     }
 
     return 1;
-}
-
-internal void
-CacheStyle(ui_style Style, byte_string Name, ui_style_registery *Registery, render_handle RendererHandle)
-{
-    if (Name.Size <= ThemeNameLength)
-    {
-        // NOTE: I believe this check is now useless since it is caught way earlier?
-        ui_style_name CachedName = UIGetCachedNameFromStyleName(Name, Registery);
-
-        if (!IsValidByteString(CachedName.Value))
-        {
-            // BUG: Doesn't check if it's an already referenced font.
-
-            // Load deferred data
-            if(IsValidByteString(Style.Font.Name))
-            {
-                Style.Font.Ref = UILoadFont(Style.Font.Name, Style.FontSize, RendererHandle, UIFontCoverage_ASCIIOnly);
-            }
-
-            ui_cached_style *Sentinel = UIGetStyleSentinel(Name, Registery);
-
-            ui_cached_style *CachedStyle = Registery->CachedStyles + Registery->Count;
-            CachedStyle->Style = Style;
-            CachedStyle->Index = Registery->Count;
-            CachedStyle->Next  = Sentinel->Next;
-
-            ui_style_name *NewName = Registery->CachedName + CachedStyle->Index;
-            NewName->Value.String = PushArena(Registery->Arena, Name.Size + 1, AlignOf(u8));
-            NewName->Value.Size   = Name.Size;
-            memcpy(NewName->Value.String, Name.String, Name.Size);
-
-            if (Sentinel->Next)
-            {
-                Sentinel->Next->Next = CachedStyle;
-            }
-            Sentinel->Next = CachedStyle;
-
-            Registery->Count += 1;
-        }
-        else
-        {
-            WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Two different styles cannot have the same name."));
-        }
-    }
-    else
-    {
-        WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Style name exceeds maximum length of %u"), ThemeNameLength);
-    }
 }
 
 // [Success Handling]

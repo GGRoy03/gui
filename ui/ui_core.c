@@ -8,16 +8,21 @@ internal void
 UIWindow(ui_style_name StyleName, ui_pipeline *Pipeline)
 {
     ui_style Style = UIGetStyleFromCachedName(StyleName, &Pipeline->StyleRegistery);
+    ui_node *Node = UIGetNextNode(&Pipeline->StyleTree, UINode_Window);
 
-    // Style Node
+    if (Node)
     {
-        ui_node *Node = UIGetNextNode(&Pipeline->StyleTree, UINode_Window);
-        if (Node)
+        Node->Style = Style;
+        Node->Id    = NextId++;
+        UILinkNodes(Node, UIGetParentNodeFromTree(&Pipeline->StyleTree));
+
+        if(Node->Style.BorderWidth > 0)
         {
-            Node->Style = Style;
-            Node->Id    = NextId++;
-            UILinkNodes(Node, UIGetParentNodeFromTree(&Pipeline->StyleTree));
+            UISetFlagBinding(Node, 1, UILayoutBox_DrawBorders, Pipeline);
         }
+
+        UISetFlagBinding(Node, 1, UILayoutBox_DrawBackground         , Pipeline);
+        UISetFlagBinding(Node, 1, UILayoutBox_PlaceChildrenVertically, Pipeline);
 
         UIPushParentNodeInTree(Node, &Pipeline->StyleTree);
     }
@@ -27,16 +32,19 @@ internal void
 UIButton(ui_style_name StyleName, ui_pipeline *Pipeline)
 {
     ui_style Style = UIGetStyleFromCachedName(StyleName, &Pipeline->StyleRegistery);
+    ui_node *Node  = UIGetNextNode(&Pipeline->StyleTree, UINode_Button);
 
-    // Style Node
+    if (Node)
     {
-        ui_node *Node = UIGetNextNode(&Pipeline->StyleTree, UINode_Button);
-        if (Node)
+        Node->Style = Style;
+        Node->Id    = NextId++;
+        UILinkNodes(Node, UIGetParentNodeFromTree(&Pipeline->StyleTree));
+
+        if(Node->Style.BorderWidth > 0)
         {
-            Node->Style = Style;
-            Node->Id    = NextId++;
-            UILinkNodes(Node, UIGetParentNodeFromTree(&Pipeline->StyleTree));
+            UISetFlagBinding(Node, 1, UILayoutBox_DrawBorders, Pipeline);
         }
+        UISetFlagBinding(Node, 1, UILayoutBox_DrawBackground, Pipeline);
     }
 }
 
@@ -54,6 +62,19 @@ UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
         Node->Id    = NextId++;
         UILinkNodes(Node, UIGetParentNodeFromTree(&Pipeline->StyleTree));
 
+        // Draw Binds
+        {
+            if (Node->Style.BorderWidth > 0)
+            {
+                UISetFlagBinding(Node, 1, UILayoutBox_DrawBorders, Pipeline);
+            }
+
+            if (Text.Size > 0)
+            {
+                UISetFlagBinding(Node, 1, UILayoutBox_DrawText, Pipeline);
+            }
+        }
+
         f32 TextWidth  = 0;
         f32 TextHeight = 0;
 
@@ -65,20 +86,20 @@ UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
             for (u32 Idx = 0; Idx < Text.Size; Idx++)
             {
                 u8 Character = Text.String[Idx];
-            
+
                 glyph_state          State      = FindGlyphEntryByDirectAccess((u32)Character, Font->GlyphTable);
                 os_glyph_layout      Layout     = State.Layout;
                 os_glyph_raster_info RasterInfo = State.RasterInfo;
-            
+
                 if (!RasterInfo.IsRasterized)
                 {
                     Layout = OSGetGlyphLayout(Character, &Font->OSFontObjects, Font->TextureSize, Font->Size);
-            
+
                     stbrp_rect STBRect = { 0 };
                     STBRect.w = (u16)Layout.Size.X; Assert(STBRect.w == Layout.Size.X);
                     STBRect.h = (u16)Layout.Size.Y; Assert(STBRect.h == Layout.Size.Y);
                     stbrp_pack_rects(&Font->AtlasContext, &STBRect, 1);
-            
+
                     if (STBRect.was_packed)
                     {
                         rect_f32 Rect;
@@ -87,7 +108,7 @@ UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
                         Rect.Max.X = (f32)STBRect.x + STBRect.w;
                         Rect.Max.Y = (f32)STBRect.y + STBRect.h;
                         RasterInfo = OSRasterizeGlyph(Character, Rect, &Font->OSFontObjects, &Font->GPUFontObjects, Pipeline->RendererHandle);
-            
+
                         UpdateDirectGlyphTableEntry((u32)Character, Layout, RasterInfo, Font->GlyphTable);
                     }
                     else
@@ -95,10 +116,10 @@ UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
                         OSLogMessage(byte_string_literal("Failed to pack rect."), OSMessage_Error);
                     }
                 }
-            
+
                 TextWidth += Layout.AdvanceX;
                 TextHeight = Layout.Size.Y > TextHeight ? Layout.Size.Y : TextHeight;
-            
+
                 Characters[Idx].Layout       = Layout;
                 Characters[Idx].SampleSource = RasterInfo.SampleSource;
             }
@@ -222,6 +243,19 @@ UIGetNextNode(ui_tree *Tree, UINode_Type Type)
     return Result;
 }
 
+internal ui_node *
+UIGetLayoutNodeFromStyleNode(ui_node *Node, ui_pipeline *Pipeline)
+{
+    ui_node *Result = 0;
+
+    if (Node->Id < Pipeline->LayoutTree.NodeCapacity)
+    {
+        Result = Pipeline->LayoutTree.Nodes + Node->Id;
+    }
+
+    return Result;
+}
+
 internal ui_tree
 UIAllocateTree(ui_tree_params Params)
 {   Assert(Params.Depth > 0 && Params.NodeCount > 0 && Params.Type != UITree_None);
@@ -280,23 +314,42 @@ UIAllocateTree(ui_tree_params Params)
 
 internal void
 UISetTextBinding(ui_pipeline *Pipeline, ui_character *Characters, u32 Count, ui_font *Font, ui_node *Node)
-{   Assert(Node->Id < Pipeline->LayoutTree.NodeCapacity);
+{
+    Assert(Node->Id < Pipeline->LayoutTree.NodeCapacity);
 
-    ui_node *LNode = &Pipeline->LayoutTree.Nodes[Node->Id];
-    if (Font)
+    ui_node *LNode = UIGetLayoutNodeFromStyleNode(Node, Pipeline);
+    if (LNode && Font)
     {
         LNode->Layout.Text = PushArray(Pipeline->StaticArena, ui_text, 1);
-        LNode->Layout.Text->AtlasTexture     = RenderHandle((u64)Font->GPUFontObjects.GlyphCacheView);
+        LNode->Layout.Text->AtlasTexture = RenderHandle((u64)Font->GPUFontObjects.GlyphCacheView);
         LNode->Layout.Text->AtlasTextureSize = Font->TextureSize;
-        LNode->Layout.Text->Size             = Count;
-        LNode->Layout.Text->Characters       = Characters;
-        LNode->Layout.Text->LineHeight       = Font->LineHeight;
+        LNode->Layout.Text->Size = Count;
+        LNode->Layout.Text->Characters = Characters;
+        LNode->Layout.Text->LineHeight = Font->LineHeight;
 
         LNode->Layout.Flags |= UILayoutBox_DrawText;
     }
     else
     {
-        OSLogMessage(byte_string_literal("Could not set font: Font Stack is empty."), OSMessage_Error);
+        OSLogMessage(byte_string_literal("Could not set tex binding. Font is invalid."), OSMessage_Error);
+    }
+}
+
+internal void
+UISetFlagBinding(ui_node *Node, b32 Set, UILayoutBox_Flag Flag, ui_pipeline *Pipeline)
+{   Assert(Node && (Flag >= UILayoutBox_NoFlag && Flag <= UILayoutBox_HasClip) && Pipeline);
+
+    ui_node *LNode = UIGetLayoutNodeFromStyleNode(Node, Pipeline);
+    if(LNode)
+    {
+        if(Set)
+        {
+            SetFlag(LNode->Layout.Flags, Flag);
+        }
+        else
+        {
+            ClearFlag(LNode->Layout.Flags, Flag);
+        }
     }
 }
 
@@ -469,7 +522,6 @@ UIPipelineSynchronize(ui_pipeline *Pipeline, ui_node *Root)
         LNode->Layout.Height   = Root->Style.Size.Y;
         LNode->Layout.Padding  = Root->Style.Padding;
         LNode->Layout.Spacing  = Root->Style.Spacing;
-        LNode->Layout.Flags   |= UILayoutBox_DrawBackground | UILayoutBox_DrawBorders | UILayoutBox_PlaceChildrenVertically; // TODO: Where are these coming from?
     }
 
     for (ui_node *Child = Root->First; Child != 0; Child = Child->Next)

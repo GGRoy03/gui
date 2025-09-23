@@ -73,6 +73,13 @@
 #define DisableWarning(Code) __pragma (warning(disable: Code))
 #endif
 
+// [Flags]
+
+#define SetFlag(v, f)    ((v) |=  (f))
+#define ClearFlag(v, f)  ((v) &= ~(f))
+#define ToggleFlag(v, f) ((v) ^=  (f))
+#define HasFlag(v, f)    ((v) &   (f))
+
 // [Core Types]
 
 #include <stdint.h>

@@ -217,20 +217,22 @@ internal ui_style          UIGetStyleFromCachedName      (ui_style_name Name, ui
 
 // [Tree]
 
-internal ui_tree   UIAllocateTree           (ui_tree_params Params);
-internal void      UIPopParentNodeFromTree  (ui_tree *Tree);
-internal void      UIPushParentNodeInTree   (void *Node, ui_tree *Tree);
-internal void    * UIGetParentNodeFromTree  (ui_tree *Tree);
-internal ui_node * UIGetNextNode            (ui_tree *Tree, UINode_Type Type);
+internal ui_tree   UIAllocateTree                (ui_tree_params Params);
+internal void      UIPopParentNodeFromTree       (ui_tree *Tree);
+internal void      UIPushParentNodeInTree        (void *Node, ui_tree *Tree);
+internal void    * UIGetParentNodeFromTree       (ui_tree *Tree);
+internal ui_node * UIGetNextNode                 (ui_tree *Tree, UINode_Type Type);
+internal ui_node * UIGetLayoutNodeFromStyleNode  (ui_node *Node, ui_pipeline *Pipeline);
 
 // [Bindings]
 
 internal void UISetTextBinding  (ui_pipeline *Pipeline, ui_character *Characters, u32 Count, ui_font *Font, ui_node *Node);
+internal void UISetFlagBinding  (ui_node *Node, b32 Set, UILayoutBox_Flag Flag, ui_pipeline *Pipeline);
 
 // [Pipeline]
 
 internal b32         UIIsParallelNode         (ui_node *Node1, ui_node *Node2);
-internal b32         UIIsNodeALeaf          (UINode_Type Type);
+internal b32         UIIsNodeALeaf            (UINode_Type Type);
 internal void        UILinkNodes              (ui_node *Node, ui_node *Parent);
 
 internal ui_pipeline UICreatePipeline         (ui_pipeline_params Params);

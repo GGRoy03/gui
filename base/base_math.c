@@ -87,6 +87,15 @@ RectF32Zero(void)
 	return Result;
 }
 
+// [Vector OPs]
+
+internal vec2_f32
+Vec2F32Sub(vec2_f32 Vec1, vec2_f32 Vec2)
+{
+	vec2_f32 Result = Vec2F32((Vec1.X - Vec2.X), (Vec1.Y - Vec2.Y));
+	return Result;
+}
+
 // [Rect]
 
 internal rect_f32

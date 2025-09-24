@@ -182,7 +182,7 @@ internal void
 UIHeader(ui_style_name StyleName, ui_pipeline *Pipeline)
 {
     ui_style Style = UIGetStyle(StyleName, &Pipeline->StyleRegistery);
-    ui_node *Node  = UIGetNextNode(&Pipeline->StyleTree, UINode_None);
+    ui_node *Node  = UIGetNextNode(&Pipeline->StyleTree, UINode_Header);
 
     if (Node)
     {
@@ -262,11 +262,11 @@ UIGetStyle(ui_style_name Name, ui_style_registery *Registery)
 
 // [Tree]
 
-internal void *
+internal ui_node *
 UIGetParentNode(ui_tree *Tree)
 {   Assert(Tree);
 
-    void *Result = 0;
+    ui_node *Result = 0;
 
     if(Tree->ParentTop)
     {
@@ -652,37 +652,80 @@ UIPipelineTopDownLayout(ui_pipeline *Pipeline)
 
         if (Queue.Data)
         {
-            PushNodeQueue(&Queue, &LayoutTree->Nodes[0]);
+            ui_node       *RootLayout = &LayoutTree->Nodes[0];
+            ui_layout_box *RootBox    = &RootLayout->Layout;
+
+            if (RootBox->Width.Type != UIUnit_Float32)
+            {
+                return; // TODO: Error.
+            }
+
+            RootBox->FinalWidth  = RootBox->Width.Float32;
+            RootBox->FinalHeight = RootBox->Height.Float32;
+
+            PushNodeQueue(&Queue, RootLayout);
 
             while (!IsNodeQueueEmpty(&Queue))
             {
                 ui_node        *Current = PopNodeQueue(&Queue);
                 ui_layout_box  *Box     = &Current->Layout;
-
-                f32 AvailableWidth  = Box->Width.Float32  - (Box->Padding.Left + Box->Padding.Right);
-                f32 AvailableHeight = Box->Height.Float32 - (Box->Padding.Top  + Box->Padding.Bot);
-                f32 UsedWidth       = 0;
-                f32 UsedHeight      = 0;
-                f32 BasePosX        = Box->ClientX + Box->Padding.Left;
-                f32 BasePosY        = Box->ClientY + Box->Padding.Top;
+                
+                f32 AvWidth    = Box->FinalWidth  - (Box->Padding.Left + Box->Padding.Right);
+                f32 AvHeight   = Box->FinalHeight - (Box->Padding.Top  + Box->Padding.Bot);
+                f32 UsedWidth  = 0;
+                f32 UsedHeight = 0;
+                f32 BasePosX   = Box->ClientX + Box->Padding.Left;
+                f32 BasePosY   = Box->ClientY + Box->Padding.Top;
 
                 {
-                    for (ui_node *ChildNode = Current->First; (ChildNode != 0 && UsedWidth <= AvailableWidth); ChildNode = ChildNode->Next)
+
+                    for (ui_node *ChildNode = Current->First; (ChildNode != 0 && UsedWidth <= AvWidth); ChildNode = ChildNode->Next)
                     {
                         ChildNode->Layout.ClientX = BasePosX + UsedWidth;
                         ChildNode->Layout.ClientY = BasePosY + UsedHeight;
 
                         ui_layout_box *ChildBox = &ChildNode->Layout;
-                        ChildBox->Width.Float32  = ChildBox->Width.Float32  <= AvailableWidth  ? ChildBox->Width.Float32  : AvailableWidth;
-                        ChildBox->Height.Float32 = ChildBox->Height.Float32 <= AvailableHeight ? ChildBox->Height.Float32 : AvailableHeight;
+
+                        f32 Width  = 0;
+                        f32 Height = 0;
+                        {
+                            if (ChildBox->Width.Type == UIUnit_Percent)
+                            {
+                                Width = (ChildBox->Width.Percent / 100.f) * AvWidth;
+                            }
+                            else if (ChildBox->Width.Type == UIUnit_Float32)
+                            {
+                                Width = ChildBox->Width.Float32 <= AvWidth ? ChildBox->Width.Float32 : 0.f;
+                            }
+                            else
+                            {
+                                return;
+                            }
+
+                            if (ChildBox->Height.Type == UIUnit_Percent)
+                            {
+                                Height = (ChildBox->Height.Percent / 100.f) * AvHeight;
+                            }
+                            else if (ChildBox->Height.Type == UIUnit_Float32)
+                            {
+                                Height = ChildBox->Height.Float32 <= AvHeight ? ChildBox->Height.Float32 : 0.f;
+                            }
+                            else
+                            {
+                                return;
+                            }
+
+                            ChildBox->FinalWidth  = Width;
+                            ChildBox->FinalHeight = Height;
+                        }
 
                         if (Box->Flags & UILayoutBox_PlaceChildrenVertically)
                         {
-                            UsedHeight += ChildBox->Height.Float32 + Box->Spacing.Vertical;
+                            UsedHeight += Height + Box->Spacing.Vertical;
                         }
                         else
                         {
-                            UsedWidth += ChildBox->Width.Float32 + Box->Spacing.Horizontal;
+                            UsedWidth += Width + Box->Spacing.Horizontal;
                         }
 
                         PushNodeQueue(&Queue, ChildNode);
@@ -801,7 +844,7 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
     if (HasFlag(Box->Flags, UILayoutBox_DrawBackground))
     {
         ui_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);  
-        Rect->RectBounds  = RectF32(Box->ClientX, Box->ClientY, Box->Width.Float32, Box->Height.Float32);
+        Rect->RectBounds  = RectF32(Box->ClientX, Box->ClientY, Box->FinalWidth, Box->FinalHeight);
         Rect->Color       = Style->Color;
         Rect->CornerRadii = Style->CornerRadius;
         Rect->Softness    = Style->Softness;
@@ -811,7 +854,7 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
     if (HasFlag(Box->Flags, UILayoutBox_DrawBorders))
     {
         ui_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);
-        Rect->RectBounds  = RectF32(Box->ClientX, Box->ClientY, Box->Width.Float32, Box->Height.Float32);
+        Rect->RectBounds  = RectF32(Box->ClientX, Box->ClientY, Box->FinalWidth, Box->FinalHeight);
         Rect->Color       = Style->BorderColor;
         Rect->CornerRadii = Style->CornerRadius;
         Rect->BorderWidth = (f32)Style->BorderWidth;

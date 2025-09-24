@@ -61,6 +61,10 @@ internal matrix_3x3 Mat3x3Identity    (void);
 internal rect_f32   RectF32           (f32 MinX, f32 MinY, f32 Width, f32 Height);
 internal rect_f32   RectF32Zero       (void);
 
+// [Vector OPs]
+
+internal vec2_f32 Vec2F32Sub(vec2_f32 Vec1, vec2_f32 Vec2);
+
 // [Rect]
 
 internal rect_f32 IntersectRectF32  (rect_f32 R1, rect_f32 R2);
@@ -75,7 +79,3 @@ internal b32 Vec2I32IsEmpty    (vec2_i32 Vec);
 internal b32 Vec2F32IsEqual    (vec2_f32 Vec1, vec2_f32 Vec2);
 internal b32 Vec2F32IsEmpty    (vec2_f32 Vec);
 internal b32 Mat3x3AreEqual    (matrix_3x3 *m1, matrix_3x3 *m2);
-
-// [Misc]
-
-internal vec4_f32 NormalizedColor  (vec4_f32 Vector);

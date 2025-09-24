@@ -129,6 +129,8 @@ typedef struct ui_layout_box
     // Output
     f32 ClientX;
     f32 ClientY;
+    f32 FinalWidth;
+    f32 FinalHeight;
 
     // Layout Info
     ui_unit    Width;
@@ -177,14 +179,14 @@ typedef struct ui_style
     bit_field Flags;
 } ui_style;
 
-typedef struct ui_node
+struct ui_node
 {
-    u32   Id;
-    void *Parent;
-    void *First;
-    void *Last;
-    void *Next;
-    void *Prev;
+    u32      Id;
+    ui_node *Parent;
+    ui_node *First;
+    ui_node *Last;
+    ui_node *Next;
+    ui_node *Prev;
 
     UINode_Type Type;
     union
@@ -192,7 +194,7 @@ typedef struct ui_node
         ui_style      Style;
         ui_layout_box Layout;
     };
-} ui_node;
+};
 
 typedef struct ui_tree_params
 {
@@ -288,7 +290,7 @@ internal void UIButton  (ui_style_name StyleName, ui_click_callback *Callback, u
 internal void UILabel   (ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline);
 internal void UIHeader  (ui_style_name StyleName, ui_pipeline *Pipeline);
 
-#define UIHeaderEx(StyleName, Pipeline) DeferLoop(UIHeader(StyleName, Pipeline), UIPopParentNode(Pipeline.StyleTree));
+#define UIHeaderEx(StyleName, Pipeline) DeferLoop(UIHeader(StyleName, Pipeline), UIPopParentNode(Pipeline.StyleTree))
 
 // [Style]
 
@@ -301,7 +303,7 @@ internal ui_style          UIGetStyle          (ui_style_name Name, ui_style_reg
 internal ui_tree   UIAllocateTree                (ui_tree_params Params);
 internal void      UIPopParentNode               (ui_tree *Tree);
 internal void      UIPushParentNode              (void *Node, ui_tree *Tree);
-internal void    * UIGetParentNode               (ui_tree *Tree);
+internal ui_node * UIGetParentNode               (ui_tree *Tree);
 internal ui_node * UIGetNextNode                 (ui_tree *Tree, UINode_Type Type);
 internal ui_node * UIGetLayoutNodeFromStyleNode  (ui_node *Node, ui_pipeline *Pipeline);
 

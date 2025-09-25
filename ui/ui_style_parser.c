@@ -133,7 +133,7 @@ ReadUnit(os_file *File, ui_unit *Result)
 
     if (IsValidFile(File))
     {
-        if (PeekFile(File, 0) == '.')
+        if (PeekFile(File, 0) == UIStyleToken_Period)
         {
             AdvanceFile(File, 1); // Consumes '.'
 
@@ -156,7 +156,7 @@ ReadUnit(os_file *File, ui_unit *Result)
 
             if (IsValidFile(File))
             {
-                if (PeekFile(File, 0) == '%')
+                if (PeekFile(File, 0) == UIStyleToken_Percent)
                 {
                     Result->Type = UIUnit_Percent;
 
@@ -167,7 +167,7 @@ ReadUnit(os_file *File, ui_unit *Result)
                     }
                     else
                     {
-                        return 0;  // TODO: Error messages?
+                        return 0;  // TODO: Error message?
                     }
                 }
                 else
@@ -181,7 +181,7 @@ ReadUnit(os_file *File, ui_unit *Result)
                 return 0;
             }
         }
-        else if (PeekFile(File, 0) == '%')
+        else if (PeekFile(File, 0) == UIStyleToken_Percent)
         {
             Result->Type = UIUnit_Percent;
 
@@ -192,7 +192,7 @@ ReadUnit(os_file *File, ui_unit *Result)
             }
             else
             {
-                return 0;  // TODO: Error messages?
+                return 0;  // TODO: Error message?
             }
         }
         else
@@ -321,7 +321,7 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
 
         if (IsDigit(Char))
         {
-            Success = ReadUnit(File, &(CreateStyleToken(UIStyleToken_Number, Tokenizer)->Unit));
+            Success = ReadUnit(File, &(CreateStyleToken(UIStyleToken_Unit, Tokenizer)->Unit));
             if (!Success)
             {
                 WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Failed to parse unit."));
@@ -383,15 +383,15 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
             Success = ReadString(File, &String);
             if (!Success)
             {
-                WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Could not parse string. EOF?"));
+                WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Could not parse string. EOF?"));
                 return Success;
             }
 
             CreateStyleToken(UIStyleToken_String, Tokenizer)->Identifier = String;
-            
+
             if (PeekFile(File, 0) != '"')
             {
-                WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Could not parse string. Invalid Characters?"));
+                WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Could not parse string. Invalid Characters?"));
                 return Success;
             }
 
@@ -400,9 +400,16 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
             continue;
         }
 
-        // TODO: I think we add specific tokens for {, } and ;
-        CreateStyleToken((UIStyleToken_Type)Char, Tokenizer);
-        AdvanceFile(File, 1);
+        if(Char == '{' || Char == '}' || Char == ';' || Char == '.' || Char == ',' || Char == '%')
+        {
+            AdvanceFile(File, 1);
+            CreateStyleToken((UIStyleToken_Type)Char, Tokenizer);
+
+            continue;
+        }
+
+        WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Invalid character found in file: %c"), Char);
+        break;
     }
 
     CreateStyleToken(UIStyleToken_EndOfFile, Tokenizer);
@@ -461,7 +468,7 @@ GetStyleAttributeFlag(byte_string Identifier)
 {
     UIStyleAttribute_Flag Result = UIStyleAttribute_None;
 
-    // Valid Types (Clearer as a non-table)
+    // Valid Types (Clearer as a non-table) (Can be better?)
     byte_string Size         = byte_string_literal("size");
     byte_string Color        = byte_string_literal("color");
     byte_string Padding      = byte_string_literal("padding");
@@ -525,7 +532,7 @@ IsAttributeFormattedCorrectly(UIStyleToken_Type TokenType, UIStyleAttribute_Flag
     switch (TokenType)
     {
 
-    case UIStyleToken_Number:
+    case UIStyleToken_Unit:
     {
         Result = (AttributeFlag & UIStyleAttribute_BorderWidth) ||
                  (AttributeFlag & UIStyleAttribute_Softness   ) ||
@@ -564,13 +571,14 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
 
     default:
     {
-        WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid style supplied."));
+        Assert(!"???");
         return 0;
     } break;
 
     case UIStyleAttribute_Size:
     {
-        if (Value->Vector.Z.Type != UIUnit_None || Value->Vector.W.Type != UIUnit_None)
+        Valid = ValidateVectorUnitType(Value->Vector, UIUnit_None, 2, 2);
+        if(!Valid)
         {
             WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Size must be: [Width, Height]"));
             return 0;
@@ -681,8 +689,7 @@ CacheStyle(ui_style Style, byte_string Name, ui_style_registery *Registery, rend
 
         if (!IsValidByteString(CachedName.Value))
         {
-            // BUG: Doesn't check if it's an already referenced font. Yeah and this comes
-            // from the fact that the fonts are not centralized.
+            // BUG: Doesn't check if it's an already referenced font.
             // TODO: Centralize the fonts.
 
             // Load deferred data
@@ -703,6 +710,7 @@ CacheStyle(ui_style Style, byte_string Name, ui_style_registery *Registery, rend
             NewName->Value.Size   = Name.Size;
             memcpy(NewName->Value.String, Name.String, Name.Size);
 
+            // WARN: Reverse iteration?
             if (Sentinel->Next)
             {
                 Sentinel->Next->Next = CachedStyle;
@@ -772,14 +780,12 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
             return 0;
         }
 
-        ConsumeStyleTokens(Parser, 1);      
+        ConsumeStyleTokens(Parser, 1);
     }
 
     {
-        read_only bit_field ValueMask = UIStyleToken_String | UIStyleToken_Number | UIStyleToken_Vector;
-
         style_token *Value = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
-        if (!(Value->Type & ValueMask))
+        if (Value->Type != UIStyleToken_Unit && Value->Type != UIStyleToken_String && Value->Type != UIStyleToken_Vector)
         {
             WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Expected: Value"));
             return 0;
@@ -808,7 +814,7 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
 
     {
         style_token *EndOfAttribute = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
-        if (EndOfAttribute->Type != ';')
+        if (EndOfAttribute->Type != UIStyleToken_SemiColon)
         {
             WriteStyleErrorMessage(EndOfAttribute->LineInFile, OSMessage_Error, byte_string_literal("Expected: ';' after setting an attribute."));
             return 0;
@@ -905,7 +911,7 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize)
 
     {
         style_token *NextToken = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
-        if (NextToken->Type != '{')
+        if (NextToken->Type != UIStyleToken_OpenBrace)
         {
             WriteStyleErrorMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Expect: '{' after style header."));
             return 0;
@@ -913,9 +919,9 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize)
 
         ConsumeStyleTokens(Parser, 1);
 
-        while (NextToken->Type != '}')
+        while (NextToken->Type != UIStyleToken_CloseBrace)
         {
-            if (NextToken == '\0')
+            if (NextToken == UIStyleToken_EndOfFile)
             {
                 WriteStyleErrorMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
                 return 0;
@@ -980,7 +986,7 @@ UIStyleAttributeToString(UIStyleAttribute_Flag Flag)
     }
 }
 
-// TODO: This is still wrong, these aren't all parsing errors.
+// TODO: This is still wrong, these aren't all parsing errors.  Flags?
 
 internal void
 WriteStyleErrorMessage(u32 LineInFile, OSMessage_Severity Severity, byte_string Format, ...)

@@ -33,17 +33,20 @@ typedef enum UIStyleAttribute_Flag
 
 typedef enum UIStyleToken_Type
 {
-    // Extended ASCII... (0..255)
-
-    // Flags used when parsing values (unsure if they really need to be)
-    UIStyleToken_String      = 1 << 8,
-    UIStyleToken_Identifier  = 1 << 9,
-    UIStyleToken_Number      = 1 << 10,
-    UIStyleToken_Assignment  = 1 << 11,
-    UIStyleToken_Vector      = 1 << 12,
-    UIStyleToken_Style       = 1 << 13,
-    UIStyleToken_For         = 1 << 14,
-    UIStyleToken_EndOfFile   = 1 << 15,
+    UIStyleToken_EndOfFile   = 0,
+    UIStyleToken_Percent     = 37,
+    UIStyleToken_Comma       = 44,
+    UIStyleToken_Period      = 46,
+    UIStyleToken_SemiColon   = 59,
+    UIStyleToken_OpenBrace   = 123,
+    UIStyleToken_CloseBrace  = 125,
+    UIStyleToken_Identifier  = 256,
+    UIStyleToken_Assignment  = 257,
+    UIStyleToken_Unit        = 258,
+    UIStyleToken_String      = 259,
+    UIStyleToken_Vector      = 260,
+    UIStyleToken_Style       = 261,
+    UIStyleToken_For         = 262,
 } UIStyleToken_Type;
 
 // [Types]
@@ -83,7 +86,7 @@ typedef struct style_parser
 
 // [GLOBALS]
 
-read_only global bit_field StyleTokenValueMask = UIStyleToken_String | UIStyleToken_Number | UIStyleToken_Vector;
+read_only global bit_field StyleTokenValueMask = UIStyleToken_String | UIStyleToken_Unit | UIStyleToken_Vector;
 
 read_only global bit_field StyleTypeValidAttributesTable[] =
 {

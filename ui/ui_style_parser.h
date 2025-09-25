@@ -128,8 +128,8 @@ internal void LoadThemeFiles  (byte_string *Files, u32 FileCount, ui_style_regis
 internal style_token *CreateStyleToken   (UIStyleToken_Type Type, style_tokenizer *Tokenizer);
 internal b32          TokenizeStyleFile  (os_file *File, style_tokenizer *Tokenizer);
 internal b32          ReadString         (os_file *File, byte_string *OutString);
-internal b32          ReadVector         (os_file *File, u32 MinimumSize, u32 MaximumSize, style_token *Result);
-internal b32          ReadUnit           (os_file *File, ui_unit *Result);
+internal b32          ReadVector         (os_file *File, u32 MinimumSize, u32 MaximumSize, u32 CurrentLineInFile, style_token *Result);
+internal b32          ReadUnit           (os_file *File, u32 CurrentLineInFile, ui_unit *Result);
 
 // [Parsing]
 
@@ -151,4 +151,4 @@ internal void                  CacheStyle                     (ui_style Style, b
 // [Error Handling]
 
 internal read_only char *UIStyleAttributeToString  (UIStyleAttribute_Flag Flag);
-internal void            WriteStyleErrorMessage    (u32 LineInFile, OSMessage_Severity Severity, byte_string Format, ...);
+internal void            LogStyleParserMessage     (u32 LineInFile, OSMessage_Severity Severity, byte_string Format, ...);

@@ -2,13 +2,7 @@
 
 internal void
 LoadThemeFiles(byte_string *Files, u32 FileCount, ui_style_registery *Registery, render_handle Renderer, ui_state *UIState)
-{
-    if (!Files)
-    {
-        WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("'Files' must be a valid pointer."));
-
-        return;
-    }
+{   Assert(Files && FileCount > 0 && Registery && IsValidRenderHandle(Renderer) && UIState);
 
     style_parser    Parser    = {0};
     style_tokenizer Tokenizer = {0};
@@ -62,21 +56,21 @@ LoadThemeFiles(byte_string *Files, u32 FileCount, ui_style_registery *Registery,
   
         if (!OSFile.FullyRead)
         {
-            WriteStyleErrorMessage(0, OSMessage_Warn, byte_string_literal("File with path: %s does not exist on disk."), FileName);
+            LogStyleParserMessage(0, OSMessage_Warn, byte_string_literal("File with path: %s does not exist on disk."), FileName);
             continue;
         }
 
         b32 TokenSuccess = TokenizeStyleFile(&OSFile, &Tokenizer);
         if (!TokenSuccess)
         {
-            WriteStyleErrorMessage(0, OSMessage_Warn, byte_string_literal("Failed to tokenize file. See error(s) above."));
+            LogStyleParserMessage(0, OSMessage_Warn, byte_string_literal("Failed to tokenize file. See error(s) above."));
             continue;
         }
 
         b32 ParseSuccess = ParseStyleFile(&Parser, Tokenizer.Buffer, Tokenizer.Count, Renderer, UIState, Registery);
         if (!ParseSuccess)
         {
-            WriteStyleErrorMessage(0, OSMessage_Warn, byte_string_literal("Failed to parse file. See error(s) above."));
+            LogStyleParserMessage(0, OSMessage_Warn, byte_string_literal("Failed to parse file. See error(s) above."));
             continue;
         }
 
@@ -97,7 +91,7 @@ CreateStyleToken(UIStyleToken_Type Type, style_tokenizer *Tokenizer)
 
     if (Tokenizer->Count == Tokenizer->Capacity)
     {
-        WriteStyleErrorMessage(0, OSMessage_Fatal, byte_string_literal("TOKEN LIMIT EXCEEDED."));
+        LogStyleParserMessage(0, OSMessage_Fatal, byte_string_literal("TOKEN LIMIT EXCEEDED."));
     }
     else
     {
@@ -110,7 +104,7 @@ CreateStyleToken(UIStyleToken_Type Type, style_tokenizer *Tokenizer)
 }
 
 internal b32
-ReadUnit(os_file *File, ui_unit *Result)
+ReadUnit(os_file *File, u32 CurrentLineInFile, ui_unit *Result)
 {
     f64 Number = 0;
 
@@ -164,7 +158,8 @@ ReadUnit(os_file *File, ui_unit *Result)
                     }
                     else
                     {
-                        return 0;  // TODO: Error message?
+                        LogStyleParserMessage(CurrentLineInFile, OSMessage_Error, byte_string_literal("Percent value must be >= 0.0 AND <= 100.0"));
+                        return 0;
                     }
                 }
                 else
@@ -189,7 +184,8 @@ ReadUnit(os_file *File, ui_unit *Result)
             }
             else
             {
-                return 0;  // TODO: Error message?
+                LogStyleParserMessage(CurrentLineInFile, OSMessage_Error, byte_string_literal("Percent value must be >= 0.0 AND <= 100.0"));
+                return 0;
             }
         }
         else
@@ -231,7 +227,7 @@ ReadString(os_file *File, byte_string *OutString)
 }
 
 internal b32
-ReadVector(os_file *File, u32 MinimumSize, u32 MaximumSize, style_token *Result)
+ReadVector(os_file *File, u32 MinimumSize, u32 MaximumSize, u32 CurrentLineInFile, style_token *Result)
 {   Assert(PeekFile(File, 0) == '[');
 
     AdvanceFile(File, 1); // Skips '['
@@ -244,14 +240,14 @@ ReadVector(os_file *File, u32 MinimumSize, u32 MaximumSize, style_token *Result)
         u8 Character = PeekFile(File, 0);
         if (!IsDigit(Character))
         {
-            WriteStyleErrorMessage(Result->LineInFile, OSMessage_Error, byte_string_literal("Vectors must only contain digits."));
+            LogStyleParserMessage(Result->LineInFile, OSMessage_Error, byte_string_literal("Vectors must only contain digits."));
             return 0;
         }
 
-        b32 Success = ReadUnit(File, &Result->Vector.Values[Count++]);
+        b32 Success = ReadUnit(File, CurrentLineInFile, &Result->Vector.Values[Count++]);
         if(!Success)
         {
-            WriteStyleErrorMessage(Result->LineInFile, OSMessage_Error, byte_string_literal("Could not parse unit."));
+            LogStyleParserMessage(Result->LineInFile, OSMessage_Error, byte_string_literal("Could not parse unit."));
             return 0;
         }
 
@@ -270,7 +266,7 @@ ReadVector(os_file *File, u32 MinimumSize, u32 MaximumSize, style_token *Result)
         }
         else
         {
-            WriteStyleErrorMessage(Result->LineInFile, OSMessage_Error, byte_string_literal("Invalid character found in vector: %c"), Character);
+            LogStyleParserMessage(Result->LineInFile, OSMessage_Error, byte_string_literal("Invalid character found in vector: %c"), Character);
             return 0;
         }
     }
@@ -296,7 +292,7 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
             Success = ReadString(File, &Identifier);
             if (!Success)
             {
-                WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Could not parse string. EOF?"));
+                LogStyleParserMessage(0, OSMessage_Error, byte_string_literal("Could not parse string. EOF?"));
                 return Success;
             }
 
@@ -318,10 +314,10 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
 
         if (IsDigit(Char))
         {
-            Success = ReadUnit(File, &(CreateStyleToken(UIStyleToken_Unit, Tokenizer)->Unit));
+            Success = ReadUnit(File, Tokenizer->AtLine, &(CreateStyleToken(UIStyleToken_Unit, Tokenizer)->Unit));
             if (!Success)
             {
-                WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Failed to parse unit."));
+                LogStyleParserMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Failed to parse unit."));
                 return Success;
             }
 
@@ -351,7 +347,7 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
             }
             else
             {
-                WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Stray ':'. Did you mean := ?"));
+                LogStyleParserMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Stray ':'. Did you mean := ?"));
                 return Success;
             }
 
@@ -362,10 +358,10 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
         {
             read_only u32 MinimumVectorSize = 2;
             read_only u32 MaximumVectorSize = 4;
-            Success = ReadVector(File, MinimumVectorSize, MaximumVectorSize, CreateStyleToken(UIStyleToken_Vector, Tokenizer));
+            Success = ReadVector(File, MinimumVectorSize, MaximumVectorSize, Tokenizer->AtLine, CreateStyleToken(UIStyleToken_Vector, Tokenizer));
             if (!Success)
             {
-                WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Could not read vector. See error(s) above."));
+                LogStyleParserMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Could not read vector. See error(s) above."));
                 return Success;
             }
 
@@ -380,7 +376,7 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
             Success = ReadString(File, &String);
             if (!Success)
             {
-                WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Could not parse string. EOF?"));
+                LogStyleParserMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Could not parse string. EOF?"));
                 return Success;
             }
 
@@ -388,7 +384,7 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
 
             if (PeekFile(File, 0) != '"')
             {
-                WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Could not parse string. Invalid Characters?"));
+                LogStyleParserMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Could not parse string. Invalid Characters?"));
                 return Success;
             }
 
@@ -405,7 +401,7 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
             continue;
         }
 
-        WriteStyleErrorMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Invalid character found in file: %c"), Char);
+        LogStyleParserMessage(Tokenizer->AtLine, OSMessage_Error, byte_string_literal("Invalid character found in file: %c"), Char);
         break;
     }
 
@@ -577,7 +573,7 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
         Valid = ValidateVectorUnitType(Value->Vector, UIUnit_None, 2, 2);
         if(!Valid)
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Size must be: [Width, Height]"));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Size must be: [Width, Height]"));
             return 0;
         }
 
@@ -589,7 +585,7 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
         Valid = ValidateColor(Value->Vector);
         if (!Valid)
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Color values must be included in [0, 255]"));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Color values must be included in [0, 255]"));
             return 0;
         }
 
@@ -601,7 +597,7 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
         Valid = ValidateVectorUnitType(Value->Vector, UIUnit_Float32, 4, 0);
         if (!Valid)
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Padding must be: [Float, Float, Float, Float]"));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Padding must be: [Float, Float, Float, Float]"));
             return 0;
         }
 
@@ -613,14 +609,14 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
         Valid = (ValidateVectorUnitType(Value->Vector, UIUnit_None, 2, 2));
         if (!Valid)
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Spacing must be: [Horizontal, Vertical]"));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Spacing must be: [Horizontal, Vertical]"));
             return 0;
         }
 
         Valid = ValidateVectorUnitType(Value->Vector, UIUnit_Float32, 2, 0);
         if (!Valid)
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Spacing must be: [Float, Float]"));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Spacing must be: [Float, Float]"));
             return 0;
         }
 
@@ -647,7 +643,7 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
         Valid = ValidateColor(Value->Vector);
         if (!Valid)
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Color values must be included in [0, 255]"));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Color values must be included in [0, 255]"));
             return 0;
         }
 
@@ -664,7 +660,7 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
         Valid = ValidateVectorUnitType(Value->Vector, UIUnit_Float32, 4, 0);
         if(!Valid)
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Corner Radius must be: [Float, Float, Float, Float]"));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Corner Radius must be: [Float, Float, Float, Float]"));
             return 0;
         }
 
@@ -697,12 +693,12 @@ CacheStyle(ui_style Style, byte_string Name, render_handle Renderer, ui_state *U
 
                 if (!Style.Font.Ref)
                 {
-                    WriteStyleErrorMessage(0, OSMessage_Warn, byte_string_literal("Could not load font. Font does not exist on the system or the size is ridiculous."));
+                    LogStyleParserMessage(0, OSMessage_Warn, byte_string_literal("Could not load font. Font does not exist on the system or the size is ridiculous."));
                 }
             }
             else
             {
-                WriteStyleErrorMessage(0, OSMessage_Warn, byte_string_literal("When specifying a font name, you must also speicify a font size."));
+                LogStyleParserMessage(0, OSMessage_Warn, byte_string_literal("When specifying a font name, you must also speicify a font size."));
             }
         }
         
@@ -731,7 +727,7 @@ CacheStyle(ui_style Style, byte_string Name, render_handle Renderer, ui_state *U
     }
     else
     {
-        WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Style name exceeds maximum length of %u"), ThemeNameLength);
+        LogStyleParserMessage(0, OSMessage_Error, byte_string_literal("Style name exceeds maximum length of %u"), ThemeNameLength);
     }
 }
 
@@ -763,14 +759,14 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
         style_token *AttributeName = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (AttributeName->Type != UIStyleToken_Identifier)
         {
-            WriteStyleErrorMessage(AttributeName->LineInFile, OSMessage_Error, byte_string_literal("Expected: Attribute Name"));
+            LogStyleParserMessage(AttributeName->LineInFile, OSMessage_Error, byte_string_literal("Expected: Attribute Name"));
             return 0;
         }
 
         Flag = GetStyleAttributeFlag(AttributeName->Identifier);
         if (Flag == UIStyleAttribute_None)
         {
-            WriteStyleErrorMessage(AttributeName->LineInFile, OSMessage_Error, byte_string_literal("Invalid: Attribute Name"));
+            LogStyleParserMessage(AttributeName->LineInFile, OSMessage_Error, byte_string_literal("Invalid: Attribute Name"));
             return 0;
         }
 
@@ -781,7 +777,7 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
         style_token *Assignment = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (Assignment->Type != UIStyleToken_Assignment)
         {
-            WriteStyleErrorMessage(Assignment->LineInFile, OSMessage_Error, byte_string_literal("Expected: Assignment"));
+            LogStyleParserMessage(Assignment->LineInFile, OSMessage_Error, byte_string_literal("Expected: Assignment"));
             return 0;
         }
 
@@ -792,19 +788,19 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
         style_token *Value = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (Value->Type != UIStyleToken_Unit && Value->Type != UIStyleToken_String && Value->Type != UIStyleToken_Vector)
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Expected: Value"));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Expected: Value"));
             return 0;
         }
 
         if (!(Flag & StyleTypeValidAttributesTable[Parser->StyleType]))
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid attribute supplied to a theme. Invalid: %s"), UIStyleAttributeToString(Flag));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid attribute supplied to a theme. Invalid: %s"), UIStyleAttributeToString(Flag));
             return 0;
         }
 
         if (!IsAttributeFormattedCorrectly(Value->Type, Flag))
         {
-            WriteStyleErrorMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting for %s"), UIStyleAttributeToString(Flag));
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting for %s"), UIStyleAttributeToString(Flag));
             return 0;
         }
 
@@ -821,7 +817,7 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
         style_token *EndOfAttribute = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (EndOfAttribute->Type != UIStyleToken_SemiColon)
         {
-            WriteStyleErrorMessage(EndOfAttribute->LineInFile, OSMessage_Error, byte_string_literal("Expected: ';' after setting an attribute."));
+            LogStyleParserMessage(EndOfAttribute->LineInFile, OSMessage_Error, byte_string_literal("Expected: ';' after setting an attribute."));
             return 0;
         }
 
@@ -838,7 +834,7 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
         style_token *Style = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (Style->Type != UIStyleToken_Style)
         {
-            WriteStyleErrorMessage(Style->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'Style'"));
+            LogStyleParserMessage(Style->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'Style'"));
             return 0;
         }
 
@@ -849,14 +845,14 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
         style_token *Name = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (Name->Type != UIStyleToken_String)
         {
-            WriteStyleErrorMessage(Name->LineInFile, OSMessage_Error, byte_string_literal("Expected: '\"style_name\""));
+            LogStyleParserMessage(Name->LineInFile, OSMessage_Error, byte_string_literal("Expected: '\"style_name\""));
             return 0;
         }
 
         ui_style_name CachedName = UIGetCachedName(Name->Identifier, Registery);
         if (IsValidByteString(CachedName.Value))
         {
-            WriteStyleErrorMessage(Name->LineInFile, OSMessage_Error, byte_string_literal("A style with the same name already exists."));
+            LogStyleParserMessage(Name->LineInFile, OSMessage_Error, byte_string_literal("A style with the same name already exists."));
             return 0;
         }
 
@@ -869,7 +865,7 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
         style_token *For = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (For->Type != UIStyleToken_For)
         {
-            WriteStyleErrorMessage(For->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'For'"));
+            LogStyleParserMessage(For->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'For'"));
             return 0;
         }
 
@@ -880,7 +876,7 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
         style_token *Type = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (Type->Type != UIStyleToken_Identifier)
         {
-            WriteStyleErrorMessage(0, OSMessage_Error, byte_string_literal("Expected: 'Type'"));
+            LogStyleParserMessage(0, OSMessage_Error, byte_string_literal("Expected: 'Type'"));
             return 0;
         }
 
@@ -907,7 +903,7 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
         }
         else
         {
-            WriteStyleErrorMessage(Type->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'Type'"));
+            LogStyleParserMessage(Type->LineInFile, OSMessage_Error, byte_string_literal("Expected: 'Type'"));
             return 0;
         }
 
@@ -918,7 +914,7 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
         style_token *NextToken = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (NextToken->Type != UIStyleToken_OpenBrace)
         {
-            WriteStyleErrorMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Expect: '{' after style header."));
+            LogStyleParserMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Expect: '{' after style header."));
             return 0;
         }
 
@@ -928,13 +924,13 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
         {
             if (NextToken == UIStyleToken_EndOfFile)
             {
-                WriteStyleErrorMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
+                LogStyleParserMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
                 return 0;
             }
 
             if (!ParseStyleAttribute(Parser, Tokens, TokenBufferSize))
             {
-                WriteStyleErrorMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
+                LogStyleParserMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
                 return 0;
             }
 
@@ -950,6 +946,8 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
 internal b32
 ParseStyleFile(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize, render_handle Renderer, ui_state *UIState, ui_style_registery *Registery)
 {
+    u32 StyleCount = 0;
+
     while (PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0)->Type != UIStyleToken_EndOfFile)
     {
         if (!ParseStyleHeader(Parser, Tokens, TokenBufferSize, Registery))
@@ -958,10 +956,16 @@ ParseStyleFile(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize, r
         }
 
         CacheStyle(Parser->Style, Parser->StyleName, Renderer, UIState, Registery);
+        ++StyleCount;
 
         Parser->StyleName = ByteString(0, 0);
         Parser->Style     = (ui_style){ 0 };
         Parser->StyleType = UINode_None;
+    }
+
+    if(StyleCount == 0)
+    { 
+        LogStyleParserMessage(0, OSMessage_Warn, byte_string_literal("File contains no styles."));
     }
 
     return 1;
@@ -991,19 +995,25 @@ UIStyleAttributeToString(UIStyleAttribute_Flag Flag)
     }
 }
 
-// TODO: This is still wrong, these aren't all parsing errors.  Flags?
-
 internal void
-WriteStyleErrorMessage(u32 LineInFile, OSMessage_Severity Severity, byte_string Format, ...)
+LogStyleParserMessage(u32 LineInFile, OSMessage_Severity Severity, byte_string Format, ...)
 {
     va_list Args;
     __crt_va_start(Args, Format);
     __va_start(&Args, Format);
 
-    u8  Buffer[Kilobyte(2)];
-
+    u8 Buffer[Kilobyte(4)];
     byte_string ErrorString = ByteString(Buffer, 0);
-    ErrorString.Size  = snprintf ((char *) Buffer, sizeof(Buffer), "[Parsing Error: Line=%u] -> ", LineInFile);
+
+    if (LineInFile > 0)
+    {
+        ErrorString.Size = snprintf((char *)Buffer, sizeof(Buffer), "[Error At Line %u] -> ", LineInFile);
+    }
+    else
+    {
+        ErrorString.Size = snprintf((char *)Buffer, sizeof(Buffer), "[Error] -> ");
+    }
+
     ErrorString.Size += vsnprintf((char *)(Buffer + ErrorString.Size), sizeof(Buffer), (char *)Format.String, Args);
 
     OSLogMessage(ErrorString, Severity);

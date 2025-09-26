@@ -16,6 +16,25 @@
 
 // [Enums]
 
+typedef enum UIStyleToken_Type
+{
+    UIStyleToken_EndOfFile   = 0,
+    UIStyleToken_Percent     = 37,
+    UIStyleToken_Comma       = 44,
+    UIStyleToken_Period      = 46,
+    UIStyleToken_SemiColon   = 59,
+    UIStyleToken_AtSymbol    = 64,
+    UIStyleToken_OpenBrace   = 123,
+    UIStyleToken_CloseBrace  = 125,
+    UIStyleToken_Identifier  = 256,
+    UIStyleToken_Assignment  = 257,
+    UIStyleToken_Unit        = 258,
+    UIStyleToken_String      = 259,
+    UIStyleToken_Vector      = 260,
+    UIStyleToken_Style       = 261,
+    UIStyleToken_For         = 262,
+} UIStyleToken_Type;
+
 typedef enum UIStyleAttribute_Flag
 {
     UIStyleAttribute_None         = 0,
@@ -31,23 +50,12 @@ typedef enum UIStyleAttribute_Flag
     UIStyleAttribute_CornerRadius = 1 << 9,
 } UIStyleAttribute_Flag;
 
-typedef enum UIStyleToken_Type
+typedef enum UICacheStyle_Flag
 {
-    UIStyleToken_EndOfFile   = 0,
-    UIStyleToken_Percent     = 37,
-    UIStyleToken_Comma       = 44,
-    UIStyleToken_Period      = 46,
-    UIStyleToken_SemiColon   = 59,
-    UIStyleToken_OpenBrace   = 123,
-    UIStyleToken_CloseBrace  = 125,
-    UIStyleToken_Identifier  = 256,
-    UIStyleToken_Assignment  = 257,
-    UIStyleToken_Unit        = 258,
-    UIStyleToken_String      = 259,
-    UIStyleToken_Vector      = 260,
-    UIStyleToken_Style       = 261,
-    UIStyleToken_For         = 262,
-} UIStyleToken_Type;
+    UICacheStyle_NoFlag          = 0,
+    UICacheStyle_BindClickEffect = 1 << 0,
+    UICacheStyle_BindHoverEffect = 1 << 1,
+} UICacheStyle_Flag;
 
 // [Types]
 
@@ -73,18 +81,22 @@ typedef struct style_tokenizer
     u32           AtLine;
 } style_tokenizer;
 
-// TODO: Maybe separate this into a tokenizer and a parser.
 typedef struct style_parser
 {
-    u32                 TokenIndex;
-    byte_string         StyleName;
-    UINode_Type         StyleType;
-    ui_style            Style;
+    u32         TokenIndex;
+    byte_string StyleName;
+    UINode_Type StyleType;
+
+    ui_style  BaseStyle;
+    ui_style  HoverStyle;
+    ui_style  ClickStyle;
+    ui_style *EffectPointer;
+    b32       HasBaseStyle;
+    b32       HasHoverStyle;
+    b32       HasClickStyle;
 } style_parser;
 
 // [GLOBALS]
-
-read_only global bit_field StyleTokenValueMask = UIStyleToken_String | UIStyleToken_Unit | UIStyleToken_Vector;
 
 read_only global bit_field StyleTypeValidAttributesTable[] =
 {
@@ -136,9 +148,9 @@ internal b32          ReadUnit           (os_file *File, u32 CurrentLineInFile, 
 internal void          ConsumeStyleTokens  (style_parser *Parser, u32 Count);
 internal style_token * PeekStyleToken      (style_token *Tokens, u32 TokenBufferSize, u32 Index, u32 Offset);
 
-internal b32 ParseStyleFile        (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize, render_handle Renderer, ui_state *UIState, ui_style_registery *Registery);
-internal b32 ParseStyleAttribute   (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize);
-internal b32 ParseStyleHeader      (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize, ui_style_registery *Registery);
+internal b32 ParseStyleFile       (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize, render_handle Renderer, ui_state *UIState, ui_style_registery *Registery);
+internal b32 ParseStyleAttribute  (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize);
+internal b32 ParseStyleHeader     (style_parser *Parser, style_token *Tokens, u32 TokenBufferSize, ui_style_registery *Registery);
 
 internal b32      ValidateColor      (vec4_unit Vec);
 internal ui_color ToNormalizedColor  (vec4_unit Vec);
@@ -146,7 +158,9 @@ internal ui_color ToNormalizedColor  (vec4_unit Vec);
 internal b32                   SaveStyleAttribute             (UIStyleAttribute_Flag Attribute, style_token *Value, style_parser *Parser);
 internal UIStyleAttribute_Flag GetStyleAttributeFlag          (byte_string Identifier);
 internal b32                   IsAttributeFormattedCorrectly  (UIStyleToken_Type TokenType, UIStyleAttribute_Flag AttributeFlag);
-internal void                  CacheStyle                     (ui_style Style, byte_string Name, render_handle Renderer, ui_state *UIState, ui_style_registery *Registery);
+internal ui_cached_style      *CacheStyle                     (ui_style Style, byte_string Name, bit_field Flags, ui_cached_style *BaseStyle, render_handle Renderer, ui_state *UIState, ui_style_registery *Registery);
+internal ui_cached_style      *CreateCachedStyle              (ui_style Style, ui_style_registery *Registery);
+internal ui_style_name        *CreateCachedStyleName          (byte_string Name, ui_cached_style *CachedStyle, ui_style_registery *Registery);
 
 // [Error Handling]
 

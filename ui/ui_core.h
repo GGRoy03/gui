@@ -2,20 +2,33 @@
 
 typedef enum UIStyleNode_Flag
 {
-    UIStyleNode_NoFlag       = 0,
-    UIStyleNode_DirtySubtree = 1 << 0,
-    UIStyleNode_DirtySpine   = 1 << 1,
+    UIStyleNode_NoFlag            = 0,
+    UIStyleNode_HasSize           = 1 << 0,
+    UIStyleNode_HasColor          = 1 << 1,
+    UIStyleNode_HasPadding        = 1 << 2,
+    UIStyleNode_HasSpacing        = 1 << 3,
+    UIStyleNode_HasFontName       = 1 << 4,
+    UIStyleNode_HasFontSize       = 1 << 5,
+    UIStyleNode_HasSoftness       = 1 << 6,
+    UIStyleNode_HasBorderColor    = 1 << 7,
+    UIStyleNode_HasBorderWidth    = 1 << 8,
+    UIStyleNode_HasCornerRadius   = 1 << 9,
+    UIStyleNode_DirtySubtree      = 1 << 10,
+    UIStyleNode_DirtySpine        = 1 << 11,
+    UIStyleNode_StyleSetAtRuntime = 1 << 12,
 } UIStyleNode_Flag;
 
-typedef enum UILayoutBox_Flag
+typedef enum UILayoutNode_Flag
 {
-    UILayoutBox_NoFlag                  = 0,
-    UILayoutBox_PlaceChildrenVertically = 1 << 0,
-    UILayoutBox_DrawBackground          = 1 << 1,
-    UILayoutBox_DrawBorders             = 1 << 2,
-    UILayoutBox_DrawText                = 1 << 3,
-    UILayoutBox_HasClip                 = 1 << 4,
-} UILayoutBox_Flag;
+    UILayoutNode_NoFlag                  = 0,
+    UILayoutNode_PlaceChildrenVertically = 1 << 0,
+    UILayoutNode_DrawBackground          = 1 << 1,
+    UILayoutNode_DrawBorders             = 1 << 2,
+    UILayoutNode_DrawText                = 1 << 3,
+    UILayoutNode_HasClip                 = 1 << 4,
+    UILayoutNode_IsHovered               = 1 << 5,
+    UILayoutNode_IsClicked               = 1 << 6,
+} UILayoutNode_Flag;
 
 typedef enum UITree_Type
 {
@@ -45,6 +58,7 @@ typedef enum UIUnit_Type
 typedef struct ui_node      ui_node;
 typedef struct ui_font      ui_font;
 typedef struct ui_text      ui_text;
+typedef struct ui_style     ui_style;
 typedef struct ui_character ui_character;
 typedef struct ui_pipeline  ui_pipeline;
 
@@ -127,8 +141,8 @@ typedef struct ui_rect
 typedef struct ui_layout_box
 {
     // Output
-    f32 ClientX;
-    f32 ClientY;
+    f32 FinalX;
+    f32 FinalY;
     f32 FinalWidth;
     f32 FinalHeight;
 
@@ -175,7 +189,12 @@ typedef struct ui_style
         byte_string Name;
     } Font;
 
+    // Effects
+    ui_style *ClickOverride;
+    ui_style *HoverOverride;
+
     // Misc
+    u32       Version;
     bit_field Flags;
 } ui_style;
 
@@ -294,6 +313,8 @@ internal ui_padding       UIPadding       (f32 Left, f32 Top, f32 Right, f32 Bot
 internal ui_corner_radius UICornerRadius  (f32 TopLeft, f32 TopRight, f32 BotLeft, f32 BotRight);
 internal vec2_unit        Vec2Unit        (ui_unit U0, ui_unit U1);
 
+internal b32 IsNormalizedColor(ui_color Color);
+
 // [Components]
 
 internal void UIWindow  (ui_style_name StyleName, ui_pipeline *Pipeline);
@@ -309,6 +330,8 @@ internal ui_cached_style * UIGetStyleSentinel  (byte_string   Name, ui_style_reg
 internal ui_style_name     UIGetCachedName     (byte_string   Name, ui_style_registery *Registery);
 internal ui_style          UIGetStyle          (ui_style_name Name, ui_style_registery *Registery);
 
+internal void UISetColor(ui_node *Node, ui_color Color);
+
 // [Tree]
 
 internal ui_tree   UIAllocateTree                (ui_tree_params Params);
@@ -317,11 +340,12 @@ internal void      UIPushParentNode              (void *Node, ui_tree *Tree);
 internal ui_node * UIGetParentNode               (ui_tree *Tree);
 internal ui_node * UIGetNextNode                 (ui_tree *Tree, UINode_Type Type);
 internal ui_node * UIGetLayoutNodeFromStyleNode  (ui_node *Node, ui_pipeline *Pipeline);
+internal ui_node * UIGetStyleNodeFromLayoutNode  (ui_node *Node, ui_pipeline *Pipeline);
 
 // [Bindings]
 
 internal void UISetTextBinding           (ui_pipeline *Pipeline, ui_character *Characters, u32 Count, ui_font *Font, ui_node *Node);
-internal void UISetFlagBinding           (ui_node *Node, b32 Set, UILayoutBox_Flag Flag, ui_pipeline *Pipeline);
+internal void UISetFlagBinding           (ui_node *Node, b32 Set, UILayoutNode_Flag Flag, ui_pipeline *Pipeline);
 internal void UISetClickCallbackBinding  (ui_node *Node, ui_click_callback *Callback, ui_pipeline *Pipeline);
 
 // [Pipeline]

@@ -23,6 +23,8 @@ RenderHandleMatches(render_handle H1, render_handle H2)
 
 // [Internal API]
 
+// WARN: UNUSED
+
 internal size_t 
 EstimateUIPassFootprint(render_pass_ui_stats Stats)
 {
@@ -47,6 +49,8 @@ EstimateUIPassFootprint(render_pass_ui_stats Stats)
 }
 
 // [Core API]
+
+// WARN: NO-OP
 
 internal void
 BeginRendereringContext(render_pass_list *List)

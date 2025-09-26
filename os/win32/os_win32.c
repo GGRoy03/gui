@@ -215,11 +215,15 @@ OSLogMessage(byte_string ANSISequence, OSMessage_Severity Severity)
     case OSMessage_Info:
     {
         OSWin32SetConsoleColor(byte_string_literal("\x1b[32m"), FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+        OSWin32WriteToConsole(byte_string_literal("[INFO] -> "));
+        OSWin32SetConsoleColor(byte_string_literal("\x1b[32m"), FOREGROUND_GREEN | FOREGROUND_INTENSITY);
         OSWin32WriteToConsole(ANSISequence);
     } break;
 
     case OSMessage_Warn:
     {
+        OSWin32SetConsoleColor(byte_string_literal("\x1b[33m"), FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+        OSWin32WriteToConsole(byte_string_literal("[WARN] -> "));
         OSWin32SetConsoleColor(byte_string_literal("\x1b[33m"), FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
         OSWin32WriteToConsole(ANSISequence);
     } break;
@@ -227,11 +231,15 @@ OSLogMessage(byte_string ANSISequence, OSMessage_Severity Severity)
     case OSMessage_Error:
     {
         OSWin32SetConsoleColor(byte_string_literal("\x1b[31m"), FOREGROUND_RED | FOREGROUND_INTENSITY);
+        OSWin32WriteToConsole(byte_string_literal("[ERROR] -> "));
+        OSWin32SetConsoleColor(byte_string_literal("\x1b[31m"), FOREGROUND_RED | FOREGROUND_INTENSITY);
         OSWin32WriteToConsole(ANSISequence);
     } break;
 
     case OSMessage_Fatal:
     {
+        OSWin32SetConsoleColor(byte_string_literal("\x1b[97;41m"), FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY | BACKGROUND_RED);
+        OSWin32WriteToConsole(byte_string_literal("[FATAL] -> "));
         OSWin32SetConsoleColor(byte_string_literal("\x1b[97;41m"), FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY | BACKGROUND_RED);
         OSWin32WriteToConsole(ANSISequence);
         OSAbort(1);

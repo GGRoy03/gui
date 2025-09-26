@@ -35,6 +35,17 @@ Vec2Unit(ui_unit U0, ui_unit U1)
     return Result;
 }
 
+internal b32
+IsNormalizedColor(ui_color Color)
+{
+    b32 Result = (Color.R >= 0.f && Color.R <= 1.f) &&
+                 (Color.G >= 0.f && Color.G <= 1.f) &&
+                 (Color.B >= 0.f && Color.B <= 1.f) &&
+                 (Color.A >= 0.f && Color.A <= 1.f);
+
+    return Result;
+}
+
 // [Components]
 
 // NOTE: Temporary global ID tracker. Obviously, this is not good.
@@ -57,11 +68,11 @@ UIWindow(ui_style_name StyleName, ui_pipeline *Pipeline)
 
         if(Node->Style.BorderWidth > 0)
         {
-            UISetFlagBinding(Node, 1, UILayoutBox_DrawBorders, Pipeline);
+            UISetFlagBinding(Node, 1, UILayoutNode_DrawBorders, Pipeline);
         }
 
-        UISetFlagBinding(Node, 1, UILayoutBox_DrawBackground         , Pipeline);
-        UISetFlagBinding(Node, 1, UILayoutBox_PlaceChildrenVertically, Pipeline);
+        UISetFlagBinding(Node, 1, UILayoutNode_DrawBackground         , Pipeline);
+        UISetFlagBinding(Node, 1, UILayoutNode_PlaceChildrenVertically, Pipeline);
     }
 }
 
@@ -81,9 +92,9 @@ UIButton(ui_style_name StyleName, ui_click_callback *Callback, ui_pipeline *Pipe
         {
             if (Node->Style.BorderWidth > 0)
             {
-                UISetFlagBinding(Node, 1, UILayoutBox_DrawBorders, Pipeline);
+                UISetFlagBinding(Node, 1, UILayoutNode_DrawBorders, Pipeline);
             }
-            UISetFlagBinding(Node, 1, UILayoutBox_DrawBackground, Pipeline);
+            UISetFlagBinding(Node, 1, UILayoutNode_DrawBackground, Pipeline);
         }
 
         // Callbacks (What about hovers?)
@@ -112,12 +123,12 @@ UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
         {
             if (Node->Style.BorderWidth > 0)
             {
-                UISetFlagBinding(Node, 1, UILayoutBox_DrawBorders, Pipeline);
+                UISetFlagBinding(Node, 1, UILayoutNode_DrawBorders, Pipeline);
             }
 
             if (Text.Size > 0)
             {
-                UISetFlagBinding(Node, 1, UILayoutBox_DrawText, Pipeline);
+                UISetFlagBinding(Node, 1, UILayoutNode_DrawText, Pipeline);
             }
         }
 
@@ -176,8 +187,6 @@ UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
     }
 }
 
-// BUG: Doesn't act as the parent?
-
 internal void
 UIHeader(ui_style_name StyleName, ui_pipeline *Pipeline)
 {
@@ -194,7 +203,7 @@ UIHeader(ui_style_name StyleName, ui_pipeline *Pipeline)
 
         if (Node->Style.BorderWidth > 0)
         {
-            UISetFlagBinding(Node, 1, UILayoutBox_DrawBorders, Pipeline);
+            UISetFlagBinding(Node, 1, UILayoutNode_DrawBorders, Pipeline);
         }
     }
 }
@@ -246,18 +255,40 @@ UIGetStyle(ui_style_name Name, ui_style_registery *Registery)
     if (Registery)
     {
         ui_cached_style *Sentinel = UIGetStyleSentinel(Name.Value, Registery);
-        for (ui_cached_style *CachedStyle = Sentinel->Next; CachedStyle != 0; CachedStyle = CachedStyle->Next)
+        if (Sentinel)
         {
-            byte_string CachedString = Registery->CachedName[CachedStyle->Index].Value;
-            if (Name.Value.String == CachedString.String)
+            for (ui_cached_style *CachedStyle = Sentinel->Next; CachedStyle != 0; CachedStyle = CachedStyle->Next)
             {
-                Result = CachedStyle->Style;
-                break;
+                byte_string CachedString = Registery->CachedName[CachedStyle->Index].Value;
+                if (Name.Value.String == CachedString.String)
+                {
+                    Result = CachedStyle->Style;
+                    break;
+                }
             }
+        }
+        else
+        {
+            OSLogMessage(byte_string_literal("Style does not exist."), OSMessage_Warn);
         }
     }
 
     return Result;
+}
+
+internal void
+UISetColor(ui_node *Node, ui_color Color)
+{
+    b32 ValidColor = IsNormalizedColor(Color);
+    if (ValidColor)
+    {
+        Node->Style.Color = Color;
+        SetFlag(Node->Style.Flags, UIStyleNode_StyleSetAtRuntime);
+    }
+    else
+    {
+        OSLogMessage(byte_string_literal("Color given to 'UISetColor' is not normalized."), OSMessage_Warn);
+    }
 }
 
 // [Tree]
@@ -320,6 +351,18 @@ UIGetLayoutNodeFromStyleNode(ui_node *Node, ui_pipeline *Pipeline)
     if (Node->Id < Pipeline->LayoutTree.NodeCapacity)
     {
         Result = Pipeline->LayoutTree.Nodes + Node->Id;
+    }
+
+    return Result;
+}
+
+internal ui_node *
+UIGetStyleNodeFromLayoutNode(ui_node *Node, ui_pipeline *Pipeline)
+{
+    ui_node *Result = 0;
+    if (Node->Id < Pipeline->StyleTree.NodeCapacity)
+    {
+        Result = Pipeline->StyleTree.Nodes + Node->Id;
     }
 
     return Result;
@@ -412,8 +455,8 @@ UISetTextBinding(ui_pipeline *Pipeline, ui_character *Characters, u32 Count, ui_
 }
 
 internal void
-UISetFlagBinding(ui_node *Node, b32 Set, UILayoutBox_Flag Flag, ui_pipeline *Pipeline)
-{   Assert((Flag >= UILayoutBox_NoFlag && Flag <= UILayoutBox_HasClip));
+UISetFlagBinding(ui_node *Node, b32 Set, UILayoutNode_Flag Flag, ui_pipeline *Pipeline)
+{   Assert((Flag >= UILayoutNode_NoFlag && Flag <= UILayoutNode_HasClip));
 
     ui_node *LNode = UIGetLayoutNodeFromStyleNode(Node, Pipeline);
     if(LNode)
@@ -576,14 +619,12 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
                 Node->Layout.ClickCallback(Node, Pipeline);
             }
 
-            // BUG: At the start of the application, I think the mouse is not positioned correctly.
-            // Which causes unwanted hits.
-            // OSLogMessage(byte_string_literal("Something has been hit."), OSMessage_Info);
-        }
+            if (MouseClicked)
+            {
+                SetFlag(Node->Layout.Flags, UILayoutNode_IsClicked);
+            }
 
-        if (MouseClicked)
-        {
-            OSLogMessage(byte_string_literal("Mouse Is Clicked."), OSMessage_Info);
+            SetFlag(Node->Layout.Flags, UILayoutNode_IsHovered);
         }
     }
 
@@ -670,15 +711,15 @@ UIPipelineTopDownLayout(ui_pipeline *Pipeline)
                 f32 AvHeight   = Box->FinalHeight - (Box->Padding.Top  + Box->Padding.Bot);
                 f32 UsedWidth  = 0;
                 f32 UsedHeight = 0;
-                f32 BasePosX   = Box->ClientX + Box->Padding.Left;
-                f32 BasePosY   = Box->ClientY + Box->Padding.Top;
+                f32 BasePosX   = Box->FinalX + Box->Padding.Left;
+                f32 BasePosY   = Box->FinalY + Box->Padding.Top;
 
                 {
 
                     for (ui_node *ChildNode = Current->First; (ChildNode != 0 && UsedWidth <= AvWidth); ChildNode = ChildNode->Next)
                     {
-                        ChildNode->Layout.ClientX = BasePosX + UsedWidth;
-                        ChildNode->Layout.ClientY = BasePosY + UsedHeight;
+                        ChildNode->Layout.FinalX = BasePosX + UsedWidth;
+                        ChildNode->Layout.FinalY = BasePosY + UsedHeight;
 
                         ui_layout_box *ChildBox = &ChildNode->Layout;
 
@@ -715,7 +756,7 @@ UIPipelineTopDownLayout(ui_pipeline *Pipeline)
                             ChildBox->FinalHeight = Height;
                         }
 
-                        if (Box->Flags & UILayoutBox_PlaceChildrenVertically)
+                        if (Box->Flags & UILayoutNode_PlaceChildrenVertically)
                         {
                             UsedHeight += Height + Box->Spacing.Vertical;
                         }
@@ -732,7 +773,7 @@ UIPipelineTopDownLayout(ui_pipeline *Pipeline)
                 // TODO: Text wrapping and stuff.
                 // TODO: Text Alignment.
                 {
-                    if (Box->Flags & UILayoutBox_DrawText)
+                    if (Box->Flags & UILayoutNode_DrawText)
                     {
                         ui_text *Text    = Box->Text;
                         vec2_f32 TextPos = Vec2F32(BasePosX, BasePosY);
@@ -771,7 +812,7 @@ UIPipelineHitTest(ui_pipeline *Pipeline, vec2_f32 MousePosition, ui_node *LRoot)
 {
     ui_layout_box *Box = &LRoot->Layout;
 
-    rect_f32 BoundingBox = RectF32(Box->ClientX, Box->ClientY, Box->Width.Float32, Box->Height.Float32);
+    rect_f32 BoundingBox = RectF32(Box->FinalX, Box->FinalY, Box->Width.Float32, Box->Height.Float32);
     if (IsPointInRect(BoundingBox, MousePosition))
     {
         for (ui_node *Child = LRoot->Last; Child != 0; Child = Child->Prev)
@@ -793,8 +834,7 @@ UIPipelineHitTest(ui_pipeline *Pipeline, vec2_f32 MousePosition, ui_node *LRoot)
 internal void
 UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot, ui_node *LRoot)
 {
-    ui_style      *Style = &SRoot->Style;
-    ui_layout_box *Box   = &LRoot->Layout;
+    ui_layout_box *Box = &LRoot->Layout;
 
     render_batch_list     *List      = 0;
     render_pass_params_ui *UIParams  = &Pass->Params.UI.Params;
@@ -805,7 +845,7 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
         b32 CanMerge = 1;
         if(Node)
         {
-            if(HasFlag(Box->Flags, UILayoutBox_DrawText))
+            if(HasFlag(Box->Flags, UILayoutNode_DrawText))
             {
                 Assert(Box->Text);
                 NewParams.AtlasTextureSize = Box->Text->AtlasTextureSize;
@@ -837,27 +877,72 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
         List         = &Node->BatchList;
     }
 
-    if (HasFlag(Box->Flags, UILayoutBox_DrawBackground))
+    ui_style *Style  = &SRoot->Style;
+    {
+        if (HasFlag(Box->Flags, UILayoutNode_IsClicked))
+        {
+            ClearFlag(Box->Flags, UILayoutNode_IsClicked);
+
+            ui_style *Click = Style->ClickOverride;
+            if (Style->ClickOverride && Click->Version != Style->Version)
+            {
+                if (!HasFlag(Click->Flags, UIStyleNode_HasColor)) Click->Color = Style->Color;
+
+                Click->Version = Style->Version;
+            }
+
+            if (Click)
+            {
+                Style = Click;
+            }
+
+            goto BeginDraw;
+        }
+
+        if (HasFlag(Box->Flags, UILayoutNode_IsHovered))
+        {
+            ClearFlag(Box->Flags, UILayoutNode_IsHovered);
+
+            ui_style *Hover = Style->HoverOverride;
+            if (Hover && Hover->Version != Style->Version)
+            {
+                if (!HasFlag(Hover->Flags, UIStyleNode_HasColor)) Hover->Color = Style->Color;
+
+                Hover->Version = Style->Version;
+            }
+
+            if (Hover)
+            {
+                Style = Hover;
+            }
+
+            goto BeginDraw;
+        }
+    }
+
+    BeginDraw:
+
+    if (HasFlag(Box->Flags, UILayoutNode_DrawBackground))
     {
         ui_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);  
-        Rect->RectBounds  = RectF32(Box->ClientX, Box->ClientY, Box->FinalWidth, Box->FinalHeight);
+        Rect->RectBounds  = RectF32(Box->FinalX, Box->FinalY, Box->FinalWidth, Box->FinalHeight);
         Rect->Color       = Style->Color;
         Rect->CornerRadii = Style->CornerRadius;
         Rect->Softness    = Style->Softness;
         
     }
 
-    if (HasFlag(Box->Flags, UILayoutBox_DrawBorders))
+    if (HasFlag(Box->Flags, UILayoutNode_DrawBorders))
     {
         ui_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);
-        Rect->RectBounds  = RectF32(Box->ClientX, Box->ClientY, Box->FinalWidth, Box->FinalHeight);
+        Rect->RectBounds  = RectF32(Box->FinalX, Box->FinalY, Box->FinalWidth, Box->FinalHeight);
         Rect->Color       = Style->BorderColor;
         Rect->CornerRadii = Style->CornerRadius;
-        Rect->BorderWidth = (f32)Style->BorderWidth;
+        Rect->BorderWidth = Style->BorderWidth;
         Rect->Softness    = Style->Softness;
     }
 
-    if (HasFlag(Box->Flags, UILayoutBox_DrawText))
+    if (HasFlag(Box->Flags, UILayoutNode_DrawText))
     {
         for (u32 Idx = 0; Idx < Box->Text->Size; Idx++)
         {

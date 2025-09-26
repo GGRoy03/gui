@@ -393,7 +393,7 @@ TokenizeStyleFile(os_file *File, style_tokenizer *Tokenizer)
             continue;
         }
 
-        if(Char == '{' || Char == '}' || Char == ';' || Char == '.' || Char == ',' || Char == '%')
+        if(Char == '{' || Char == '}' || Char == ';' || Char == '.' || Char == ',' || Char == '%' || Char == '@')
         {
             AdvanceFile(File, 1);
             CreateStyleToken((UIStyleToken_Type)Char, Tokenizer);
@@ -571,13 +571,15 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
     case UIStyleAttribute_Size:
     {
         Valid = ValidateVectorUnitType(Value->Vector, UIUnit_None, 2, 2);
-        if(!Valid)
+        if (!Valid)
         {
             LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Size must be: [Width, Height]"));
             return 0;
         }
 
-        Parser->Style.Size = Vec2Unit(Value->Vector.X, Value->Vector.Y);
+        Parser->EffectPointer->Size = Vec2Unit(Value->Vector.X, Value->Vector.Y);
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasSize);
     } break;
 
     case UIStyleAttribute_Color:
@@ -589,7 +591,9 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
             return 0;
         }
 
-        Parser->Style.Color = ToNormalizedColor(Value->Vector);
+        Parser->EffectPointer->Color = ToNormalizedColor(Value->Vector);
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasColor);
     } break;
 
     case UIStyleAttribute_Padding:
@@ -601,7 +605,9 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
             return 0;
         }
 
-        Parser->Style.Padding = UIPadding(Value->Vector.X.Float32, Value->Vector.Y.Float32, Value->Vector.Z.Float32, Value->Vector.W.Float32);
+        Parser->EffectPointer->Padding = UIPadding(Value->Vector.X.Float32, Value->Vector.Y.Float32, Value->Vector.Z.Float32, Value->Vector.W.Float32);
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasPadding);
     } break;
 
     case UIStyleAttribute_Spacing:
@@ -620,22 +626,30 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
             return 0;
         }
 
-        Parser->Style.Spacing = UISpacing(Value->Vector.X.Float32, Value->Vector.Y.Float32);
+        Parser->EffectPointer->Spacing = UISpacing(Value->Vector.X.Float32, Value->Vector.Y.Float32);
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasSpacing);
     } break;
 
     case UIStyleAttribute_FontSize:
     {
-        Parser->Style.FontSize = Value->Unit.Float32;
+        Parser->EffectPointer->FontSize = Value->Unit.Float32;
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasFontSize);
     } break;
 
     case UIStyleAttribute_FontName:
     {
-        Parser->Style.Font.Name = Value->Identifier;
+        Parser->EffectPointer->Font.Name = Value->Identifier;
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasFontName);
     } break;
 
     case UIStyleAttribute_Softness:
     {
-        Parser->Style.Softness = Value->Unit.Float32;
+        Parser->EffectPointer->Softness = Value->Unit.Float32;
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasSoftness);
     } break;
 
     case UIStyleAttribute_BorderColor:
@@ -647,24 +661,30 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
             return 0;
         }
 
-        Parser->Style.BorderColor = ToNormalizedColor(Value->Vector);
+        Parser->EffectPointer->BorderColor = ToNormalizedColor(Value->Vector);
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasBorderColor);
     } break;
 
     case UIStyleAttribute_BorderWidth:
     {
-        Parser->Style.BorderWidth = Value->Unit.Float32;
+        Parser->EffectPointer->BorderWidth = Value->Unit.Float32;
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasBorderWidth);
     } break;
 
     case UIStyleAttribute_CornerRadius:
     {
         Valid = ValidateVectorUnitType(Value->Vector, UIUnit_Float32, 4, 0);
-        if(!Valid)
+        if (!Valid)
         {
             LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Corner Radius must be: [Float, Float, Float, Float]"));
             return 0;
         }
 
-        Parser->Style.CornerRadius = UICornerRadius(Value->Vector.X.Float32, Value->Vector.Y.Float32, Value->Vector.Z.Float32, Value->Vector.W.Float32);
+        Parser->EffectPointer->CornerRadius = UICornerRadius(Value->Vector.X.Float32, Value->Vector.Y.Float32, Value->Vector.Z.Float32, Value->Vector.W.Float32);
+
+        SetFlag(Parser->EffectPointer->Flags, UIStyleNode_HasCornerRadius);
     } break;
 
     }
@@ -672,11 +692,51 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
     return Valid;
 }
 
-internal void
-CacheStyle(ui_style Style, byte_string Name, render_handle Renderer, ui_state *UIState, ui_style_registery *Registery)
+internal ui_cached_style *
+CreateCachedStyle(ui_style Style, ui_style_registery *Registery)
 {
-    if (Name.Size <= ThemeNameLength)
+    ui_cached_style *Result = 0;
+
+    if (Registery->Count < ThemeMaxCount)
     {
+        Result = Registery->CachedStyles + Registery->Count;
+        Result->Index = Registery->Count;
+        Result->Next  = 0;
+        Result->Style = Style;
+
+        ++Registery->Count;
+    }
+
+    return Result;
+}
+
+internal ui_style_name *
+CreateCachedStyleName(byte_string Name, ui_cached_style *CachedStyle, ui_style_registery *Registery)
+{
+    ui_style_name *Result = 0;
+
+    if (Registery->Count < ThemeMaxCount)
+    {
+        Result = Registery->CachedName + CachedStyle->Index;
+        Assert(!IsValidByteString(Result->Value));
+
+        Result->Value.String = PushArena(Registery->Arena, Name.Size + 1, AlignOf(u8));
+        Result->Value.Size = Name.Size;
+
+        memcpy(Result->Value.String, Name.String, Name.Size);
+    }
+
+    return Result;
+}
+
+internal ui_cached_style *
+CacheStyle(ui_style Style, byte_string Name, bit_field Flags, ui_cached_style *BaseStyle, render_handle Renderer, ui_state *UIState, ui_style_registery *Registery)
+{
+    ui_cached_style *Result = 0;
+
+    if (Name.Size && Name.Size <= ThemeNameLength)
+    {
+        // TODO: Remove this load from here. We must only store the name and maybe somehow set a flag?
         if (IsValidByteString(Style.Font.Name))
         {
             if (Style.FontSize)
@@ -701,34 +761,43 @@ CacheStyle(ui_style Style, byte_string Name, render_handle Renderer, ui_state *U
                 LogStyleParserMessage(0, OSMessage_Warn, byte_string_literal("When specifying a font name, you must also speicify a font size."));
             }
         }
-        
-        ui_cached_style *Sentinel = UIGetStyleSentinel(Name, Registery);
-        
-        ui_cached_style *CachedStyle = Registery->CachedStyles + Registery->Count;
-        CachedStyle->Style = Style;
-        CachedStyle->Index = Registery->Count;
-        CachedStyle->Next  = Sentinel->Next;
-        
-        ui_style_name *NewName = Registery->CachedName + CachedStyle->Index;
-        NewName->Value.String = PushArena(Registery->Arena, Name.Size + 1, AlignOf(u8));
-        NewName->Value.Size   = Name.Size;
-        memcpy(NewName->Value.String, Name.String, Name.Size);
-        
-        // WARN: Reverse iteration? Do we care?
+
+        Result = CreateCachedStyle(Style, Registery);
+        if (Result)
         {
-            if (Sentinel->Next)
+            if (HasFlag(Flags, UICacheStyle_BindClickEffect))
             {
-                Sentinel->Next->Next = CachedStyle;
+                BaseStyle->Style.ClickOverride = &Result->Style;
             }
-            Sentinel->Next = CachedStyle;
+            else if (HasFlag(Flags, UICacheStyle_BindHoverEffect))
+            {
+                BaseStyle->Style.HoverOverride = &Result->Style;
+            }
+            else
+            {
+                CreateCachedStyleName(Name, Result, Registery);
+
+                // WARN: Reverse iteration, do we care?
+                ui_cached_style *Sentinel = UIGetStyleSentinel(Name, Registery);    
+                if (Sentinel->Next)
+                {
+                    Sentinel->Next->Next = Result;
+                }
+                Sentinel->Next = Result;           
+                Result->Next   = Sentinel->Next;
+            }
         }
-        
-        Registery->Count += 1;  
+        else
+        {
+            LogStyleParserMessage(0, OSMessage_Error, byte_string_literal("Failed to allocate style. Limit exceeded."));
+        }
     }
     else
     {
-        LogStyleParserMessage(0, OSMessage_Error, byte_string_literal("Style name exceeds maximum length of %u"), ThemeNameLength);
+        LogStyleParserMessage(0, OSMessage_Error, byte_string_literal("Style name must be between [0, 64]"));
     }
+
+    return Result;
 }
 
 internal style_token *
@@ -754,6 +823,51 @@ ConsumeStyleTokens(style_parser *Parser, u32 Count)
 internal b32
 ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize)
 {
+    // Check if a new effect is set.
+    {
+        style_token *Effect = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
+        if (Effect->Type == UIStyleToken_AtSymbol)
+        {
+            style_token *EffectName = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 1);
+            if (EffectName->Type == UIStyleToken_Identifier)
+            {
+                byte_string BaseEffect  = byte_string_literal("base");
+                byte_string ClickEffect = byte_string_literal("click");
+                byte_string HoverEffect = byte_string_literal("hover");
+
+                if (ByteStringMatches(EffectName->Identifier, BaseEffect, StringMatch_NoFlag))
+                {
+                    Parser->EffectPointer = &Parser->BaseStyle;
+                    Parser->HasBaseStyle = 1;
+                }
+                else if (ByteStringMatches(EffectName->Identifier, ClickEffect, StringMatch_NoFlag))
+                {
+                    Parser->EffectPointer = &Parser->ClickStyle;
+                    Parser->HasClickStyle = 1;
+                }
+                else if (ByteStringMatches(EffectName->Identifier, HoverEffect, StringMatch_NoFlag))
+                {
+                    Parser->EffectPointer = &Parser->HoverStyle;
+                    Parser->HasHoverStyle = 1;
+                }
+                else
+                {
+                    LogStyleParserMessage(EffectName->LineInFile, OSMessage_Error, byte_string_literal("Unknown effect name."));
+                    return 0;
+                }
+
+                ConsumeStyleTokens(Parser, 2);
+                return 1;
+            }
+            else
+            {
+                LogStyleParserMessage(EffectName->LineInFile, OSMessage_Error, byte_string_literal("Expect identifier after trying to set an effect with @."));
+                return 0;
+            }
+        }
+    }
+
+    // Validates the attributes.
     UIStyleAttribute_Flag Flag = UIStyleAttribute_None;
     {
         style_token *AttributeName = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
@@ -773,6 +887,7 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
         ConsumeStyleTokens(Parser, 1);
     }
 
+    // Validates the assignment
     {
         style_token *Assignment = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (Assignment->Type != UIStyleToken_Assignment)
@@ -784,6 +899,7 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
         ConsumeStyleTokens(Parser, 1);
     }
 
+    // Validates the value assigned to the attribute
     {
         style_token *Value = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (Value->Type != UIStyleToken_Unit && Value->Type != UIStyleToken_String && Value->Type != UIStyleToken_Vector)
@@ -807,12 +923,14 @@ ParseStyleAttribute(style_parser *Parser, style_token *Tokens, u32 TokenBufferSi
         b32 Saved = SaveStyleAttribute(Flag, Value, Parser);
         if (!Saved)
         {
+            LogStyleParserMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Failed to save : %s. See error(s) above."), UIStyleAttributeToString(Flag));
             return 0;
         }
 
         ConsumeStyleTokens(Parser, 1);
     }
 
+    // Validates the end of the expression.
     {
         style_token *EndOfAttribute = PeekStyleToken(Tokens, TokenBufferSize, Parser->TokenIndex, 0);
         if (EndOfAttribute->Type != UIStyleToken_SemiColon)
@@ -930,7 +1048,7 @@ ParseStyleHeader(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize,
 
             if (!ParseStyleAttribute(Parser, Tokens, TokenBufferSize))
             {
-                LogStyleParserMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Unexpected end of file."));
+                LogStyleParserMessage(NextToken->LineInFile, OSMessage_Error, byte_string_literal("Failed to parse an attribute. See error(s) above."));
                 return 0;
             }
 
@@ -955,12 +1073,33 @@ ParseStyleFile(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize, r
             return 0;
         }
 
-        CacheStyle(Parser->Style, Parser->StyleName, Renderer, UIState, Registery);
-        ++StyleCount;
+        ui_cached_style *BaseStyle = 0;
+        if (Parser->HasBaseStyle)
+        {
+            BaseStyle = CacheStyle(Parser->BaseStyle, Parser->StyleName, UICacheStyle_NoFlag, 0, Renderer, UIState, Registery);
+        }
 
-        Parser->StyleName = ByteString(0, 0);
-        Parser->Style     = (ui_style){ 0 };
-        Parser->StyleType = UINode_None;
+        if (Parser->HasClickStyle && Parser->HasBaseStyle)
+        {
+            CacheStyle(Parser->ClickStyle, Parser->StyleName, UICacheStyle_BindClickEffect, BaseStyle, Renderer, UIState, Registery);
+        }
+
+        if (Parser->HasHoverStyle && Parser->HasBaseStyle)
+        {
+            CacheStyle(Parser->HoverStyle, Parser->StyleName, UICacheStyle_BindHoverEffect, BaseStyle, Renderer, UIState, Registery);
+        }
+
+        StyleCount += Parser->HasBaseStyle + Parser->HasClickStyle + Parser->HasHoverStyle;
+
+        Parser->StyleName     = ByteString(0, 0);
+        Parser->HasBaseStyle  = 0;
+        Parser->BaseStyle     = (ui_style){0};
+        Parser->HasClickStyle = 0;
+        Parser->ClickStyle    = (ui_style){0};
+        Parser->HasHoverStyle = 0;
+        Parser->HoverStyle    = (ui_style){0};
+        Parser->EffectPointer = 0;
+        Parser->StyleType     = UINode_None;
     }
 
     if(StyleCount == 0)
@@ -1007,11 +1146,11 @@ LogStyleParserMessage(u32 LineInFile, OSMessage_Severity Severity, byte_string F
 
     if (LineInFile > 0)
     {
-        ErrorString.Size = snprintf((char *)Buffer, sizeof(Buffer), "[Error At Line %u] -> ", LineInFile);
+        ErrorString.Size = snprintf((char *)Buffer, sizeof(Buffer), "[Style Parser At Line %u] -> ", LineInFile);
     }
     else
     {
-        ErrorString.Size = snprintf((char *)Buffer, sizeof(Buffer), "[Error] -> ");
+        ErrorString.Size = snprintf((char *)Buffer, sizeof(Buffer), "[Style Parser] -> ");
     }
 
     ErrorString.Size += vsnprintf((char *)(Buffer + ErrorString.Size), sizeof(Buffer), (char *)Format.String, Args);

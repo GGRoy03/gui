@@ -1076,15 +1076,16 @@ ParseStyleFile(style_parser *Parser, style_token *Tokens, u32 TokenBufferSize, r
         ui_cached_style *BaseStyle = 0;
         if (Parser->HasBaseStyle)
         {
-            BaseStyle = CacheStyle(Parser->BaseStyle, Parser->StyleName, UICacheStyle_NoFlag, 0, Renderer, UIState, Registery);
+            BaseStyle                = CacheStyle(Parser->BaseStyle, Parser->StyleName, UICacheStyle_NoFlag, 0, Renderer, UIState, Registery);
+            BaseStyle->Style.Version = 1;
         }
 
-        if (Parser->HasClickStyle && Parser->HasBaseStyle)
+        if (Parser->HasClickStyle && BaseStyle)
         {
             CacheStyle(Parser->ClickStyle, Parser->StyleName, UICacheStyle_BindClickEffect, BaseStyle, Renderer, UIState, Registery);
         }
 
-        if (Parser->HasHoverStyle && Parser->HasBaseStyle)
+        if (Parser->HasHoverStyle && BaseStyle)
         {
             CacheStyle(Parser->HoverStyle, Parser->StyleName, UICacheStyle_BindHoverEffect, BaseStyle, Renderer, UIState, Registery);
         }

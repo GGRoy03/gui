@@ -282,7 +282,8 @@ UISetColor(ui_node *Node, ui_color Color)
     b32 ValidColor = IsNormalizedColor(Color);
     if (ValidColor)
     {
-        Node->Style.Color = Color;
+        Node->Style.Version += 1;
+        Node->Style.Color    = Color;
         SetFlag(Node->Style.Flags, UIStyleNode_StyleSetAtRuntime);
     }
     else
@@ -877,46 +878,36 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
         List         = &Node->BatchList;
     }
 
-    ui_style *Style  = &SRoot->Style;
+    ui_style *BaseStyle = &SRoot->Style;
+    ui_style *Style     = BaseStyle;
     {
         if (HasFlag(Box->Flags, UILayoutNode_IsClicked))
         {
+            if(Style->ClickOverride) Style = Style->ClickOverride;
             ClearFlag(Box->Flags, UILayoutNode_IsClicked);
-
-            ui_style *Click = Style->ClickOverride;
-            if (Style->ClickOverride && Click->Version != Style->Version)
-            {
-                if (!HasFlag(Click->Flags, UIStyleNode_HasColor)) Click->Color = Style->Color;
-
-                Click->Version = Style->Version;
-            }
-
-            if (Click)
-            {
-                Style = Click;
-            }
-
+        }
+        else if (HasFlag(Box->Flags, UILayoutNode_IsHovered))
+        {
+            if(Style->HoverOverride) Style = Style->HoverOverride;
+            ClearFlag(Box->Flags, UILayoutNode_IsHovered);
+        }
+        else
+        {
             goto BeginDraw;
         }
 
-        if (HasFlag(Box->Flags, UILayoutNode_IsHovered))
+        if (Style && Style->Version != BaseStyle->Version)
         {
-            ClearFlag(Box->Flags, UILayoutNode_IsHovered);
+            if (!HasFlag(Style->Flags, UIStyleNode_HasColor))        Style->Color        = BaseStyle->Color;
+            if (!HasFlag(Style->Flags, UIStyleNode_HasBorderColor))  Style->BorderColor  = BaseStyle->BorderColor;
+            if (!HasFlag(Style->Flags, UIStyleNode_HasPadding))      Style->Padding      = BaseStyle->Padding;
+            if (!HasFlag(Style->Flags, UIStyleNode_HasSpacing))      Style->Spacing      = BaseStyle->Spacing;
+            if (!HasFlag(Style->Flags, UIStyleNode_HasSoftness))     Style->Softness     = BaseStyle->Softness;
+            if (!HasFlag(Style->Flags, UIStyleNode_HasBorderColor))  Style->BorderColor  = BaseStyle->BorderColor;
+            if (!HasFlag(Style->Flags, UIStyleNode_HasBorderWidth))  Style->BorderWidth  = BaseStyle->BorderWidth;
+            if (!HasFlag(Style->Flags, UIStyleNode_HasCornerRadius)) Style->CornerRadius = BaseStyle->CornerRadius;
 
-            ui_style *Hover = Style->HoverOverride;
-            if (Hover && Hover->Version != Style->Version)
-            {
-                if (!HasFlag(Hover->Flags, UIStyleNode_HasColor)) Hover->Color = Style->Color;
-
-                Hover->Version = Style->Version;
-            }
-
-            if (Hover)
-            {
-                Style = Hover;
-            }
-
-            goto BeginDraw;
+            Style->Version = BaseStyle->Version;
         }
     }
 

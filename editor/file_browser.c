@@ -3,11 +3,7 @@
 internal void
 FileBrowserForwardHistory(ui_node *Node, ui_pipeline *Pipeline)
 {   UNUSED(Node); UNUSED(Pipeline);
-    
-    ui_node *StyleNode = UIGetStyleNodeFromLayoutNode(Node, Pipeline);
 
-    ui_color Color = UIColor(1.f, 0.f, 0.f, 1.f);
-    UISetColor(StyleNode, Color);
 }
 
 internal void

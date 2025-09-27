@@ -627,6 +627,27 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
                 SetFlag(Node->Layout.Flags, UILayoutNode_IsClicked);
             }
 
+            // Border Testing
+            {
+                f32      Radius            = 0;
+                f32      BorderWidth       = UIGetStyleNodeFromLayoutNode(Node, Pipeline)->Style.BorderWidth;
+                vec2_f32 BorderWidthVector = Vec2F32(BorderWidth, BorderWidth);
+
+                vec2_f32 FullHalfSize  = Vec2F32(Node->Layout.FinalWidth * 0.5f, Node->Layout.FinalHeight * 0.5f);
+                vec2_f32 RectHalfSize  = Vec2F32Sub(FullHalfSize, BorderWidthVector);
+                vec2_f32 Origin        = Vec2F32Add(Vec2F32(Node->Layout.FinalX, Node->Layout.FinalY), FullHalfSize);
+                vec2_f32 LocalPosition = Vec2F32Sub(MousePosition, Origin);
+
+                LocalPosition.Y *= -1.f; // NOTE: Because mouse positions are top-bottom
+
+                f32 SDF = RoundedRectSDF(LocalPosition, RectHalfSize, Radius);
+                if (SDF >= 0)
+                {
+                    // TODO: And then what?
+                }
+            }
+
+
             SetFlag(Node->Layout.Flags, UILayoutNode_IsHovered);
         }
 

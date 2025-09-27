@@ -90,9 +90,32 @@ RectF32Zero(void)
 // [Vector OPs]
 
 internal vec2_f32
+Vec2F32Add(vec2_f32 Vec1, vec2_f32 Vec2)
+{
+	vec2_f32 Result = Vec2F32(Vec1.X + Vec2.X, Vec1.Y + Vec2.Y);
+	return Result;
+}
+
+internal vec2_f32
 Vec2F32Sub(vec2_f32 Vec1, vec2_f32 Vec2)
 {
 	vec2_f32 Result = Vec2F32((Vec1.X - Vec2.X), (Vec1.Y - Vec2.Y));
+	return Result;
+}
+
+internal vec2_f32
+Vec2F32Abs(vec2_f32 Vec)
+{
+	vec2_f32 Result = Vec2F32(ClampBot(Vec.X, -Vec.X), ClampBot(Vec.Y, -Vec.Y));
+	Assert(Result.X >= 0 && Result.Y >= 0);
+
+	return Result;
+}
+
+internal f32
+Vec2F32Length(vec2_f32 Vec)
+{
+	f32 Result = sqrtf(Vec.X * Vec.X + Vec.Y + Vec.Y);
 	return Result;
 }
 
@@ -127,7 +150,29 @@ IsPointInRect(rect_f32 Target, vec2_f32 Point)
 	return Result;
 }
 
-// [Helpers]
+// TODO: Copy the shader to check if it's faster on the CPU as well.
+
+internal f32
+RoundedRectSDF(vec2_f32 LocalPosition, vec2_f32 RectHalfSize, f32 Radius)
+{
+	// Abuse the symmetry and fold every point into the first quadrant.
+	// Offset these points by the quadrant (RectHalfSize), to figure out
+	// if they lay inside or outside the quadrant. If any axis is positive,
+	// then the point was outside the original Rect. Else it was inside or
+	// on the boundary.
+
+	vec2_f32 RadiusVector  = Vec2F32(Radius, Radius);
+	vec2_f32 FirstQuadrant = Vec2F32Add(Vec2F32Sub(Vec2F32Abs(LocalPosition), RectHalfSize), RadiusVector);
+
+	// OuterDistance: If any axis is positive, take its length to figure out the closest distance to the boundary.
+	// InnerDistance: If any axis is positive, this results in a 0. Else return the "less negative" value (Closest to edge)
+
+	f32 OuterDistance = Vec2F32Length(Vec2F32(Max(FirstQuadrant.X, 0.f), Max(FirstQuadrant.Y, 0.f)));
+	f32 InnerDistance = Min(Max(FirstQuadrant.X, FirstQuadrant.Y), 0.f);
+	f32 Result        = OuterDistance + InnerDistance - Radius;
+
+	return Result;
+}
 
 internal b32
 Vec2I32IsEqual(vec2_i32 Vec1, vec2_i32 Vec2)

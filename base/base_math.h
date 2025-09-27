@@ -63,12 +63,16 @@ internal rect_f32   RectF32Zero       (void);
 
 // [Vector OPs]
 
-internal vec2_f32 Vec2F32Sub(vec2_f32 Vec1, vec2_f32 Vec2);
+internal vec2_f32 Vec2F32Add     (vec2_f32 Vec1, vec2_f32 Vec2);
+internal vec2_f32 Vec2F32Sub     (vec2_f32 Vec1, vec2_f32 Vec2);
+internal vec2_f32 Vec2F32Abs     (vec2_f32 Vec);
+internal f32      Vec2F32Length  (vec2_f32 Vec);
 
 // [Rect]
 
 internal rect_f32 IntersectRectF32  (rect_f32 R1, rect_f32 R2);
 internal b32      IsPointInRect     (rect_f32 Target, vec2_f32 Point);
+internal f32      RoundedRectSDF    (vec2_f32 LocalPosition, vec2_f32 RectHalfSize, f32 Radius);
 
 // [Helpers]
 

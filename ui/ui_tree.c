@@ -1,15 +1,15 @@
 // [Tree Management]
 
-internal ui_tree
+internal ui_tree *
 UITree_Allocate(ui_tree_params Params)
 {
 	Assert(Params.Depth > 0 && Params.NodeCount > 0 && Params.Type != UITree_None);
 
-    ui_tree Result = {0};
+    ui_tree *Result = 0;
 
     memory_arena *Arena = 0;
     {
-        size_t Footprint =  0;
+        size_t Footprint = sizeof(ui_tree);
         Footprint += Params.Depth * sizeof(ui_node *);           // Parent Stack
 
         switch(Params.Type)
@@ -44,12 +44,13 @@ UITree_Allocate(ui_tree_params Params)
 
     if(Arena)
     {
-        Result.Arena        = Arena;
-        Result.Nodes        = PushArray(Arena, ui_node  , Params.NodeCount);
-        Result.ParentStack  = PushArray(Arena, ui_node *, Params.Depth    );
-        Result.MaximumDepth = Params.Depth;
-        Result.NodeCapacity = Params.NodeCount;
-        Result.Type         = Params.Type;
+        Result = PushArena(Arena, sizeof(ui_tree), AlignOf(ui_tree));
+        Result->Arena        = Arena;
+        Result->Nodes        = PushArray(Arena, ui_node  , Params.NodeCount);
+        Result->ParentStack  = PushArray(Arena, ui_node *, Params.Depth    );
+        Result->MaximumDepth = Params.Depth;
+        Result->NodeCapacity = Params.NodeCount;
+        Result->Type         = Params.Type;
     }
 
     return Result;
@@ -111,9 +112,9 @@ UITree_GetLayoutNode(ui_node *Node, ui_pipeline *Pipeline)
 {
     ui_node *Result = 0;
 
-    if (Node->Id < Pipeline->LayoutTree.NodeCapacity)
+    if (Node->Id < Pipeline->LayoutTree->NodeCapacity)
     {
-        Result = Pipeline->LayoutTree.Nodes + Node->Id;
+        Result = Pipeline->LayoutTree->Nodes + Node->Id;
     }
 
     return Result;
@@ -124,12 +125,62 @@ UITree_GetStyleNode(ui_node *Node, ui_pipeline *Pipeline)
 {
     ui_node *Result = 0;
 
-    if (Node->Id < Pipeline->StyleTree.NodeCapacity)
+    if (Node->Id < Pipeline->StyleTree->NodeCapacity)
     {
-        Result = Pipeline->StyleTree.Nodes + Node->Id;
+        Result = Pipeline->StyleTree->Nodes + Node->Id;
     }
 
     return Result;
+}
+
+// [Bindings]
+
+internal void
+UITree_BindText(ui_pipeline *Pipeline, ui_character *Characters, u32 Count, ui_font *Font, ui_node *Node)
+{   Assert(Node->Id < Pipeline->LayoutTree->NodeCapacity);
+
+    ui_node *LayoutNode = UITree_GetLayoutNode(Node, Pipeline);
+    if (LayoutNode && Font)
+    {
+        LayoutNode->Layout.Text = PushArray(Pipeline->StaticArena, ui_text, 1);
+        LayoutNode->Layout.Text->AtlasTexture     = RenderHandle((u64)Font->GPUFontObjects.GlyphCacheView);
+        LayoutNode->Layout.Text->AtlasTextureSize = Font->TextureSize;
+        LayoutNode->Layout.Text->Size             = Count;
+        LayoutNode->Layout.Text->Characters       = Characters;
+        LayoutNode->Layout.Text->LineHeight       = Font->LineHeight;
+    }
+    else
+    {
+        OSLogMessage(byte_string_literal("Could not set tex binding. Font is invalid."), OSMessage_Error);
+    }
+}
+
+internal void
+UITree_BindFlag(ui_node *Node, b32 Set, UILayoutNode_Flag Flag, ui_pipeline *Pipeline)
+{   Assert((Flag >= UILayoutNode_NoFlag && Flag <= UILayoutNode_IsResizable));
+
+    ui_node *LayoutNode = UITree_GetLayoutNode(Node, Pipeline);
+    if (LayoutNode)
+    {
+        if (Set)
+        {
+            SetFlag(LayoutNode->Layout.Flags, Flag);
+        }
+        else
+        {
+            ClearFlag(LayoutNode->Layout.Flags, Flag);
+        }
+    }
+}
+
+internal void
+UITree_BindClickCallback(ui_node *Node, ui_click_callback *Callback, ui_pipeline *Pipeline)
+{
+    ui_node *LayoutNode = UITree_GetLayoutNode(Node, Pipeline);
+    if (LayoutNode)
+    {
+        LayoutNode->Layout.ClickCallback = Callback;
+    }
 }
 
 // [Helpers]
@@ -190,14 +241,14 @@ UITree_SynchronizePipeline(ui_node *StyleRoot, ui_pipeline *Pipeline)
 
     if (!UITree_NodesAreParallel(StyleRoot, LayoutRoot))
     {
-        LayoutRoot = UITree_GetFreeNode(&Pipeline->LayoutTree, StyleRoot->Type);
+        LayoutRoot = UITree_GetFreeNode(Pipeline->LayoutTree, StyleRoot->Type);
         LayoutRoot->Id = StyleRoot->Id;
 
         ui_node *StyleRootParent = StyleRoot->Parent;
         ui_node *LayoutRootParent = 0;
-        if (UITree_IsValidNode(StyleRootParent, &Pipeline->StyleTree))
+        if (UITree_IsValidNode(StyleRootParent, Pipeline->StyleTree))
         {
-            LayoutRootParent = Pipeline->LayoutTree.Nodes + StyleRootParent->Id;
+            LayoutRootParent = Pipeline->LayoutTree->Nodes + StyleRootParent->Id;
         }
 
         UITree_LinkNodes(LayoutRoot, LayoutRootParent);

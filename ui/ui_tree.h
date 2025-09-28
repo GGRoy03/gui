@@ -58,9 +58,16 @@ typedef struct ui_tree
     ui_node **ParentStack;
 } ui_tree;
 
+// [GLOBALS]
+
+read_only global u32 InvalidNodeId = 0xFFFFFFFF;
+
+read_only global u32 LayoutTreeDefaultCapacity = 500;
+read_only global u32 LayoutTreeDefaultDepth = 16;
+
 // [API]
 
-internal ui_tree   UITree_Allocate             (ui_tree_params Params);
+internal ui_tree * UITree_Allocate             (ui_tree_params Params);
                                                
 internal void      UITree_PopParent            (ui_tree *Tree);
 internal void      UITree_PushParent           (ui_node *Node, ui_tree *Tree);
@@ -69,6 +76,10 @@ internal ui_node * UITree_GetParent            (ui_tree *Tree);
 internal ui_node * UITree_GetFreeNode          (ui_tree *Tree, UINode_Type Type);
 internal ui_node * UITree_GetLayoutNode        (ui_node *Node, ui_pipeline *Pipeline);
 internal ui_node * UITree_GetStyleNode         (ui_node *Node, ui_pipeline *Pipeline);
+
+internal void UITree_BindText           (ui_pipeline *Pipeline, ui_character *Characters, u32 Count, ui_font *Font, ui_node *Node);
+internal void UITree_BindFlag           (ui_node *Node, b32 Set, UILayoutNode_Flag Flag, ui_pipeline *Pipeline);
+internal void UITree_BindClickCallback  (ui_node *Node, ui_click_callback *Callback, ui_pipeline *Pipeline);
                                             
 internal b32       UITree_IsValidNode          (ui_node *Node, ui_tree *Tree);
 internal b32       UITree_NodesAreParallel     (ui_node *Node1, ui_node *Node2);

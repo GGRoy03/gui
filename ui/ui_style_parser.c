@@ -1,5 +1,8 @@
 // [API]
 
+// WARN: Will release any handles passed to FileHandles
+// WARN: May 'chain' the output arena
+
 internal ui_style_registery
 LoadStyleFromFiles(os_handle *FileHandles, u32 Count, memory_arena *OutputArena)
 {
@@ -56,8 +59,11 @@ LoadStyleFromFiles(os_handle *FileHandles, u32 Count, memory_arena *OutputArena)
                 LogStyleFileMessage(0, OSMessage_Warn, byte_string_literal("File exceeds size limit of 1 GB."));
             }
 
+            OSReleaseFile(FileHandle);
             PopArenaTo(Arena, 0);
         }
+
+        ReleaseArena(Arena);
     }
 
     return Result;
@@ -498,7 +504,7 @@ GetStyleAttributeFlag(byte_string Identifier)
     byte_string Softness     = byte_string_literal("softness");
     byte_string BorderWidth  = byte_string_literal("borderwidth");
     byte_string BorderColor  = byte_string_literal("bordercolor");
-    byte_string BorderRadius = byte_string_literal("borderradius");
+    byte_string CornerRadius = byte_string_literal("cornerradius");
 
     if (ByteStringMatches(Identifier, Size, StringMatch_NoFlag))
     {
@@ -536,7 +542,7 @@ GetStyleAttributeFlag(byte_string Identifier)
     {
         Result = UIStyleAttribute_BorderColor;
     }
-    else if (ByteStringMatches(Identifier, BorderRadius, StringMatch_NoFlag))
+    else if (ByteStringMatches(Identifier, CornerRadius, StringMatch_NoFlag))
     {
         Result = UIStyleAttribute_CornerRadius;
     }
@@ -888,16 +894,10 @@ ParseStyleAttribute(style_parser *Parser, tokenized_style_file *TokenizedFile, U
             return 0;
         }
 
-        if (!IsAttributeFormattedCorrectly(Value->Type, Flag))
-        {
-            LogStyleFileMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting for %s"), StyleAttributeToString(Flag));
-            return 0;
-        }
-
         if (Value->Type == UIStyleToken_Identifier)
         {
             style_var_hash   Hash  = HashStyleVarIdentifier(Value->Identifier);
-            style_var_entry *Entry = FindStyleVarEntry(Hash, 0);
+            style_var_entry *Entry = FindStyleVarEntry(Hash, Parser->VarTable);
             if (Entry->ValueIsParsed)
             {
                 Value = Entry->ValueToken;
@@ -907,6 +907,12 @@ ParseStyleAttribute(style_parser *Parser, tokenized_style_file *TokenizedFile, U
                 LogStyleFileMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Unnknown variable."));
                 return 0;
             }
+        }
+
+        if (!IsAttributeFormattedCorrectly(Value->Type, Flag))
+        {
+            LogStyleFileMessage(Value->LineInFile, OSMessage_Error, byte_string_literal("Invalid formatting for %s"), StyleAttributeToString(Flag));
+            return 0;
         }
 
         b32 Saved = SaveStyleAttribute(Flag, Value, Parser);
@@ -1051,9 +1057,9 @@ ParseStyleVariable(style_parser *Parser, tokenized_style_file *TokenizedFile)
 {
     {
         style_token *VarToken = PeekStyleToken(TokenizedFile, 0);
-        if(!VarToken->Type != UIStyleToken_Var)
+        if(VarToken->Type != UIStyleToken_Var)
         {
-            return 1;
+            return 0;
         }
 
         ConsumeStyleTokens(TokenizedFile, 1);
@@ -1062,7 +1068,7 @@ ParseStyleVariable(style_parser *Parser, tokenized_style_file *TokenizedFile)
     style_var_entry *Entry = 0;
     {
         style_token *Name = PeekStyleToken(TokenizedFile, 0);
-        if(!Name->Type != UIStyleToken_Identifier)
+        if(Name->Type != UIStyleToken_Identifier)
         {
             LogStyleFileMessage(Name->LineInFile, OSMessage_Error, byte_string_literal("Expected the name of the variable."));
             return 0;
@@ -1133,11 +1139,7 @@ ParseTokenizedStyleFile(tokenized_style_file *TokenizedFile, memory_arena *Arena
     style_token *Next = PeekStyleToken(TokenizedFile, 0);
     while (Next->Type != UIStyleToken_EndOfFile)
     {
-        if (!ParseStyleVariable(&Parser, TokenizedFile))
-        {
-            LogStyleFileMessage(0, OSMessage_Warn, byte_string_literal("Failed to parse variable. See error(s) above."));
-            return 0;
-        }
+        while (ParseStyleVariable(&Parser, TokenizedFile)) {};
 
         if (!ParseStyleHeader(&Parser, TokenizedFile, Registery))
         {

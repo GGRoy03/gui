@@ -39,6 +39,8 @@ extern os_win32_state OSWin32State;
 
 // [Win32 Specific API]
 
+internal HANDLE OSWin32GetNativeHandle  (os_handle Handle);
+
 // [Windowing]
 
 internal HWND OSWin32GetWindowHandle(void);

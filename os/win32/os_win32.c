@@ -4,6 +4,13 @@ os_win32_state OSWin32State;
 
 // [Internal Implementation]
 
+internal HANDLE
+OSWin32GetNativeHandle(os_handle Handle)
+{
+    HANDLE Result = (HANDLE)Handle.u64[0];
+    return Result;
+}
+
 internal void
 OSWin32SetConsoleColor(byte_string ANSISequence, WORD WinAttributes)
 {
@@ -302,7 +309,7 @@ OSFileSize(os_handle Handle)
 {
     u64 Result = 0;
 
-    HANDLE FileHandle = (HANDLE)Handle.u64[0];
+    HANDLE FileHandle = OSWin32GetNativeHandle(Handle);
     if (FileHandle)
     {
         LARGE_INTEGER NativeResult = { 0 };
@@ -359,6 +366,16 @@ OSReadFile(os_handle Handle, memory_arena *Arena)
     }
 
     return Result;
+}
+
+internal void
+OSReleaseFile(os_handle Handle)
+{
+    HANDLE FileHandle = OSWin32GetNativeHandle(Handle);
+    if (FileHandle)
+    {
+        CloseHandle(FileHandle);
+    }
 }
 
 // [Windowing]

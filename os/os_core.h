@@ -104,9 +104,10 @@ internal u8  * PeekFilePointer  (os_read_file *File);
 internal u8    PeekFile         (os_read_file *File, u32 Offset);
 internal void  AdvanceFile      (os_read_file *File, u32 Count);
 
-internal os_handle    OSFindFile  (byte_string Path);
-internal u64          OSFileSize  (os_handle Handle);
-internal os_read_file OSReadFile  (os_handle Handle, memory_arena *Arena);
+internal os_handle    OSFindFile     (byte_string Path);
+internal u64          OSFileSize     (os_handle Handle);
+internal os_read_file OSReadFile     (os_handle Handle, memory_arena *Arena);
+internal void         OSReleaseFile  (os_handle Handle);
 
 // [OS State]
 

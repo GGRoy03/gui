@@ -383,6 +383,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
     vec2_f32 MouseDelta     = OSGetMouseDelta();
     b32      MouseIsClicked = OSIsMouseClicked(OSMouseButton_Left);
     b32      MouseReleased  = OSIsMouseReleased(OSMouseButton_Left);
+    b32      MouseMoved     = (MouseDelta.X != 0 || MouseDelta.Y != 0);
 
     bit_field HitTestFlags = UIHitTest_NoFlag;
     {
@@ -420,7 +421,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
 
         case UIHover_Target:
         {
-            if(MouseIsClicked)
+            if(MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsDraggable))
             {
                 Pipeline->DragCaptureNode = Hit.LayoutNode;
             }
@@ -428,7 +429,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
 
         case UIHover_ResizeX:
         {
-            if (MouseIsClicked)
+            if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
             {
                 Pipeline->ResizeCaptureNode = Hit.LayoutNode;
                 Pipeline->ResizeType        = UIResize_X;
@@ -437,7 +438,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
 
         case UIHover_ResizeY:
         {
-            if (MouseIsClicked)
+            if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
             {
                 Pipeline->ResizeCaptureNode = Hit.LayoutNode;
                 Pipeline->ResizeType        = UIResize_Y;
@@ -446,7 +447,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
 
         case UIHover_ResizeCorner:
         {
-            if (MouseIsClicked)
+            if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
             {
                 Pipeline->ResizeCaptureNode = Hit.LayoutNode;
                 Pipeline->ResizeType        = UIResize_XY;
@@ -494,26 +495,38 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         }
     }
 
-    if (Pipeline->DragCaptureNode && (MouseDelta.X != 0.f || MouseDelta.Y != 0.f))
+    if (Pipeline->DragCaptureNode && MouseMoved)
     {
         UILayout_DragSubtree(MouseDelta, Pipeline->DragCaptureNode, Pipeline);
     }
 
     // Set Cursor
     {
+        b32 IsDraggable = 0;
         if (Pipeline->DragCaptureNode)
+        {
+            IsDraggable = 1;
+        }
+
+        b32 IsResizable = 0;
+        if (Hit.LayoutNode && HasFlag(Hit.LayoutNode->Layout.Flags, UILayoutNode_IsResizable))
+        {
+            IsResizable = 1;
+        }
+
+        if (IsDraggable && MouseMoved)
         {
             OSSetCursor(OSCursor_GrabHand);
         }
-        else if (Hit.HoverState == UIHover_ResizeX || Pipeline->ResizeType == UIResize_X)
+        else if (IsResizable && (Hit.HoverState == UIHover_ResizeX || Pipeline->ResizeType == UIResize_X))
         {
             OSSetCursor(OSCursor_ResizeHorizontal);
         }
-        else if (Hit.HoverState == UIHover_ResizeY || Pipeline->ResizeType == UIResize_Y)
+        else if (IsResizable && (Hit.HoverState == UIHover_ResizeY || Pipeline->ResizeType == UIResize_Y))
         {
             OSSetCursor(OSCursor_ResizeVertical);
         }
-        else if (Hit.HoverState == UIHover_ResizeCorner || Pipeline->ResizeType == UIResize_XY)
+        else if (IsResizable && (Hit.HoverState == UIHover_ResizeCorner || Pipeline->ResizeType == UIResize_XY))
         {
             OSSetCursor(OSCursor_ResizeDiagonalLeftToRight);
         }
@@ -606,7 +619,8 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
 
             ClearFlag(Box->Flags, UILayoutNode_IsClicked);
         }
-        else if (HasFlag(Box->Flags, UILayoutNode_IsHovered))
+
+        if (!Overriden && HasFlag(Box->Flags, UILayoutNode_IsHovered))
         {
             if (Style->HoverOverride)
             {
@@ -617,7 +631,7 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
             ClearFlag(Box->Flags, UILayoutNode_IsHovered);
         }
 
-        if (Overriden && Style && Style->Version != BaseStyle->Version)
+        if (Overriden && Style->Version != BaseStyle->Version)
         {
             if (!HasFlag(Style->Flags, UIStyleNode_HasColor))        Style->Color        = BaseStyle->Color;
             if (!HasFlag(Style->Flags, UIStyleNode_HasBorderColor))  Style->BorderColor  = BaseStyle->BorderColor;

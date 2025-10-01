@@ -73,7 +73,8 @@ HitTestLayout(vec2_f32 MousePosition, bit_field Flags, ui_layout_node *LayoutRoo
 
 internal void
 DragUISubtree(vec2_f32 Delta, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
-{   Assert(Delta.X != 0.f || Delta.Y != 0.f);
+{
+    Assert(Delta.X != 0.f || Delta.Y != 0.f);
 
     LayoutRoot->Value.FinalX += Delta.X;
     LayoutRoot->Value.FinalY += Delta.Y;
@@ -92,8 +93,8 @@ ResizeUISubtree(vec2_f32 Delta, ui_layout_node *LayoutNode, ui_pipeline *Pipelin
     Assert(LayoutNode->Value.Width.Type  != UIUnit_Percent);
     Assert(LayoutNode->Value.Height.Type != UIUnit_Percent);
 
-    LayoutNode->Value.Width.Float32 += Delta.X;
-    LayoutNode->Value.Width.Float32 += Delta.Y;
+    LayoutNode->Value.Width.Float32  += Delta.X;
+    LayoutNode->Value.Height.Float32 += Delta.Y;
 
     TopDownLayout(LayoutNode, Pipeline);
 }

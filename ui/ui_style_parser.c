@@ -753,14 +753,14 @@ CreateCachedStyle(ui_style Style, ui_style_subregistry *Registery)
 {
     ui_cached_style *Result = 0;
 
-    if (Registery->Count < MAXIMUM_STYLE_COUNT_PER_SUB_REGISTRY)
+    if (Registery->StyleCount < MAXIMUM_STYLE_COUNT_PER_SUB_REGISTRY)
     {
-        Result = Registery->CachedStyles + Registery->Count;
-        Result->Index = Registery->Count;
+        Result = Registery->CachedStyles + Registery->StyleCount;
+        Result->Index = Registery->StyleCount;
         Result->Next  = 0;
-        Result->Style = Style;
+        Result->Value = Style;
 
-        ++Registery->Count;
+        ++Registery->StyleCount;
     }
 
     return Result;
@@ -771,7 +771,7 @@ CreateCachedStyleName(byte_string Name, ui_cached_style *CachedStyle, ui_style_s
 {
     ui_style_name *Result = 0;
 
-    if (Registry->Count < MAXIMUM_STYLE_COUNT_PER_SUB_REGISTRY)
+    if (Registry->StyleCount < MAXIMUM_STYLE_COUNT_PER_SUB_REGISTRY)
     {
         Result = Registry->CachedNames + CachedStyle->Index;
         Assert(!IsValidByteString(Result->Value));
@@ -814,12 +814,12 @@ CacheStyle(ui_style Style, byte_string Name, UIStyle_Type Type, ui_cached_style 
 
             case UIStyle_Click:
             {
-                BaseStyle->Style.ClickOverride = &Result->Style;
+                BaseStyle->Value.ClickOverride = &Result->Value;
             } break;
 
             case UIStyle_Hover:
             {
-                BaseStyle->Style.HoverOverride = &Result->Style;
+                BaseStyle->Value.HoverOverride = &Result->Value;
             } break;
 
             }
@@ -834,7 +834,7 @@ CacheStyle(ui_style Style, byte_string Name, UIStyle_Type Type, ui_cached_style 
 }
 
 internal b32
-ParseStyleAttribute(style_parser *Parser, tokenized_style_file *TokenizedFile, UINode_Type ParsingFor)
+ParseStyleAttribute(style_parser *Parser, tokenized_style_file *TokenizedFile, UILayoutNode_Type ParsingFor)
 {
     // Check if a new effect is set.
     {
@@ -1014,7 +1014,7 @@ ParseStyleHeader(style_parser *Parser, tokenized_style_file *TokenizedFile, ui_s
         ConsumeStyleTokens(TokenizedFile, 1);
     }
 
-    UINode_Type ParsingFor = UINode_None;
+    UILayoutNode_Type ParsingFor = UILayoutNode_None;
     {
         style_token *Type = PeekStyleToken(TokenizedFile, 0);
         if (Type->Type != UIStyleToken_Identifier)
@@ -1025,19 +1025,19 @@ ParseStyleHeader(style_parser *Parser, tokenized_style_file *TokenizedFile, ui_s
 
         if (ByteStringMatches(Type->Identifier, byte_string_literal("window"), StringMatch_NoFlag))
         {
-            ParsingFor = UINode_Window;
+            ParsingFor = UILayoutNode_Window;
         }
         else if (ByteStringMatches(Type->Identifier, byte_string_literal("button"), StringMatch_NoFlag))
         {
-            ParsingFor = UINode_Button;
+            ParsingFor = UILayoutNode_Button;
         }
         else if (ByteStringMatches(Type->Identifier, byte_string_literal("label"), StringMatch_NoFlag))
         {
-            ParsingFor = UINode_Label;
+            ParsingFor = UILayoutNode_Label;
         }
         else if (ByteStringMatches(Type->Identifier, byte_string_literal("header"), StringMatch_NoFlag))
         {
-            ParsingFor = UINode_Header;
+            ParsingFor = UILayoutNode_Header;
         }
         else
         {
@@ -1204,7 +1204,7 @@ ParseTokenizedStyleFile(tokenized_style_file *TokenizedFile, memory_arena *Arena
 
         if (CachedBaseStyle)
         {
-            CachedBaseStyle->Style.Version = 1;
+            CachedBaseStyle->Value.BaseVersion = 1;
         }
 
         Parser.StyleName = ByteString(0, 0);

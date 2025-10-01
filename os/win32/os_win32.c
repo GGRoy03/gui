@@ -96,31 +96,43 @@ OSWin32StyleFileWatcher(LPVOID Param)
 
                 LeaveCriticalSection(&Watcher->WatchListLock);
 
+                memory_region Region = EnterMemoryRegion(Watcher->Arena);
+
+                ui_style_subregistry *UpdatedSub = 0;
+                ui_style_subregistry *OriginSub  = 0;
                 do
                 {
-                    FILE_NOTIFY_INFORMATION *Info = (FILE_NOTIFY_INFORMATION *)Ptr;
+                     FILE_NOTIFY_INFORMATION *Info = (FILE_NOTIFY_INFORMATION *)Ptr;
 
                     if (Info->Action == FILE_ACTION_MODIFIED)
                     {
-                        wide_string UpdatedFileName = WideString(Info->FileName, Info->FileNameLength);
+                        wide_string UpdatedFileName = WideStringAppendBefore(wide_string_literal("styles/"), WideString(Info->FileName, Info->FileNameLength / 2), Region.Arena);
+
                         for (u32 Idx = 0; Idx < FileCount; Idx++)
                         {
                             os_watched_registry *Watched  = List[Idx];
                             ui_style_registry   *Registry = Watched->Registry;
 
-                            for (ui_style_subregistry *Sub = Registry->First; Sub != 0; Sub = Sub->Next)
+                            for (OriginSub = Registry->First; OriginSub != 0; OriginSub = OriginSub->Next)
                             {
-                                byte_string ByteFileName = ByteString(Sub->FileName, Sub->FileNameSize);
-                                wide_string WideFileName = ByteStringToWideString(Watcher->Arena, ByteFileName);
+                                byte_string ByteFileName = ByteString(OriginSub->FileName, OriginSub->FileNameSize);
+                                wide_string WideFileName = ByteStringToWideString(Region.Arena, ByteFileName);
                                 if (WideStringMatches(WideFileName, UpdatedFileName, StringMatch_NoFlag))
                                 {
-                                    ui_style_subregistry *UpdatedSub = CreateStyleSubregistry(ByteFileName, Watcher->Arena);
-                                    UpdatedSub->CachedNames;
+                                    UpdatedSub = CreateStyleSubregistry(ByteFileName, Region.Arena);
+                                    break;
                                 }
+                            }
 
-                                PopWideString(WideFileName, Watcher->Arena);
+                            if (UpdatedSub)
+                            {
+                                break;
                             }
                         }
+                    }
+
+                    if (UpdatedSub)
+                    {
                     }
 
                     if(Info->NextEntryOffset != 0)
@@ -132,6 +144,8 @@ OSWin32StyleFileWatcher(LPVOID Param)
                         break;
                     }
                 } while(1);
+
+                LeaveMemoryRegion(Region);
             }
             else
             {

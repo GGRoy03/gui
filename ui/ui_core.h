@@ -42,17 +42,14 @@ typedef enum UIConstant_Type
 
 // [FORWARD DECLARATIONS]
 
-typedef struct ui_node      ui_node;
-typedef struct ui_font      ui_font;
-typedef struct ui_text      ui_text;
-typedef struct ui_tree      ui_tree;
-typedef struct ui_style     ui_style;
-typedef struct ui_character ui_character;
-typedef struct ui_pipeline  ui_pipeline;
+typedef struct ui_style       ui_style;
+typedef struct ui_layout_node ui_layout_node;
+typedef struct ui_layout_tree ui_layout_tree;
+typedef struct ui_pipeline    ui_pipeline;
+
+typedef void ui_click_callback(ui_layout_node *Node, ui_pipeline *Pipeline);
 
 // [CORE TYPES]
-
-typedef void ui_click_callback(ui_node *Node, ui_pipeline *Pipeline);
 
 typedef struct ui_color
 {
@@ -157,9 +154,8 @@ typedef struct ui_style
     ui_style *HoverOverride;
 
     // Misc
-    u32           Version;
-    bit_field     Flags;
-    ui_style_name Name;
+    u32       BaseVersion;
+    bit_field Flags;
 } ui_style;
 
 typedef struct ui_cached_style ui_cached_style;
@@ -167,18 +163,25 @@ struct ui_cached_style
 {
     u32              Index;
     ui_cached_style *Next;
-    ui_style         Style;
+    ui_style         Value;
+
+    // Nodes References
+    ui_layout_node *First;
+    ui_layout_node *Last;
+    u32             RefCount;
 };
 
 typedef struct ui_style_subregistry ui_style_subregistry;
 typedef struct ui_style_subregistry
 {
+    // Misc
     b32                   HadError;
-    u32                   Count;
+    u32                   StyleCount;
     ui_style_subregistry *Next;
     u8                    FileName[OS_MAX_PATH];
     u64                   FileNameSize;
 
+    // Heap-Data (Styles, Names)
     ui_style_name   *CachedNames;
     ui_cached_style *CachedStyles;
     ui_cached_style *Sentinels;
@@ -206,13 +209,13 @@ typedef struct ui_pipeline_params
 
 typedef struct ui_pipeline
 {
-    ui_tree           *StyleTree;
-    ui_tree           *LayoutTree;
+    ui_layout_tree    *LayoutTree;
     ui_style_registry *StyleRegistery;
 
-    ui_node      *DragCaptureNode;
-    ui_node      *ResizeCaptureNode;
-    UIResize_Type ResizeType;
+    // TODO: Simplify this.
+    ui_layout_node *DragCaptureNode;
+    ui_layout_node *ResizeCaptureNode;
+    UIResize_Type   ResizeType;
 
     render_handle RendererHandle;
 
@@ -250,22 +253,18 @@ internal void UIButton  (ui_style_name StyleName, ui_click_callback *Callback, u
 internal void UILabel   (ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline);
 internal void UIHeader  (ui_style_name StyleName, ui_pipeline *Pipeline);
 
-#define UIHeaderEx(StyleName, Pipeline) DeferLoop(UIHeader(StyleName, Pipeline), UITree_PopParent(Pipeline->StyleTree))
+#define UIHeaderEx(StyleName, Pipeline) DeferLoop(UIHeader(StyleName, Pipeline), PopLayoutNodeParent(Pipeline->LayoutTree))
 
 // [Style]
 
 internal ui_cached_style * UIGetStyleSentinel              (byte_string   Name, ui_style_subregistry *Registry);
 internal ui_style_name     UIGetCachedName                 (byte_string   Name, ui_style_registry    *Registry);
 internal ui_style_name     UIGetCachedNameFromSubregistry  (byte_string   Name, ui_style_subregistry *Registry);
-internal ui_style          UIGetStyle                      (ui_style_name Name, ui_style_registry    *Registry);
-
-internal void UISetColor(ui_node *Node, ui_color Color);
+internal ui_cached_style * UIGetStyle                      (ui_style_name Name, ui_style_registry *Registry);
 
 // [Pipeline]
 
 internal ui_pipeline UICreatePipeline         (ui_pipeline_params Params);
 internal void        UIPipelineBegin          (ui_pipeline *Pipeline);
 internal void        UIPipelineExecute        (ui_pipeline *Pipeline, render_pass_list *PassList);
-
-internal void        UIPipelineDragNodes      (vec2_f32 MouseDelta, ui_pipeline *Pipeline, ui_node *LRoot);
-internal void        UIPipelineBuildDrawList  (ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot, ui_node *LRoot);
+internal void        UIPipelineBuildDrawList  (ui_pipeline *Pipeline, render_pass *Pass, ui_layout_node *LayoutRoot);

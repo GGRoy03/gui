@@ -1,17 +1,10 @@
-// [HELPERS IMPLEMENTATION]
-
-
-
 // [API IMPLEMENTATION]
 
 internal ui_hit_test_result 
-UILayout_HitTest(vec2_f32 MousePosition, bit_field Flags, ui_node *LayoutRoot, ui_pipeline *Pipeline)
+HitTestLayout(vec2_f32 MousePosition, bit_field Flags, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 {
-    ui_hit_test_result Result    = {0};
-    ui_node           *StyleRoot = UITree_GetStyleNode(LayoutRoot, Pipeline);
-
-    ui_layout_box *Box   = &LayoutRoot->Layout;
-    ui_style      *Style = &StyleRoot->Style;
+    ui_hit_test_result Result = {0};
+    ui_layout_box     *Box    = &LayoutRoot->Value;
 
 
     f32      Radius        = 0.f;
@@ -23,22 +16,22 @@ UILayout_HitTest(vec2_f32 MousePosition, bit_field Flags, ui_node *LayoutRoot, u
     if(TargetSDF <= 0.f)
     {
         // Recurse into all of the children. Respects draw order.
-        for(ui_node *Child = LayoutRoot->Last; Child != 0; Child = Child->Prev)
+        for(ui_layout_node *Child = LayoutRoot->Last; Child != 0; Child = Child->Prev)
         {
-            Result = UILayout_HitTest(MousePosition, Flags, Child, Pipeline);
+            Result = HitTestLayout(MousePosition, Flags, Child, Pipeline);
             if(Result.Success)
             {
                 return Result;
             }
         }
 
-        Result.LayoutNode = LayoutRoot;
+        Result.Node       = LayoutRoot;
         Result.HoverState = UIHover_Target;
         Result.Success    = 1;
 
         if(HasFlag(Flags, UIHitTest_CheckForResize))
         {
-            f32      BorderWidth        = Style->BorderWidth;
+            f32      BorderWidth        = LayoutRoot->CachedStyle->Value.BorderWidth;
             vec2_f32 BorderWidthVector  = Vec2F32(BorderWidth, BorderWidth);
             vec2_f32 HalfSizeWithBorder = Vec2F32Sub(FullHalfSize, BorderWidthVector);
 
@@ -79,33 +72,36 @@ UILayout_HitTest(vec2_f32 MousePosition, bit_field Flags, ui_node *LayoutRoot, u
 }
 
 internal void
-UILayout_DragSubtree(vec2_f32 Delta, ui_node *LayoutRoot, ui_pipeline *Pipeline)
+DragUISubtree(vec2_f32 Delta, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 {   Assert(Delta.X != 0.f || Delta.Y != 0.f);
 
-    LayoutRoot->Layout.FinalX += Delta.X;
-    LayoutRoot->Layout.FinalY += Delta.Y;
+    LayoutRoot->Value.FinalX += Delta.X;
+    LayoutRoot->Value.FinalY += Delta.Y;
 
-    for (ui_node *Child = LayoutRoot->First; Child != 0; Child = Child->Next)
+    for (ui_layout_node *Child = LayoutRoot->First; Child != 0; Child = Child->Next)
     {
-        UILayout_DragSubtree(Delta, Child, Pipeline);
+        DragUISubtree(Delta, Child, Pipeline);
     }
 }
 
+// NOTE: How does this change?
+
 internal void
-UILayout_ResizeSubtree(vec2_f32 Delta, ui_node *LayoutNode, ui_pipeline *Pipeline)
+ResizeUISubtree(vec2_f32 Delta, ui_layout_node *LayoutNode, ui_pipeline *Pipeline)
 {
-    ui_node *StyleNode = UITree_GetStyleNode(LayoutNode, Pipeline);
-    Assert(StyleNode->Style.Size.X.Type != UIUnit_Percent);
-    Assert(StyleNode->Style.Size.Y.Type != UIUnit_Percent);
+    Assert(LayoutNode->Value.Width.Type  != UIUnit_Percent);
+    Assert(LayoutNode->Value.Height.Type != UIUnit_Percent);
 
-    StyleNode->Style.Size.X.Float32 += Delta.X;
-    StyleNode->Style.Size.Y.Float32 += Delta.Y;
+    LayoutNode->Value.Width.Float32 += Delta.X;
+    LayoutNode->Value.Width.Float32 += Delta.Y;
 
-    UILayout_ComputeParentToChildren(LayoutNode, Pipeline);
+    TopDownLayout(LayoutNode, Pipeline);
 }
 
+DEFINE_TYPED_QUEUE(Node, node, ui_layout_node *);
+
 internal void
-UILayout_ComputeParentToChildren(ui_node *LayoutRoot, ui_pipeline *Pipeline)
+TopDownLayout(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 {
     if (Pipeline->LayoutTree)
     {
@@ -119,7 +115,7 @@ UILayout_ComputeParentToChildren(ui_node *LayoutRoot, ui_pipeline *Pipeline)
 
         if (Queue.Data)
         {
-            ui_layout_box *RootBox = &LayoutRoot->Layout;
+            ui_layout_box *RootBox = &LayoutRoot->Value;
 
             if (RootBox->Width.Type != UIUnit_Float32)
             {
@@ -133,8 +129,8 @@ UILayout_ComputeParentToChildren(ui_node *LayoutRoot, ui_pipeline *Pipeline)
 
             while (!IsNodeQueueEmpty(&Queue))
             {
-                ui_node *Current = PopNodeQueue(&Queue);
-                ui_layout_box *Box = &Current->Layout;
+                ui_layout_node *Current = PopNodeQueue(&Queue);
+                ui_layout_box  *Box     = &Current->Value;
 
                 f32 AvWidth    = Box->FinalWidth - (Box->Padding.Left + Box->Padding.Right);
                 f32 AvHeight   = Box->FinalHeight - (Box->Padding.Top + Box->Padding.Bot);
@@ -144,14 +140,14 @@ UILayout_ComputeParentToChildren(ui_node *LayoutRoot, ui_pipeline *Pipeline)
                 f32 BasePosY   = Box->FinalY + Box->Padding.Top;
 
                 {
-                    for (ui_node *ChildNode = Current->First; (ChildNode != 0 && UsedWidth <= AvWidth); ChildNode = ChildNode->Next)
+                    for (ui_layout_node *ChildNode = Current->First; (ChildNode != 0 && UsedWidth <= AvWidth); ChildNode = ChildNode->Next)
                     {
-                        ChildNode->Layout.FinalX = BasePosX + UsedWidth;
-                        ChildNode->Layout.FinalY = BasePosY + UsedHeight;
+                        ChildNode->Value.FinalX = BasePosX + UsedWidth;
+                        ChildNode->Value.FinalY = BasePosY + UsedHeight;
 
-                        ui_layout_box *ChildBox = &ChildNode->Layout;
+                        ui_layout_box *ChildBox = &ChildNode->Value;
 
-                        f32 Width = 0;
+                        f32 Width  = 0;
                         f32 Height = 0;
                         {
                             if (ChildBox->Width.Type == UIUnit_Percent)
@@ -222,7 +218,7 @@ UILayout_ComputeParentToChildren(ui_node *LayoutRoot, ui_pipeline *Pipeline)
             }
 
             // NOTE: Not really clear that we are clearing the queue...
-            PopArena(Pipeline->LayoutTree->Arena, Pipeline->LayoutTree->NodeCount * sizeof(ui_node *));
+            PopArena(Pipeline->LayoutTree->Arena, Pipeline->LayoutTree->NodeCount * sizeof(ui_layout_node *));
         }
         else
         {

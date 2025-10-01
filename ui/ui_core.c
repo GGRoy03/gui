@@ -48,62 +48,55 @@ IsNormalizedColor(ui_color Color)
 
 // [Components]
 
-// NOTE: Temporary global ID tracker. Obviously, this is not good.
-// TODO: Remove this system?
-global i32 NextId;
-
 internal void
 UIWindow(ui_style_name StyleName, ui_pipeline *Pipeline)
 {
-    ui_style Style = UIGetStyle(StyleName, Pipeline->StyleRegistery);
-    ui_node *Node  = UITree_GetFreeNode(Pipeline->StyleTree, UINode_Window);
+    ui_cached_style *Style = UIGetStyle(StyleName, Pipeline->StyleRegistery);
+    ui_layout_node  *Node  = GetFreeLayoutNode(Pipeline->LayoutTree, UILayoutNode_Window);
 
     if (Node)
     {
-        Node->Style = Style;
-        Node->Id    = NextId++;
+        AttachLayoutNode    (Node, GetLayoutNodeParent(Pipeline->LayoutTree));
+        SetLayoutNodeStyle  (Style, Node);
+        PushLayoutNodeParent(Node, Pipeline->LayoutTree);
 
-        UITree_LinkNodes(Node, UITree_GetParent(Pipeline->StyleTree));
-        UITree_PushParent(Node, Pipeline->StyleTree);
-
-        if(Node->Style.BorderWidth > 0)
+        if(Style->Value.BorderWidth > 0)
         {
-            UITree_BindFlag(Node, 1, UILayoutNode_DrawBorders, Pipeline);
+            SetFlag(Node->Value.Flags, UILayoutNode_DrawBorders);
         }
 
-        UITree_BindFlag(Node, 1, UILayoutNode_DrawBackground         , Pipeline);
-        UITree_BindFlag(Node, 1, UILayoutNode_PlaceChildrenVertically, Pipeline);
-        UITree_BindFlag(Node, 1, UILayoutNode_IsDraggable            , Pipeline);
-        UITree_BindFlag(Node, 1, UILayoutNode_IsResizable            , Pipeline);
+        SetFlag(Node->Value.Flags, UILayoutNode_DrawBackground         );
+        SetFlag(Node->Value.Flags, UILayoutNode_PlaceChildrenVertically);
+        SetFlag(Node->Value.Flags, UILayoutNode_IsDraggable            );
+        SetFlag(Node->Value.Flags, UILayoutNode_IsResizable            );
     }
 }
 
 internal void
 UIButton(ui_style_name StyleName, ui_click_callback *Callback, ui_pipeline *Pipeline)
 {
-    ui_style Style = UIGetStyle(StyleName, Pipeline->StyleRegistery);
-    ui_node *Node  = UITree_GetFreeNode(Pipeline->StyleTree, UINode_Button);
+    ui_cached_style *Style = UIGetStyle(StyleName, Pipeline->StyleRegistery);
+    ui_layout_node  *Node  = GetFreeLayoutNode(Pipeline->LayoutTree, UILayoutNode_Button);
 
     if (Node)
     {
-        Node->Style = Style;
-        Node->Id    = NextId++;
-
-        UITree_LinkNodes(Node, UITree_GetParent(Pipeline->StyleTree));
+        AttachLayoutNode  (Node, GetLayoutNodeParent(Pipeline->LayoutTree));
+        SetLayoutNodeStyle(Style, Node);
 
         // Draw Flags
         {
-            if (Node->Style.BorderWidth > 0)
+            if (Style->Value.BorderWidth > 0)
             {
-                UITree_BindFlag(Node, 1, UILayoutNode_DrawBorders, Pipeline);
+                SetFlag(Node->Value.Flags, UILayoutNode_DrawBorders);
             }
-            UITree_BindFlag(Node, 1, UILayoutNode_DrawBackground, Pipeline);
+
+            SetFlag(Node->Value.Flags, UILayoutNode_DrawBackground);
         }
 
         // Callbacks (What about hovers?)
         if (Callback)
         {
-            UITree_BindClickCallback(Node, Callback, Pipeline);
+            UITree_BindClickCallback(Node, Callback);
         }
     }
 }
@@ -114,32 +107,31 @@ UIButton(ui_style_name StyleName, ui_click_callback *Callback, ui_pipeline *Pipe
 internal void
 UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
 {
-    ui_style Style = UIGetStyle(StyleName, Pipeline->StyleRegistery);
-    ui_node *Node  = UITree_GetFreeNode(Pipeline->StyleTree, UINode_Label);
+    ui_cached_style *Style = UIGetStyle(StyleName, Pipeline->StyleRegistery);
+    ui_layout_node  *Node  = GetFreeLayoutNode(Pipeline->LayoutTree, UILayoutNode_Label);
+
     if (Node)
     {
-        Node->Style = Style;
-        Node->Id    = NextId++;
+        AttachLayoutNode  (Node, GetLayoutNodeParent(Pipeline->LayoutTree));
+        SetLayoutNodeStyle(Style, Node);
 
-        UITree_LinkNodes(Node, UITree_GetParent(Pipeline->StyleTree));
-
-        // Draw Binds
+        // Draw Flags
         {
-            if (Node->Style.BorderWidth > 0)
+            if (Style->Value.BorderWidth > 0)
             {
-                UITree_BindFlag(Node, 1, UILayoutNode_DrawBorders, Pipeline);
+                SetFlag(Node->Value.Flags, UILayoutNode_DrawBorders);
             }
 
             if (Text.Size > 0)
             {
-                UITree_BindFlag(Node, 1, UILayoutNode_DrawText, Pipeline);
+                SetFlag(Node->Value.Flags, UILayoutNode_DrawText);
             }
         }
 
         ui_unit TextWidth  = {UIUnit_Float32, 0};
         ui_unit TextHeight = {UIUnit_Float32, 0};
 
-        ui_font      *Font           = Node->Style.Font.Ref;
+        ui_font      *Font           = Style->Value.Font.Ref;
         ui_character *Characters     = PushArray(Pipeline->StaticArena, ui_character, Text.Size);
         u32           CharacterCount = (u32)Text.Size; Assert(CharacterCount == Text.Size);
         if (Characters)
@@ -186,7 +178,8 @@ UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
             }
         }
 
-        Node->Style.Size = Vec2Unit(TextWidth, TextHeight);
+        Node->Value.Width  = TextWidth;
+        Node->Value.Height = TextHeight;
         UITree_BindText(Pipeline, Characters, CharacterCount, Font, Node);
     }
 }
@@ -194,20 +187,18 @@ UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
 internal void
 UIHeader(ui_style_name StyleName, ui_pipeline *Pipeline)
 {
-    ui_style Style = UIGetStyle(StyleName, Pipeline->StyleRegistery);
-    ui_node *Node  = UITree_GetFreeNode(Pipeline->StyleTree, UINode_Header);
+    ui_cached_style *Style = UIGetStyle(StyleName, Pipeline->StyleRegistery);
+    ui_layout_node  *Node  = GetFreeLayoutNode(Pipeline->LayoutTree, UILayoutNode_Header);
 
     if (Node)
     {
-        Node->Style = Style;
-        Node->Id    = NextId++;
+        AttachLayoutNode    (Node, GetLayoutNodeParent(Pipeline->LayoutTree));
+        SetLayoutNodeStyle  (Style, Node);
+        PushLayoutNodeParent(Node, Pipeline->LayoutTree);
 
-        UITree_LinkNodes(Node, UITree_GetParent(Pipeline->StyleTree));
-        UITree_PushParent(Node, Pipeline->StyleTree);
-
-        if (Node->Style.BorderWidth > 0)
+        if (Style->Value.BorderWidth > 0)
         {
-            UITree_BindFlag(Node, 1, UILayoutNode_DrawBorders, Pipeline);
+            SetFlag(Node->Value.Flags, UILayoutNode_DrawBorders);
         }
     }
 }
@@ -276,11 +267,10 @@ UIGetCachedNameFromSubregistry(byte_string Name, ui_style_subregistry *Registry)
     return Result;
 }
 
-
-internal ui_style
+internal ui_cached_style *
 UIGetStyle(ui_style_name Name, ui_style_registry *Registry)
 {
-    ui_style Result = { 0 };
+    ui_cached_style *Result = 0;
 
     if (Registry)
     {
@@ -294,7 +284,7 @@ UIGetStyle(ui_style_name Name, ui_style_registry *Registry)
                     byte_string CachedString = Sub->CachedNames[CachedStyle->Index].Value;
                     if (Name.Value.String == CachedString.String)
                     {
-                        Result = CachedStyle->Style;
+                        Result = CachedStyle;
                         break;
                     }
                 }
@@ -308,22 +298,6 @@ UIGetStyle(ui_style_name Name, ui_style_registry *Registry)
     }
 
     return Result;
-}
-
-internal void
-UISetColor(ui_node *Node, ui_color Color)
-{
-    b32 ValidColor = IsNormalizedColor(Color);
-    if (ValidColor)
-    {
-        Node->Style.Version += 1;
-        Node->Style.Color    = Color;
-        SetFlag(Node->Style.Flags, UIStyleNode_StyleSetAtRuntime);
-    }
-    else
-    {
-        OSLogMessage(byte_string_literal("Color given to 'UISetColor' is not normalized."), OSMessage_Warn);
-    }
 }
 
 // [Pipeline]
@@ -356,25 +330,13 @@ UICreatePipeline(ui_pipeline_params Params)
         }
     }
 
-    // Trees
+    // Layout Tree
     {
-        {
-            ui_tree_params TreeParams = {0};
-            TreeParams.Depth     = Params.TreeDepth;
-            TreeParams.NodeCount = Params.TreeNodeCount;
-            TreeParams.Type      = UITree_Style;
+        ui_layout_tree_params TreeParams = {0};
+        TreeParams.Depth     = Params.TreeDepth;
+        TreeParams.NodeCount = Params.TreeNodeCount;
 
-            Result.StyleTree = UITree_Allocate(TreeParams);
-        }
-
-        {
-            ui_tree_params TreeParams = { 0 };
-            TreeParams.Depth     = Params.TreeDepth;
-            TreeParams.NodeCount = Params.TreeNodeCount;
-            TreeParams.Type      = UITree_Layout;
-
-            Result.LayoutTree = UITree_Allocate(TreeParams);
-        }
+        Result.LayoutTree = AllocateLayoutTree(TreeParams);
     }
 
     // Others
@@ -398,16 +360,12 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
 {   Assert(Pipeline && PassList);
 
     // Unpacking
-    ui_node     *StyleRoot  = &Pipeline->StyleTree->Nodes[0];
-    ui_node     *LayoutRoot = &Pipeline->LayoutTree->Nodes[0];
-    render_pass *RenderPass = GetRenderPass(Pipeline->FrameArena, PassList, RenderPass_UI);
+    ui_layout_node *LayoutRoot = &Pipeline->LayoutTree->Nodes[0];
+    render_pass    *RenderPass = GetRenderPass(Pipeline->FrameArena, PassList, RenderPass_UI);
 
+    // Layout
     {
-        UITree_SynchronizePipeline(StyleRoot, Pipeline);
-    }
-
-    {
-        UILayout_ComputeParentToChildren(LayoutRoot, Pipeline);
+        TopDownLayout(LayoutRoot, Pipeline);
     }
 
     vec2_f32 MouseDelta     = OSGetMouseDelta();
@@ -417,20 +375,20 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
 
     bit_field HitTestFlags = UIHitTest_NoFlag;
     {
-        if(HasFlag(LayoutRoot->Layout.Flags, UILayoutNode_IsResizable))
+        if(HasFlag(LayoutRoot->Value.Flags, UILayoutNode_IsResizable))
         {
             SetFlag(HitTestFlags, UIHitTest_CheckForResize);
         }
     }
 
-    ui_hit_test_result Hit = UILayout_HitTest(OSGetMousePosition(), HitTestFlags, LayoutRoot, Pipeline);
+    ui_hit_test_result Hit = HitTestLayout(OSGetMousePosition(), HitTestFlags, LayoutRoot, Pipeline);
 
     if(Hit.Success)
     {
-        Assert(Hit.LayoutNode);
+        Assert(Hit.Node);
         Assert(Hit.HoverState != UIHover_None);
 
-        ui_layout_box *Box = &Hit.LayoutNode->Layout;
+        ui_layout_box *Box = &Hit.Node->Value;
 
         SetFlag(Box->Flags, UILayoutNode_IsHovered);
 
@@ -438,7 +396,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         {
             if(Box->ClickCallback)
             {
-                Box->ClickCallback(Hit.LayoutNode, Pipeline);
+                Box->ClickCallback(Hit.Node, Pipeline);
             }
 
             SetFlag(Box->Flags, UILayoutNode_IsClicked);
@@ -453,7 +411,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         {
             if(MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsDraggable))
             {
-                Pipeline->DragCaptureNode = Hit.LayoutNode;
+                Pipeline->DragCaptureNode = Hit.Node;
             }
         } break;
 
@@ -461,7 +419,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         {
             if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
             {
-                Pipeline->ResizeCaptureNode = Hit.LayoutNode;
+                Pipeline->ResizeCaptureNode = Hit.Node;
                 Pipeline->ResizeType        = UIResize_X;
             }
         } break;
@@ -470,7 +428,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         {
             if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
             {
-                Pipeline->ResizeCaptureNode = Hit.LayoutNode;
+                Pipeline->ResizeCaptureNode = Hit.Node;
                 Pipeline->ResizeType        = UIResize_Y;
             }
         } break;
@@ -479,7 +437,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         {
             if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
             {
-                Pipeline->ResizeCaptureNode = Hit.LayoutNode;
+                Pipeline->ResizeCaptureNode = Hit.Node;
                 Pipeline->ResizeType        = UIResize_XY;
             }
         } break;
@@ -503,31 +461,31 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         case UIResize_X:
         {
             vec2_f32 Delta = Vec2F32(MouseDelta.X, 0.f);
-            UILayout_ResizeSubtree(Delta, Pipeline->ResizeCaptureNode, Pipeline);
+            ResizeUISubtree(Delta, Pipeline->ResizeCaptureNode, Pipeline);
         } break;
 
         case UIResize_Y:
         {
             vec2_f32 Delta = Vec2F32(0.f, MouseDelta.Y);
-            UILayout_ResizeSubtree(Delta, Pipeline->ResizeCaptureNode, Pipeline);
+            ResizeUISubtree(Delta, Pipeline->ResizeCaptureNode, Pipeline);
         } break;
 
         case UIResize_XY:
         {
-            UILayout_ResizeSubtree(MouseDelta, Pipeline->ResizeCaptureNode, Pipeline);
+            ResizeUISubtree(MouseDelta, Pipeline->ResizeCaptureNode, Pipeline);
         } break;
 
         }
 
         if (Hit.Success)
         {
-            ClearFlag(Hit.LayoutNode->Layout.Flags, UILayoutNode_IsHovered);
+            ClearFlag(Hit.Node->Value.Flags, UILayoutNode_IsHovered);
         }
     }
 
     if (Pipeline->DragCaptureNode && MouseMoved)
     {
-        UILayout_DragSubtree(MouseDelta, Pipeline->DragCaptureNode, Pipeline);
+        DragUISubtree(MouseDelta, Pipeline->DragCaptureNode, Pipeline);
     }
 
     // Set Cursor
@@ -539,7 +497,7 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         }
 
         b32 IsResizable = 0;
-        if (Hit.LayoutNode && HasFlag(Hit.LayoutNode->Layout.Flags, UILayoutNode_IsResizable))
+        if (Hit.Node && HasFlag(Hit.Node->Value.Flags, UILayoutNode_IsResizable))
         {
             IsResizable = 1;
         }
@@ -566,32 +524,13 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
         }
     }
 
-    UIPipelineBuildDrawList(Pipeline, RenderPass, StyleRoot, LayoutRoot);
+    UIPipelineBuildDrawList(Pipeline, RenderPass, LayoutRoot);
 }
 
 internal void
-UIPipelineDragNodes(vec2_f32 MouseDelta, ui_pipeline *Pipeline, ui_node *LRoot)
+UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_layout_node *LayoutRoot)
 {
-    LRoot->Layout.FinalX += MouseDelta.X;
-    LRoot->Layout.FinalY += MouseDelta.Y;
-
-    for (ui_node *Child = LRoot->First; Child != 0; Child = Child->Next)
-    {
-        UIPipelineDragNodes(MouseDelta, Pipeline, Child);
-    }
-}
-
-internal void
-UIPipelineCrystallizeStyles(ui_pipeline *Pipeline, ui_node *Root)
-{   UNUSED(Pipeline && Root);
-
-    // TODO: Implement this....
-}
-
-internal void
-UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot, ui_node *LRoot)
-{
-    ui_layout_box *Box = &LRoot->Layout;
+    ui_layout_box *Box = &LayoutRoot->Value;
 
     render_batch_list     *List      = 0;
     render_pass_params_ui *UIParams  = &Pass->Params.UI.Params;
@@ -634,7 +573,7 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
         List         = &Node->BatchList;
     }
 
-    ui_style *BaseStyle = &SRoot->Style;
+    ui_style *BaseStyle = &LayoutRoot->CachedStyle->Value;
     ui_style *Style     = BaseStyle;
     {
         b32 Overriden = 0;
@@ -661,7 +600,7 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
             ClearFlag(Box->Flags, UILayoutNode_IsHovered);
         }
 
-        if (Overriden && Style->Version != BaseStyle->Version)
+        if (Overriden && Style->BaseVersion != BaseStyle->BaseVersion)
         {
             if (!HasFlag(Style->Flags, UIStyleNode_HasColor))        Style->Color        = BaseStyle->Color;
             if (!HasFlag(Style->Flags, UIStyleNode_HasBorderColor))  Style->BorderColor  = BaseStyle->BorderColor;
@@ -670,7 +609,7 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
             if (!HasFlag(Style->Flags, UIStyleNode_HasBorderWidth))  Style->BorderWidth  = BaseStyle->BorderWidth;
             if (!HasFlag(Style->Flags, UIStyleNode_HasCornerRadius)) Style->CornerRadius = BaseStyle->CornerRadius;
 
-            Style->Version = BaseStyle->Version;
+            Style->BaseVersion = BaseStyle->BaseVersion;
         }
     }
 
@@ -705,8 +644,8 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_node *SRoot
         }
     }
 
-    for (ui_node *SChild = SRoot->First; SChild != 0; SChild = SChild->Next)
+    for (ui_layout_node *Child = LayoutRoot->First; Child != 0; Child = Child->Next)
     {
-        UIPipelineBuildDrawList(Pipeline, Pass, SChild, UITree_GetLayoutNode(SChild, Pipeline));
+        UIPipelineBuildDrawList(Pipeline, Pass, Child);
     }
 }

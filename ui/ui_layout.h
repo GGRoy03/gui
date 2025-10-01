@@ -29,15 +29,17 @@ typedef enum UIHitTest_Flag
     UIHitTest_CheckForResize = 1 << 0,
 } UIHitTest_Flag;
 
-// [CORE TYPES]
+// [FORWARD DECLARATION]
 
-DEFINE_TYPED_QUEUE(Node, node, ui_node *);
+typedef struct ui_text ui_text;
+
+// [CORE TYPES]
 
 typedef struct ui_hit_test_result
 {
-    ui_node      *LayoutNode;
-    UIHover_State HoverState;
-    b32           Success;
+    ui_layout_node *Node;
+    UIHover_State   HoverState;
+    b32             Success;
 } ui_hit_test_result;
 
 typedef struct ui_layout_box
@@ -68,9 +70,9 @@ typedef struct ui_layout_box
 
 // [CORE API]
 
-internal ui_hit_test_result UILayout_HitTest  (vec2_f32 MousePosition, bit_field Flags, ui_node *LayoutRoot, ui_pipeline *Pipeline);
+internal ui_hit_test_result HitTestLayout  (vec2_f32 MousePosition, bit_field Flags, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline);
 
-internal void UILayout_DragSubtree    (vec2_f32 Delta, ui_node *LayoutRoot, ui_pipeline *Pipeline);
-internal void UILayout_ResizeSubtree  (vec2_f32 Delta, ui_node *LayoutNode, ui_pipeline *Pipeline);
+internal void DragUISubtree    (vec2_f32 Delta, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline);
+internal void ResizeUISubtree  (vec2_f32 Delta, ui_layout_node *LayoutNode, ui_pipeline *Pipeline);
 
-internal void UILayout_ComputeParentToChildren  (ui_node *LayoutRoot, ui_pipeline *Pipeline);
+internal void TopDownLayout  (ui_layout_node *LayoutRoot, ui_pipeline *Pipeline);

@@ -182,7 +182,7 @@ internal tokenized_style_file TokenizeStyleFile  (os_read_file File, memory_aren
 internal b32 ParseTokenizedStyleFile  (tokenized_style_file *TokenizedFile, memory_arena *Arena, ui_style_subregistry *Registery);
 internal b32 ParseStyleVariable       (style_parser *Parser, tokenized_style_file *TokenizedFile);
 internal b32 ParseStyleHeader         (style_parser *Parser, tokenized_style_file *TokenizedFile, ui_style_subregistry *Registery);
-internal b32 ParseStyleAttribute      (style_parser *Parser, tokenized_style_file *TokenizedFile, UINode_Type ParsingFor);
+internal b32 ParseStyleAttribute      (style_parser *Parser, tokenized_style_file *TokenizedFile, UILayoutNode_Type ParsingFor);
 
 // [Variables]
 

@@ -1,13 +1,13 @@
 // [Handlers]
 
 internal void
-FileBrowserForwardHistory(ui_node *Node, ui_pipeline *Pipeline)
+FileBrowserForwardHistory(ui_layout_node *Node, ui_pipeline *Pipeline)
 {   UNUSED(Node); UNUSED(Pipeline);
 
 }
 
 internal void
-FileBrowserBackwardHistory(ui_node *Node, ui_pipeline *Pipeline)
+FileBrowserBackwardHistory(ui_layout_node *Node, ui_pipeline *Pipeline)
 {   UNUSED(Node); UNUSED(Pipeline);
 
 }

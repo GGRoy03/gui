@@ -146,6 +146,30 @@ PopWideString(wide_string String, memory_arena *Arena)
     PopArena(Arena, String.Size * sizeof(String.String[0]));
 }
 
+internal byte_string
+ByteStringAppendBefore(byte_string Pre, byte_string Post, memory_arena *Arena)
+{
+    u64         Size   = Pre.Size + Post.Size;
+    byte_string Result = ByteString(PushArray(Arena, u8, Size), Size);
+
+    memcpy(Result.String           , Pre.String , Pre.Size );
+    memcpy(Result.String + Pre.Size, Post.String, Post.Size);
+
+    return Result;
+}
+
+internal wide_string
+WideStringAppendBefore(wide_string Pre, wide_string Post, memory_arena *Arena)
+{
+    u64         Size   = Pre.Size + Post.Size;
+    wide_string Result = WideString(PushArray(Arena, u16, Size), Size);
+
+    memcpy(Result.String           , Pre.String , Pre.Size  * sizeof(u16));
+    memcpy(Result.String + Pre.Size, Post.String, Post.Size * sizeof(u16));
+
+    return Result;
+}
+
 // [Character Utilities]
 
 static b32

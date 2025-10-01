@@ -41,8 +41,8 @@ typedef struct file_browser_ui
 
 // [Handlers]
 
-internal void FileBrowserForwardHistory   (ui_node *Node, ui_pipeline *Pipeline);
-internal void FileBrowserBackwardHistory  (ui_node *Node, ui_pipeline *Pipeline);
+internal void FileBrowserForwardHistory   (ui_layout_node *Node, ui_pipeline *Pipeline);
+internal void FileBrowserBackwardHistory  (ui_layout_node *Node, ui_pipeline *Pipeline);
 
 // [UI]
 

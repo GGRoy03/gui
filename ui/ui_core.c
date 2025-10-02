@@ -272,160 +272,133 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
     }
 
     vec2_f32 MouseDelta     = OSGetMouseDelta();
+    b32      MouseMoved     = (MouseDelta.X != 0 || MouseDelta.Y != 0);
     b32      MouseIsClicked = OSIsMouseClicked(OSMouseButton_Left);
     b32      MouseReleased  = OSIsMouseReleased(OSMouseButton_Left);
-    b32      MouseMoved     = (MouseDelta.X != 0 || MouseDelta.Y != 0);
 
-    bit_field HitTestFlags = UIHitTest_NoFlag;
+    UIIntent_Type Intent = Pipeline->Intent;
+
+    if (!Pipeline->CapturedNode)
     {
-        if(HasFlag(LayoutRoot->Value.Flags, UILayoutNode_IsResizable))
+        bit_field HitTestFlags = UIHitTest_NoFlag;
         {
-            SetFlag(HitTestFlags, UIHitTest_CheckForResize);
-        }
-    }
-
-    ui_hit_test_result Hit = HitTestLayout(OSGetMousePosition(), HitTestFlags, LayoutRoot, Pipeline);
-
-    if(Hit.Success)
-    {
-        Assert(Hit.Node);
-        Assert(Hit.HoverState != UIHover_None);
-
-        ui_layout_box *Box = &Hit.Node->Value;
-
-        SetFlag(Box->Flags, UILayoutNode_IsHovered);
-
-        if(MouseIsClicked)
-        {
-            if(Box->ClickCallback)
+            if (HasFlag(LayoutRoot->Value.Flags, UILayoutNode_IsResizable))
             {
-                Box->ClickCallback(Hit.Node, Pipeline);
+                SetFlag(HitTestFlags, UIHitTest_CheckForResize);
             }
-
-            SetFlag(Box->Flags, UILayoutNode_IsClicked);
         }
 
-        switch(Hit.HoverState)
+        ui_hit_test_result Hit = HitTestLayout(OSGetMousePosition(), HitTestFlags, LayoutRoot, Pipeline);
+        if(Hit.Success)
         {
-
-        default: break;
-
-        case UIHover_Target:
-        {
-            if(MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsDraggable))
+            Assert(Hit.Node);
+            Assert(Hit.Intent != UIIntent_None);
+        
+            ui_layout_box *Box = &Hit.Node->Value;
+        
+            if (MouseIsClicked)
             {
-                Pipeline->DragCaptureNode = Hit.Node;
+                if (Box->ClickCallback)
+                {
+                    Box->ClickCallback(Hit.Node, Pipeline);
+                }
+        
+                SetFlag(Box->Flags, UILayoutNode_IsClicked);
             }
-        } break;
-
-        case UIHover_ResizeX:
-        {
-            if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
+        
+            // Capture the intent and the node.
+        
+            switch(Hit.Intent)
             {
-                Pipeline->ResizeCaptureNode = Hit.Node;
-                Pipeline->ResizeType        = UIResize_X;
-            }
-        } break;
-
-        case UIHover_ResizeY:
-        {
-            if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
+        
+            default: break;
+        
+            case UIIntent_Hover:
             {
-                Pipeline->ResizeCaptureNode = Hit.Node;
-                Pipeline->ResizeType        = UIResize_Y;
-            }
-        } break;
-
-        case UIHover_ResizeCorner:
-        {
-            if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
+                if(MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsDraggable))
+                {
+                    Pipeline->CapturedNode = Hit.Node;
+                    Pipeline->Intent       = Hit.Intent;
+                }
+                SetFlag(Box->Flags, UILayoutNode_IsHovered);
+            } break;
+        
+            case UIIntent_ResizeX:
+            case UIIntent_ResizeY:
+            case UIIntent_ResizeXY:
             {
-                Pipeline->ResizeCaptureNode = Hit.Node;
-                Pipeline->ResizeType        = UIResize_XY;
+                if (MouseIsClicked && HasFlag(Box->Flags, UILayoutNode_IsResizable))
+                {
+                    Pipeline->CapturedNode = Hit.Node;
+                    Pipeline->Intent       = Hit.Intent;
+                }
+            } break;
+        
             }
-        } break;
-
         }
+
+        Intent = Hit.Intent;
     }
 
     if (MouseReleased)
     {
-        Pipeline->DragCaptureNode   = 0;
-        Pipeline->ResizeCaptureNode = 0;
-        Pipeline->ResizeType        = UIResize_None;
+        Pipeline->CapturedNode = 0;
+        Pipeline->Intent       = UIIntent_None;
     }
-
-    if (Pipeline->ResizeCaptureNode)
+    
+    switch (Intent)
     {
-        switch (Pipeline->ResizeType)
-        {
-        default: break;
 
-        case UIResize_X:
-        {
-            vec2_f32 Delta = Vec2F32(MouseDelta.X, 0.f);
-            ResizeUISubtree(Delta, Pipeline->ResizeCaptureNode, Pipeline);
-        } break;
-
-        case UIResize_Y:
-        {
-            vec2_f32 Delta = Vec2F32(0.f, MouseDelta.Y);
-            ResizeUISubtree(Delta, Pipeline->ResizeCaptureNode, Pipeline);
-        } break;
-
-        case UIResize_XY:
-        {
-            ResizeUISubtree(MouseDelta, Pipeline->ResizeCaptureNode, Pipeline);
-        } break;
-
-        }
-
-        if (Hit.Success)
-        {
-            ClearFlag(Hit.Node->Value.Flags, UILayoutNode_IsHovered);
-        }
-    }
-
-    if (Pipeline->DragCaptureNode && MouseMoved)
+    case UIIntent_None:
     {
-        DragUISubtree(MouseDelta, Pipeline->DragCaptureNode, Pipeline);
-    }
+        OSSetCursor(OSCursor_Default);
+    } break;
 
-    // Set Cursor
+    case UIIntent_Hover:
     {
-        b32 IsDraggable = 0;
-        if (Pipeline->DragCaptureNode)
+        if (Pipeline->CapturedNode && MouseMoved)
         {
-            IsDraggable = 1;
-        }
-
-        b32 IsResizable = 0;
-        if (Hit.Node && HasFlag(Hit.Node->Value.Flags, UILayoutNode_IsResizable))
-        {
-            IsResizable = 1;
-        }
-
-        if (IsDraggable && MouseMoved)
-        {
+            DragUISubtree(MouseDelta, Pipeline->CapturedNode, Pipeline);
             OSSetCursor(OSCursor_GrabHand);
-        }
-        else if (IsResizable && (Hit.HoverState == UIHover_ResizeX || Pipeline->ResizeType == UIResize_X))
-        {
-            OSSetCursor(OSCursor_ResizeHorizontal);
-        }
-        else if (IsResizable && (Hit.HoverState == UIHover_ResizeY || Pipeline->ResizeType == UIResize_Y))
-        {
-            OSSetCursor(OSCursor_ResizeVertical);
-        }
-        else if (IsResizable && (Hit.HoverState == UIHover_ResizeCorner || Pipeline->ResizeType == UIResize_XY))
-        {
-            OSSetCursor(OSCursor_ResizeDiagonalLeftToRight);
         }
         else
         {
             OSSetCursor(OSCursor_Default);
         }
+    } break;
+
+    case UIIntent_ResizeX:
+    {
+        if (Pipeline->CapturedNode && MouseMoved)
+        {
+            ResizeUISubtree(Vec2F32(MouseDelta.X, 0.f), Pipeline->CapturedNode, Pipeline);
+        }
+
+        OSSetCursor(OSCursor_ResizeHorizontal);
+    } break;
+
+    case UIIntent_ResizeY:
+    {
+        if (Pipeline->CapturedNode && MouseMoved)
+        {
+            ResizeUISubtree(Vec2F32(0.f, MouseDelta.Y), Pipeline->CapturedNode, Pipeline);
+        }
+
+        OSSetCursor(OSCursor_ResizeVertical);
+    } break;
+
+    case UIIntent_ResizeXY:
+    {
+        if (Pipeline->CapturedNode && MouseMoved)
+        {
+            ResizeUISubtree(MouseDelta, Pipeline->CapturedNode, Pipeline);
+        }
+
+        OSSetCursor(OSCursor_ResizeDiagonalLeftToRight);
+    } break;
+
     }
+    
 
     UIPipelineBuildDrawList(Pipeline, RenderPass, LayoutRoot);
 }

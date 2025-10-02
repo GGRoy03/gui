@@ -25,9 +25,9 @@ HitTestLayout(vec2_f32 MousePosition, bit_field Flags, ui_layout_node *LayoutRoo
             }
         }
 
-        Result.Node       = LayoutRoot;
-        Result.HoverState = UIHover_Target;
-        Result.Success    = 1;
+        Result.Node    = LayoutRoot;
+        Result.Intent  = UIIntent_Hover;
+        Result.Success = 1;
 
         if(HasFlag(Flags, UIHitTest_CheckForResize))
         {
@@ -46,22 +46,22 @@ HitTestLayout(vec2_f32 MousePosition, bit_field Flags, ui_layout_node *LayoutRoo
                 {
                     if(MousePosition.Y >= (Origin.Y + FullHalfSize.Y - CornerTolerance))
                     {
-                        Result.HoverState = UIHover_ResizeCorner;
+                        Result.Intent = UIIntent_ResizeXY;
                     }
                     else
                     {
-                        Result.HoverState = UIHover_ResizeX;
+                        Result.Intent = UIIntent_ResizeX;
                     }
                 }
                 else if(MousePosition.Y >= (ResizeBorderY - BorderWidth))
                 {
                     if(MousePosition.X >= (Origin.X + FullHalfSize.X - CornerTolerance))
                     {
-                        Result.HoverState = UIHover_ResizeCorner;
+                        Result.Intent = UIIntent_ResizeXY;
                     }
                     else
                     {
-                        Result.HoverState = UIHover_ResizeY;
+                        Result.Intent = UIIntent_ResizeY;
                     }
                  }
             }

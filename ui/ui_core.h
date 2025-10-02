@@ -7,13 +7,14 @@ typedef enum UIUnit_Type
     UIUnit_Percent = 2,
 } UIUnit_Type;
 
-typedef enum UIResize_Type
+typedef enum UIIntent_Type
 {
-    UIResize_None = 0,
-    UIResize_X    = 1,
-    UIResize_Y    = 2,
-    UIResize_XY   = 3,
-} UIResize_Type;
+    UIIntent_None     = 0,
+    UIIntent_Hover    = 1,
+    UIIntent_ResizeX  = 2,
+    UIIntent_ResizeY  = 3,
+    UIIntent_ResizeXY = 4,
+} UIIntent_Type;
 
 typedef enum UIConstant_Type
 {
@@ -120,10 +121,8 @@ typedef struct ui_pipeline
     ui_layout_tree    *LayoutTree;
     ui_style_registry *StyleRegistery;
 
-    // TODO: Simplify this.
-    ui_layout_node *DragCaptureNode;
-    ui_layout_node *ResizeCaptureNode;
-    UIResize_Type   ResizeType;
+    ui_layout_node *CapturedNode;
+    UIIntent_Type   Intent;
 
     render_handle RendererHandle;
 

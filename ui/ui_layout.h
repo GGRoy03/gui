@@ -14,15 +14,6 @@ typedef enum UILayoutNode_Flag
     UILayoutNode_IsResizable             = 1 << 8,
 } UILayoutNode_Flag;
 
-typedef enum UIHover_State
-{
-    UIHover_None         = 0,
-    UIHover_Target       = 1,
-    UIHover_ResizeX      = 2,
-    UIHover_ResizeY      = 3,
-    UIHover_ResizeCorner = 4,
-} UIHover_State;
-
 typedef enum UIHitTest_Flag
 {
     UIHitTest_NoFlag         = 0,
@@ -38,7 +29,7 @@ typedef struct ui_text ui_text;
 typedef struct ui_hit_test_result
 {
     ui_layout_node *Node;
-    UIHover_State   HoverState;
+    UIIntent_Type   Intent;
     b32             Success;
 } ui_hit_test_result;
 

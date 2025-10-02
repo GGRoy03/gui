@@ -93,25 +93,6 @@ GetFreeLayoutNode(ui_layout_tree *Tree, UILayoutNode_Type Type)
     return Result;
 }
 
-internal void
-SetLayoutNodeStyle(ui_cached_style *CachedStyle, ui_layout_node *Node, bit_field Flags)
-{
-    if (IsValidLayoutNode(Node) && CachedStyle)
-    {
-        Node->CachedStyle = CachedStyle;
-
-        Node->Value.Width   = CachedStyle->Value.Size.X;
-        Node->Value.Height  = CachedStyle->Value.Size.Y;
-        Node->Value.Padding = CachedStyle->Value.Padding;
-        Node->Value.Spacing = CachedStyle->Value.Spacing;
-
-        if (!HasFlag(Flags, SetLayoutNodeStyle_OmitReference))
-        {
-            AppendToLinkedList(CachedStyle, Node, CachedStyle->RefCount);
-        }
-    }
-}
-
 // [Bindings]
 
 // NOTE: This seems weird.

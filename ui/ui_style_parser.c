@@ -241,7 +241,8 @@ ReadString(os_read_file *File, byte_string *OutString)
 
 internal b32
 ReadVector(os_read_file *File, u32 MinimumSize, u32 MaximumSize, u32 CurrentLineInFile, style_token *Result)
-{   Assert(PeekFile(File, 0) == '[');
+{
+    Assert(PeekFile(File, 0) == '[');
 
     AdvanceFile(File, 1); // Skips '['
 
@@ -659,7 +660,7 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
             Result = ValidateVectorUnitType(Value->Vector, UIUnit_Float32, 4, 0);
             if (!Result)
             {
-                LogStyleFileMessage(Value->LineInFile, ConsoleMessage_Error, byte_string_literal("Padding must be: [Float, Float, Float, Float]"));
+                LogStyleFileMessage( Value->LineInFile, ConsoleMessage_Error, byte_string_literal("Padding must be: [Float, Float, Float, Float]"));
                 return Result;
             }
 
@@ -749,18 +750,18 @@ SaveStyleAttribute(UIStyleAttribute_Flag Attribute, style_token *Value, style_pa
 }
 
 internal ui_cached_style *
-CreateCachedStyle(ui_style Style, ui_style_subregistry *Registery)
+CreateCachedStyle(ui_style Style, ui_style_subregistry *Registry)
 {
     ui_cached_style *Result = 0;
 
-    if (Registery->StyleCount < MAXIMUM_STYLE_COUNT_PER_SUB_REGISTRY)
+    if (Registry->StyleCount < MAXIMUM_STYLE_COUNT_PER_SUB_REGISTRY)
     {
-        Result = Registery->CachedStyles + Registery->StyleCount;
-        Result->Index = Registery->StyleCount;
+        Result = Registry->CachedStyles + Registry->StyleCount;
+        Result->Index = Registry->StyleCount;
         Result->Next  = 0;
         Result->Value = Style;
 
-        ++Registery->StyleCount;
+        ++Registry->StyleCount;
     }
 
     return Result;
@@ -787,13 +788,13 @@ CreateCachedStyleName(byte_string Name, ui_cached_style *CachedStyle, ui_style_s
 }
 
 internal ui_cached_style *
-CacheStyle(ui_style Style, byte_string Name, UIStyle_Type Type, ui_cached_style *BaseStyle, ui_style_subregistry *Registery)
+CacheStyle(ui_style Style, byte_string Name, UIStyle_Type Type, ui_cached_style *BaseStyle, ui_style_subregistry *Registry)
 {
     ui_cached_style *Result = 0;
 
     if (Name.Size && Name.Size <= MAXIMUM_STYLE_NAME_LENGTH)
     {
-        Result = CreateCachedStyle(Style, Registery);
+        Result = CreateCachedStyle(Style, Registry);
         if (Result)
         {
             switch (Type)
@@ -803,10 +804,10 @@ CacheStyle(ui_style Style, byte_string Name, UIStyle_Type Type, ui_cached_style 
 
             case UIStyle_Base:
             {
-                CreateCachedStyleName(Name, Result, Registery);
+                CreateCachedStyleName(Name, Result, Registry);
 
                 // TODO: Change this?
-                ui_cached_style *Sentinel = UIGetStyleSentinel(Name, Registery);
+                ui_cached_style *Sentinel = UIGetStyleSentinel(Name, Registry);
                 if (Sentinel->Next)
                 {
                     Sentinel->Next->Next = Result;
@@ -1182,7 +1183,7 @@ ParseTokenizedStyleFile(tokenized_style_file *TokenizedFile, memory_arena *Arena
             LogStyleFileMessage(0, ConsoleMessage_Warn, byte_string_literal("Failed to parse style. See error(s) above."));
             return 0;
         }
-        
+
         ui_cached_style *CachedBaseStyle = 0;
         ForEachEnum(UIStyle_Type, Type)
         {
@@ -1401,7 +1402,7 @@ LogStyleFileMessage(u32 LineInFile, ConsoleMessage_Severity Severity, byte_strin
     ErrorString.Size += vsnprintf((char *)(Buffer + ErrorString.Size), sizeof(Buffer), (char *)Format.String, Args);
 
     console_queue_node *Node = AllocateConsoleNode(ErrorString, Severity);
-    ConsoleWriteMessage(Node, 0);
+    ConsoleWriteMessage(Node, &Console);
 
     __crt_va_end(Args);
 }

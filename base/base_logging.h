@@ -53,6 +53,10 @@ struct console_queue
     console_queue_node Sentinel;
 };
 
+// [Globals]
+
+global console_queue Console;
+
 // [PRODUCER API]
 
 internal void ConsoleWriteMessage       (console_queue_node *Node, console_queue *Queue);
@@ -68,7 +72,7 @@ internal ConsoleMessagePoll_Result  PollConsoleMessageQueue        (console_queu
 internal console_queue_node       * PopConsoleMessageQueue         (console_queue *Queue);
 internal void                       FreeConsoleMessageNode         (console_queue_node *Node);
 
-// [NON-ATOMIC PRODUCER API]
+// [NON-ATOMIC API]
 
 internal u64                  GetTimeStamp         (void);
 internal console_queue_node * AllocateConsoleNode  (byte_string Message, ConsoleMessage_Severity Severity);

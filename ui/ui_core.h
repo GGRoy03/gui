@@ -140,9 +140,6 @@ typedef struct ui_state
     ui_font *Last;
     u32      FontCount;
 
-    // Console
-    console_queue Console;
-
     memory_arena *StaticData;
 } ui_state;
 

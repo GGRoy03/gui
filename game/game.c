@@ -22,9 +22,9 @@ GameEntryPoint()
         Params.CommitSize        = Kilobyte(64);
 
         UIState.StaticData = AllocateArena(Params);
-
-        InitializeConsoleMessageQueue(&UIState.Console);
     }
+
+    InitializeConsoleMessageQueue(&Console);
 
     while(OSUpdateWindow())
     {

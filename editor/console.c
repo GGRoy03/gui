@@ -15,9 +15,9 @@ ConsolePrintMessage(byte_string Message, ConsoleMessage_Severity Severity, ui_st
 }
 
 internal void
-ConsoleUI(editor_console_ui *Console, game_state *GameState, ui_state *UIState)
+ConsoleUI(editor_console_ui *ConsoleUI, game_state *GameState, ui_state *UIState)
 {
-    if(!Console->IsInitialized)
+    if(!ConsoleUI->IsInitialized)
     {
         ui_pipeline_params PipelineParams = {0};
         {
@@ -32,7 +32,7 @@ ConsoleUI(editor_console_ui *Console, game_state *GameState, ui_state *UIState)
             PipelineParams.TreeNodeCount  = 16;
             PipelineParams.RendererHandle = GameState->Renderer; // NOTE: Why do we do this?
         }
-        Console->Pipeline = UICreatePipeline(PipelineParams);
+        ConsoleUI->Pipeline = UICreatePipeline(PipelineParams);
 
         memory_arena_params ArenaParams = { 0 };
         {
@@ -41,37 +41,37 @@ ConsoleUI(editor_console_ui *Console, game_state *GameState, ui_state *UIState)
             ArenaParams.ReserveSize       = Kilobyte(10);
             ArenaParams.CommitSize        = Kilobyte(1);
         }
-        Console->Arena = AllocateArena(ArenaParams);
+        ConsoleUI->Arena = AllocateArena(ArenaParams);
 
         // Styles
         {
-            Console->WindowStyle       = UIGetCachedName(byte_string_literal("Console_Window")     , Console->Pipeline.Registry);
-            Console->MessageStyle      = UIGetCachedName(byte_string_literal("Console_Message")    , Console->Pipeline.Registry);
-            Console->MessageScrollView = UIGetCachedName(byte_string_literal("Console_MessageView"), Console->Pipeline.Registry);
+            ConsoleUI->WindowStyle       = UIGetCachedName(byte_string_literal("Console_Window")     , ConsoleUI->Pipeline.Registry);
+            ConsoleUI->MessageStyle      = UIGetCachedName(byte_string_literal("Console_Message")    , ConsoleUI->Pipeline.Registry);
+            ConsoleUI->MessageScrollView = UIGetCachedName(byte_string_literal("Console_MessageView"), ConsoleUI->Pipeline.Registry);
         }
 
         // Layout
-        UIWindow(Console->WindowStyle, &Console->Pipeline);
+        UIWindow(ConsoleUI->WindowStyle, &ConsoleUI->Pipeline);
         {
-            UIScrollViewEx(Console->MessageScrollViewNode, Console->MessageScrollView, (&Console->Pipeline))
+            UIScrollViewEx(ConsoleUI->MessageScrollViewNode, ConsoleUI->MessageScrollView, (&ConsoleUI->Pipeline))
             {
             }
         }
 
-        Console->IsInitialized = 1;
+        ConsoleUI->IsInitialized = 1;
     }
 
-    UIPipelineBegin(&Console->Pipeline);
+    UIPipelineBegin(&ConsoleUI->Pipeline);
 
     // Drain The Queue
     {
         console_queue_node *Node = 0;
-        while((Node = PopConsoleMessageQueue(&UIState->Console)))
+        while((Node = PopConsoleMessageQueue(&Console)))
         {
             ConsolePrintMessage(ByteString(Node->Value.Text, Node->Value.TextSize), Node->Value.Severity, UIState);
             FreeConsoleNode(Node);
         }
     }
 
-    UIPipelineExecute(&Console->Pipeline, &GameState->RenderPassList);
+    UIPipelineExecute(&ConsoleUI->Pipeline, &GameState->RenderPassList);
 }

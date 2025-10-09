@@ -1,5 +1,3 @@
-// [API IMPLEMENTATION]
-
 // [Constructors]
 
 external byte_string 
@@ -91,67 +89,10 @@ ByteStringAppendBefore(byte_string Pre, byte_string Post, memory_arena *Arena)
     return Result;
 }
 
-internal b32
-WideStringMatches(wide_string A, wide_string B, bit_field Flags)
+external b32
+IsValidWideString(wide_string Input)
 {
-    Assert(Flags >= StringMatch_NoFlag && Flags <= StringMatch_CaseSensitive);
-
-    b32 Result = 0;
-
-    if(A.Size == B.Size)
-    {
-        u16 *P1  = A.String;
-        u16 *P2  = B.String;
-        u16 *End = A.String + A.Size;
-
-        if(Flags & StringMatch_CaseSensitive)
-        {
-            while(P1 < End && *P1++ == *P2++){};
-        }
-        else
-        {
-            while (P1 < End)
-            {
-                u16 C1 = *P1;
-                u16 C2 = *P2;
-
-                if (C1 < 255)
-                {
-                    u8 C1Byte = (u8)C1;
-                    if (IsAlpha(C1Byte))
-                    {
-                        C1Byte = ToLowerChar(C1Byte);
-                    }
-
-                    C1 = (u16)C1Byte;
-                }
-
-                if (C2 < 255)
-                {
-                    u8 C2Byte = (u8)C2;
-                    if (IsAlpha(C2Byte))
-                    {
-                        C2Byte = ToLowerChar(C2Byte);
-                    }
-
-                    C2 = (u16)C2Byte;
-                }
-
-                if(C1 == C2)
-                {
-                    ++P1;
-                    ++P2;
-                }
-                else
-                {
-                    break;
-                }
-            }
-        }
-
-        Result = (P1 == End);
-    }
-
+    b32 Result = (Input.String) && (Input.Size);
     return Result;
 }
 
@@ -230,7 +171,7 @@ read_only global u8 ByteStringClass[32] =
 // 3 byte -> 1110 xxxx 10yy yyyy 10zz zzzz           -> Code Point == (Byte0 & BitMask4) << 12 | (Byte1 & BitMask6) << 6  | (Byte2 & BitMask6)
 // 4 byte -> 1111 1xxx 10yy yyyy 10zz zzzz 10ww wwww -> Code Point == (Byte0 & BitMask3) << 18 | (Byte1 & BitMask6) << 12 | (Byte2 & BitMask6) << 6 | (Byte3 & BitMask6)
 
-internal unicode_decode 
+external unicode_decode 
 DecodeByteString(u8 *ByteString, u64 Maximum)
 {
     unicode_decode Result = { 1, _UI32_MAX };

@@ -1,21 +1,158 @@
 // [Helpers]
 
 internal void
-AlignGlyph(vec2_f32 GlyphPosition, f32 LineHeight, ui_character *Character)
+AlignGlyph(vec2_f32 Position, f32 LineHeight, ui_glyph *Glyph)
 {
-    Character->Position.Min.X = roundf(GlyphPosition.X + Character->Layout.Offset.X);
-    Character->Position.Min.Y = roundf(GlyphPosition.Y + Character->Layout.Offset.Y);
-    Character->Position.Max.X = roundf(Character->Position.Min.X + Character->Layout.AdvanceX);
-    Character->Position.Max.Y = roundf(Character->Position.Min.Y + LineHeight); // WARN: Wrong?
+    Glyph->Position.Min.X = roundf(Position.X + Glyph->Offset.X);
+    Glyph->Position.Min.Y = roundf(Position.Y + Glyph->Offset.Y);
+    Glyph->Position.Max.X = roundf(Glyph->Position.Min.X + Glyph->AdvanceX);
+    Glyph->Position.Max.Y = roundf(Glyph->Position.Min.Y + LineHeight); // WARN: Wrong?
 }
 
-// [API IMPLEMENTATION]
+// [Layout Tree/Nodes]
 
-internal ui_hit_test_result 
+internal b32 
+IsValidLayoutNode(ui_layout_node *Node)
+{
+    b32 Result = Node && Node->Index != InvalidLayoutNodeIndex;
+    return Result;
+}
+
+internal ui_layout_tree *
+AllocateLayoutTree(ui_layout_tree_params Params)
+{
+    Assert(Params.NodeCount > 0 && Params.Depth > 0);
+
+    ui_layout_tree *Result = 0;
+
+    memory_arena *Arena = 0;
+    {
+        u64 StackSize = Params.Depth     * sizeof(Result->ParentStack[0]);
+        u64 ArraySize = Params.NodeCount * sizeof(Result->Nodes[0]);
+        u64 QueueSize = Params.NodeCount * sizeof(Result->Nodes[0]);
+        u64 Footprint = sizeof(ui_layout_tree) + StackSize + ArraySize + QueueSize;
+
+        memory_arena_params ArenaParams = { 0 };
+        ArenaParams.AllocatedFromFile = __FILE__;
+        ArenaParams.AllocatedFromLine = __LINE__;
+        ArenaParams.ReserveSize       = Footprint;
+        ArenaParams.CommitSize        = Footprint;
+
+        Arena = AllocateArena(ArenaParams);
+    }
+
+    if (Arena)
+    {
+        Result = PushArena(Arena, sizeof(ui_layout_tree), AlignOf(ui_layout_tree));
+        Result->Arena        = Arena;
+        Result->Nodes        = PushArray(Arena, ui_layout_node, Params.NodeCount);
+        Result->ParentStack  = PushArray(Arena, ui_layout_node *, Params.Depth);
+        Result->MaximumDepth = Params.Depth;
+        Result->NodeCapacity = Params.NodeCount;
+
+        for (u32 Idx = 0; Idx < Result->NodeCapacity; Idx++)
+        {
+            Result->Nodes[Idx].Index = InvalidLayoutNodeIndex;
+        }
+    }
+
+    return Result;
+}
+
+
+internal void
+PopLayoutNodeParent(ui_layout_tree*Tree)
+{
+    if (Tree->ParentTop > 0)
+    {
+        --Tree->ParentTop;
+    }
+}
+
+internal void
+PushLayoutNodeParent(ui_layout_node *Node, ui_layout_tree*Tree)
+{
+    if (Tree->ParentTop < Tree->MaximumDepth)
+    {
+        Tree->ParentStack[Tree->ParentTop++] = Node;
+    }
+}
+
+internal ui_layout_node *
+GetLayoutNodeParent(ui_layout_tree *Tree)
+{
+    ui_layout_node *Result = 0;
+
+    if (Tree->ParentTop)
+    {
+        Result = Tree->ParentStack[Tree->ParentTop - 1];
+    }
+
+    return Result;
+}
+
+internal ui_layout_node *
+GetFreeLayoutNode(ui_layout_tree *Tree, UILayoutNode_Type Type)
+{
+    ui_layout_node *Result = 0;
+
+    if (Tree->NodeCount < Tree->NodeCapacity)
+    {
+        Result = Tree->Nodes + Tree->NodeCount;
+        Result->Type  = Type;
+        Result->Index = Tree->NodeCount;
+
+        ++Tree->NodeCount;
+    }
+
+    return Result;
+}
+
+
+internal ui_layout_node *
+InitializeLayoutNode(ui_cached_style *Style, UILayoutNode_Type Type, bit_field ConstantFlags, ui_layout_tree *Tree)
+{
+    ui_layout_node *Node = GetFreeLayoutNode(Tree, Type);
+    if(Node)
+    {
+        Node->Flags = ConstantFlags;
+
+        // Tree Hierarchy
+        {
+            Node->Last   = 0;
+            Node->Next   = 0;
+            Node->First  = 0;
+            Node->Parent = GetLayoutNodeParent(Tree);
+
+            if(Node->Parent)
+            {
+                AppendToDoublyLinkedList(Node->Parent, Node, Node->Parent->ChildCount);
+            }
+
+            if(HasFlag(Node->Flags, UILayoutNode_IsParent))
+            {
+                PushLayoutNodeParent(Node, Tree);
+            }
+        }
+
+        if(Style)
+        {
+            if(GetBorderWidth(Style) > 0.f)
+            {
+                Assert(!HasFlag(Node->Flags, UILayoutNode_DrawBorders));
+                SetFlag(Node->Flags, UILayoutNode_DrawBorders);
+            }
+        }
+    }
+
+    return Node;
+}
+
+internal ui_hit_test
 HitTestLayout(vec2_f32 MousePosition, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 {
-    ui_hit_test_result Result = {0};
-    ui_layout_box     *Box    = &LayoutRoot->Value;
+    ui_hit_test    Result = {0};
+    ui_layout_box *Box    = &LayoutRoot->Value;
 
     f32      Radius        = 0.f;
     vec2_f32 FullHalfSize  = Vec2F32(Box->FinalWidth * 0.5f, Box->FinalHeight * 0.5f);
@@ -39,9 +176,9 @@ HitTestLayout(vec2_f32 MousePosition, ui_layout_node *LayoutRoot, ui_pipeline *P
         Result.Intent  = UIIntent_Hover;
         Result.Success = 1;
 
-        if(HasFlag(LayoutRoot->Value.Flags, UILayoutNode_IsResizable))
+        if(HasFlag(LayoutRoot->Flags, UILayoutNode_IsResizable))
         {
-            f32      BorderWidth        = LayoutRoot->CachedStyle->Value.BorderWidth;
+            f32      BorderWidth        = UIGetBorderWidth(LayoutRoot->CachedStyle);
             vec2_f32 BorderWidthVector  = Vec2F32(BorderWidth, BorderWidth);
             vec2_f32 HalfSizeWithBorder = Vec2F32Sub(FullHalfSize, BorderWidthVector);
 
@@ -77,7 +214,7 @@ HitTestLayout(vec2_f32 MousePosition, ui_layout_node *LayoutRoot, ui_pipeline *P
             }
         }
 
-        if (Result.Intent == UIIntent_Hover && HasFlag(LayoutRoot->Value.Flags, UILayoutNode_IsDraggable))
+        if (Result.Intent == UIIntent_Hover && HasFlag(LayoutRoot->Flags, UILayoutNode_IsDraggable))
         {
             Result.Intent = UIIntent_Drag;
         }
@@ -144,7 +281,7 @@ PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
                 f32 CursorX = Box->FinalX + Box->Padding.Left;
                 f32 CursorY = Box->FinalY + Box->Padding.Top;
 
-               if(HasFlag(Box->Flags, UILayoutNode_PlaceChildrenX))
+               if(HasFlag(Current->Flags, UILayoutNode_PlaceChildrenX))
                 {
                     IterateLinkedList(Current->First, ui_layout_node *, Child)
                     {
@@ -157,7 +294,7 @@ PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
                     }
                 }
 
-                if(HasFlag(Box->Flags, UILayoutNode_PlaceChildrenY))
+                if(HasFlag(Current->Flags, UILayoutNode_PlaceChildrenY))
                 {
                     IterateLinkedList(Current->First, ui_layout_node *, Child)
                     {
@@ -170,25 +307,23 @@ PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
                     }
                 }
 
-                // TODO: I believe if we used the offsets the sampling could
-                // be more precise? Where are the offsets used anyway?
-
-                if(HasFlag(Box->Flags, UILayoutNode_DrawText) && Box->Text)
+                if(HasFlag(Current->Flags, UILayoutNode_TextIsBound))
                 {
-                    ui_text *Text       = Box->Text;
-                    u32      FilledLine = 0.f;
-                    f32      LineWidth  = 0.f;
-                    f32      LineStartX = CursorX;
-                    f32      LineStartY = CursorY;
+                    ui_glyph_run *Run = Box->DisplayText;
 
-                    for(u32 Idx = 0; Idx < Text->Size; ++Idx)
+                    u32 FilledLine = 0.f;
+                    f32 LineWidth  = 0.f;
+                    f32 LineStartX = CursorX;
+                    f32 LineStartY = CursorY;
+
+                    for(u32 Idx = 0; Idx < Run->GlyphCount; ++Idx)
                     {
-                        ui_character *Character = &Text->Characters[Idx];
+                        ui_glyph *Glyph = &Run->Glyphs[Idx];
 
-                        f32      GlyphWidth    = Character->Layout.AdvanceX;
-                        vec2_f32 GlyphPosition = Vec2F32(LineStartX + LineWidth, LineStartY + (FilledLine * Text->LineHeight));
+                        f32      GlyphWidth    = Glyph->AdvanceX;
+                        vec2_f32 GlyphPosition = Vec2F32(LineStartX + LineWidth, LineStartY + (FilledLine * Run->LineHeight));
 
-                        AlignGlyph(GlyphPosition, Text->LineHeight, Character);
+                        AlignGlyph(GlyphPosition, Run->LineHeight, Glyph);
 
                         if(LineWidth + GlyphWidth > Box->FinalWidth)
                         {
@@ -198,8 +333,8 @@ PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
                             }
                             LineWidth = GlyphWidth;
 
-                            GlyphPosition = Vec2F32(LineStartX, LineStartY + (FilledLine * Text->LineHeight));
-                            AlignGlyph(GlyphPosition, Text->LineHeight, Character);
+                            GlyphPosition = Vec2F32(LineStartX, LineStartY + (FilledLine * Run->LineHeight));
+                            AlignGlyph(GlyphPosition, Run->LineHeight, Glyph);
 
                         }
                         else
@@ -291,21 +426,21 @@ PostOrderMeasure(ui_layout_node *LayoutRoot)
 
     f32 InnerAvWidth = Box->FinalWidth - (Box->Padding.Left + Box->Padding.Right);
 
-    if(HasFlag(Box->Flags, UILayoutNode_DrawText) && Box->Text)
+    if(HasFlag(LayoutRoot->Flags, UILayoutNode_TextIsBound))
     {
-        ui_text *Text = Box->Text;
+        ui_glyph_run *Run = Box->DisplayText;
 
         f32 LineWidth = 0.f;
         u32 LineCount = 0;
 
-        if(Text->Size)
+        if(Run->GlyphCount)
         {
             LineCount = 1;
 
-            for(u32 Idx = 0; Idx < Text->Size; ++Idx)
+            for(u32 Idx = 0; Idx < Run->GlyphCount; ++Idx)
             {
-                ui_character *Character  = &Text->Characters[Idx];
-                f32           GlyphWidth = Character->Layout.AdvanceX;
+                ui_glyph *Glyph      = &Run->Glyphs[Idx];
+                f32       GlyphWidth = Glyph->AdvanceX;
 
                 if(LineWidth + GlyphWidth > InnerAvWidth)
                 {
@@ -322,7 +457,27 @@ PostOrderMeasure(ui_layout_node *LayoutRoot)
                 }
             }
 
-            Box->FinalHeight = LineCount * Text->LineHeight;
+            Box->FinalHeight = LineCount * Run->LineHeight;
         }
+    }
+}
+
+// [Binds]
+
+internal void
+BindText(ui_layout_node *Node, byte_string Text, ui_font *Font, memory_arena *Arena)
+{
+    Assert(IsValidLayoutNode(Node));
+    Assert(IsValidByteString(Text));
+    Assert(Font);
+    Assert(Arena);
+
+    ui_glyph_run *Result = PushArena(Arena, sizeof(ui_glyph_run), AlignOf(ui_glyph_run));
+    if(Result)
+    {
+        Result[0] = CreateGlyphRun(Text, Font, Arena);
+
+        Node->Value.DisplayText = Result;
+        SetFlag(Node->Flags, UILayoutNode_TextIsBound);
     }
 }

@@ -1,7 +1,7 @@
 internal void
-UIWindow(ui_style_name StyleName, ui_pipeline *Pipeline)
+UIWindow(u32 StyleIndex, ui_pipeline *Pipeline)
 {
-    ui_cached_style *Style = 0;
+    ui_cached_style *Style = GetCachedStyle(Pipeline->Registry, StyleIndex);
     bit_field        Flags = 0;
 
     // Constants Flags
@@ -9,15 +9,16 @@ UIWindow(ui_style_name StyleName, ui_pipeline *Pipeline)
         SetFlag(Flags, UILayoutNode_PlaceChildrenY);
         SetFlag(Flags, UILayoutNode_IsDraggable);
         SetFlag(Flags, UILayoutNode_IsResizable);
+        SetFlag(Flags, UILayoutNode_IsParent);
     }
 
     InitializeLayoutNode(Style, UILayoutNode_Window, Flags, Pipeline->LayoutTree);
 }
 
 internal void
-UIButton(ui_style_name StyleName, ui_click_callback *Callback, ui_pipeline *Pipeline)
+UIButton(u32 StyleIndex, ui_click_callback *Callback, ui_pipeline *Pipeline)
 {
-    ui_cached_style *Style = 0;
+    ui_cached_style *Style = GetCachedStyle(Pipeline->Registry, StyleIndex);
     bit_field        Flags = 0;
 
     // TODO: Figure out what we want to do with callbacks.
@@ -27,9 +28,9 @@ UIButton(ui_style_name StyleName, ui_click_callback *Callback, ui_pipeline *Pipe
 }
 
 internal void
-UIHeader(ui_style_name StyleName, ui_pipeline *Pipeline)
+UIHeader(u32 StyleIndex, ui_pipeline *Pipeline)
 {
-    ui_cached_style *Style = 0;
+    ui_cached_style *Style = GetCachedStyle(Pipeline->Registry, StyleIndex);
     bit_field        Flags = 0;
 
     // Constants Flags
@@ -41,23 +42,24 @@ UIHeader(ui_style_name StyleName, ui_pipeline *Pipeline)
 }
 
 internal void
-UIScrollView(ui_style_name StyleName, ui_pipeline *Pipeline)
+UIScrollView(u32 StyleIndex, ui_pipeline *Pipeline)
 {
-    ui_cached_style *Style = 0;
+    ui_cached_style *Style = GetCachedStyle(Pipeline->Registry, StyleIndex);
     bit_field        Flags = 0;
 
     // Constants Flags
     {
         SetFlag(Flags, UILayoutNode_PlaceChildrenY);
+        SetFlag(Flags, UILayoutNode_IsParent);
     }
 
     InitializeLayoutNode(Style, UILayoutNode_ScrollView, Flags, Pipeline->LayoutTree);
 }
 
 internal void
-UILabel(ui_style_name StyleName, byte_string Text, ui_pipeline *Pipeline)
+UILabel(u32 StyleIndex, byte_string Text, ui_pipeline *Pipeline)
 {
-    ui_cached_style *Style = 0;
+    ui_cached_style *Style = GetCachedStyle(Pipeline->Registry, StyleIndex);
     bit_field        Flags = 0;
 
     // Constants Flags

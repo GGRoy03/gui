@@ -4,7 +4,10 @@
 
 typedef enum CachedStyle_Flag
 {
-    CachedStyle_FontIsLoaded = 1 << 0,
+    CachedStyle_FontIsLoaded  = 1 << 0,
+    CachedStyle_HasBaseStyle  = 1 << 1,
+    CachedStyle_HasClickStyle = 1 << 2,
+    CachedStyle_HasHoverStyle = 1 << 3,
 } CachedStyle_Flag;
 
 typedef enum StyleProperty_Type
@@ -37,11 +40,9 @@ typedef enum StyleEffect_Type
 
 // [CORE TYPES]
 
-typedef struct style_property style_property;
-struct style_property
+typedef struct style_property
 {
-    b32             IsSet;
-    style_property *Next;
+    b32 IsSet;
 
     StyleProperty_Type Type;
     union
@@ -55,52 +56,46 @@ struct style_property
         void            *Pointer;
         byte_string      String;
     };
-};
+} style_property;
 
-typedef struct style_property_list
-{
-    style_property *First;
-    style_property *Last;
-    u32             Count;
-} style_property_list;
-
-typedef struct ui_cached_style ui_cached_style;
-struct ui_cached_style
+typedef struct ui_cached_style
 {
     // Properties (Not very memory efficient)
     style_property Properties[StyleEffect_Count][StyleProperty_Count];
 
     // Misc
     bit_field Flags;
-};
-
-typedef struct ui_style_subregistry ui_style_subregistry;
-typedef struct ui_style_subregistry
-{
-    u32              StyleCount;
-    u32              StyleCapacity;
-    ui_cached_style *Styles;
-
-    ui_style_subregistry *Next;
-} ui_style_subregistry;
+} ui_cached_style;
 
 typedef struct ui_style_registry
 {
-    u32                   Count;
-    ui_style_subregistry *First;
-    ui_style_subregistry *Last;
-} ui_style_registry;
+    u32              StylesCount;
+    u32              StylesCapacity;
+    ui_cached_style *Styles;
+} ui_style_subregistry;
 
 // [Properties]
 
 internal f32               UIGetBorderWidth   (ui_cached_style *Cached);
 internal f32               UIGetSoftness      (ui_cached_style *Cached);
 internal f32               UIGetFontSize      (ui_cached_style *Cached);
+internal vec2_unit         UIGetSize          (ui_cached_style *Cached);
 internal ui_color          UIGetColor         (ui_cached_style *Cached);
 internal ui_color          UIGetBorderColor   (ui_cached_style *Cached);
 internal ui_color          UIGetTextColor     (ui_cached_style *Cached);
 internal byte_string       UIGetFontName      (ui_cached_style *Cached);
+internal ui_padding        UIGetPadding       (ui_cached_style *Cached);
+internal ui_spacing        UIGetSpacing       (ui_cached_style *Cached);
 internal ui_corner_radius  UIGetCornerRadius  (ui_cached_style *Cached);
 internal ui_font         * UIGetFont          (ui_cached_style *Cached);
 
 internal void              UISetFont          (ui_cached_style *Cached, ui_font *Font);
+
+// [Styles]
+
+internal ui_cached_style   SuperposeStyle  (ui_cached_style *Base, StyleEffect_Type Effect);
+internal ui_cached_style * GetCachedStyle  (ui_style_registry *Registry, u32 Index);
+
+// [Helpers]
+
+internal b32 IsVisibleColor  (ui_color Color);

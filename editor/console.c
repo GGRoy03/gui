@@ -39,6 +39,12 @@ ConsolePrintMessage(byte_string Message, ConsoleMessage_Severity Severity)
 
     }
 
+    // NOTE: We have to implement two things.
+    // 1) Attaching children nodes
+    // 2) Overriding a property
+
+    // UILabel(ConsoleStyle_Message, byte_string_literal(""), Pipeline);
+
     Useless(Pipeline);
     Useless(TextColor);
     Useless(Prefix);
@@ -51,13 +57,7 @@ ConsoleUI(editor_console_ui *ConsoleUI, game_state *GameState)
     {
         ui_pipeline_params PipelineParams = {0};
         {
-            byte_string ThemeFiles[] =
-            {
-                byte_string_literal("styles/editor_console.cim"),
-            };
-
-            PipelineParams.ThemeFiles    = ThemeFiles;
-            PipelineParams.ThemeCount    = ArrayCount(ThemeFiles);
+            PipelineParams.ThemeFile     = byte_string_literal("styles/editor_console.cim"),
             PipelineParams.TreeDepth     = 4;
             PipelineParams.TreeNodeCount = 16;
         }
@@ -72,7 +72,15 @@ ConsoleUI(editor_console_ui *ConsoleUI, game_state *GameState)
         }
         ConsoleUI->Arena = AllocateArena(ArenaParams);
 
+        ui_pipeline *Pipeline = &ConsoleUI->Pipeline;
+
         // Layout
+        UIWindow(ConsoleStyle_Window, Pipeline);
+        {
+            UIScrollView_(ConsoleStyle_MessageView, Pipeline)
+            {
+            }
+        }
 
         ConsoleUI->IsInitialized = 1;
     }

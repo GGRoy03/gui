@@ -96,17 +96,11 @@ typedef struct ui_rect
     f32              BorderWidth, Softness, SampleAtlas, _P0; // Style Params
 } ui_rect;
 
-typedef struct ui_style_name
-{
-    byte_string Value;
-} ui_style_name;
-
 typedef struct ui_pipeline_params
 {
-    byte_string *ThemeFiles;
-    u32          ThemeCount;
-    u32          TreeDepth;
-    u32          TreeNodeCount;
+    byte_string ThemeFile;
+    u32         TreeDepth;
+    u32         TreeNodeCount;
 } ui_pipeline_params;
 
 typedef struct ui_pipeline

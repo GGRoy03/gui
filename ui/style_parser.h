@@ -25,24 +25,31 @@ enum StyleParser_Constant
 {
     StyleParser_MaximumTokenPerFile = 100000,
     StyleParser_MaximumFileSize     = Gigabyte(1),
+    StyleParser_MaximumVarPerFile   = 1024,
+    StyleParser_HashEntryPerFile    = 256,
 };
 
 // [CORE TYPES]
 
 // Tokens genrated by the tokenizer and used by the parser
 
+typedef struct style_vector
+{
+    vec4_unit V;
+    u32       Size;
+} style_vector;
+
 typedef struct style_token
 {
-    u32 LineInFile;
-    u8 *FilePointer;
+    u64 LineInFile;
+    u64 ByteInFile;
 
     StyleToken_Type Type;
     union
     {
-        ui_unit     Unit;
-        byte_string Identifier;
-
-        struct {vec4_unit Vector; u32 VectorSize;};
+        ui_unit      Unit;
+        byte_string  Identifier;
+        style_vector Vector;
     };
 } style_token;
 
@@ -70,7 +77,7 @@ typedef struct style_file_debug_info
 typedef struct tokenized_style_file
 {
     b32                CanBeParsed;
-    u32                StyleCount;
+    u32                StylesCount;
     style_token_buffer Buffer;
 } tokenized_style_file;
 
@@ -93,10 +100,9 @@ typedef struct style_attribute
     StyleToken_Type    ParsedAs;
     union
     {
-        ui_unit     Unit;
-        byte_string String;
-
-        struct {vec4_unit Vector; u32 VectorSize;};
+        ui_unit      Unit;
+        byte_string  String;
+        style_vector Vector;
     };
 } style_attribute;
 
@@ -211,8 +217,7 @@ read_only global style_property_table_entry StylePropertyTable[] =
 
 // [Runtime API]
 
-internal ui_style_registry    * CreateStyleRegistry     (byte_string *FileNames, u32 Count, memory_arena *OutputArena);
-internal ui_style_subregistry * CreateStyleSubregistry  (byte_string FileName, memory_arena *RoutineArena, memory_arena *OutputArena);
+internal ui_style_registry * CreateStyleRegistry (byte_string FileName, memory_arena *OutputArena);
 
 // [Helpers]
 
@@ -222,17 +227,17 @@ internal ui_color ToNormalizedColor        (vec4_unit Vec);
 // [Tokenizer]
 
 internal style_token        * GetStyleToken      (style_token_buffer *Buffer, i64 Index);
-internal style_token        * EmitStyleToken     (style_token_buffer *Buffer, StyleToken_Type Type, u32 AtLine, u8 *InFile);
+internal style_token        * EmitStyleToken     (style_token_buffer *Buffer, StyleToken_Type Type, u64 AtLine, u64 AtByte);
 internal style_token        * PeekStyleToken     (style_token_buffer *Buffer, i32 Offset, style_file_debug_info *Debug);
 internal void                 EatStyleTokens     (style_token_buffer *Buffer, u32 Count);
 internal ui_unit              ReadUnit           (os_read_file *File, style_file_debug_info *Debug);
 internal byte_string          ReadIdentifier     (os_read_file *File);
-internal vec4_unit            ReadVector         (os_read_file *File, style_file_debug_info *Debug);
+internal style_vector         ReadVector         (os_read_file *File, style_file_debug_info *Debug);
 internal tokenized_style_file TokenizeStyleFile  (os_read_file File, memory_arena *Arena, style_file_debug_info *Debug);
 
 // [Parsing Routines]
 
-internal ui_style_subregistry * ParseStyleFile       (tokenized_style_file *File, memory_arena *Arena, style_file_debug_info *Debug);
+internal ui_style_subregistry * ParseStyleFile       (tokenized_style_file *File, memory_arena *RoutineArena, memory_arena *OutputArena, style_file_debug_info *Debug);
 internal style_header           ParseStyleHeader     (style_token_buffer *Buffer, style_file_debug_info *Debug);
 internal style_effect           ParseStyleEffect     (style_token_buffer *Buffer, style_file_debug_info *Debug);
 internal style_block            ParseStyleBlock      (style_token_buffer *Buffer, style_var_table *VarTable, style_file_debug_info *Debug);

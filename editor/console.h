@@ -1,3 +1,12 @@
+// [CONSTANTS]
+
+typedef enum ConsoleStyle_Type
+{
+    ConsoleStyle_Window      = 0,
+    ConsoleStyle_MessageView = 1,
+    ConsoleStyle_Message     = 2,
+} ConsoleStyle_Type;
+
 // [FORWARD DECLARATION]
 
 typedef struct game_state game_state;

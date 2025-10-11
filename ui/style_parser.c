@@ -1,9 +1,26 @@
 // [API]
 
-internal ui_style_subregistry *
-CreateStyleSubregistry(byte_string FileName, memory_arena *RoutineArena, memory_arena *OutputArena)
+internal ui_style_registry *
+CreateStyleRegistry(byte_string FileName, memory_arena *OutputArena)
 {
     ui_style_subregistry *Result = 0;
+
+    memory_arena *RoutineArena = {0};
+    {
+        memory_arena_params Params = {0};
+        Params.AllocatedFromLine = __LINE__;
+        Params.AllocatedFromFile = __FILE__;
+        Params.ReserveSize       = StyleParser_MaximumFileSize + (StyleParser_MaximumTokenPerFile * sizeof(style_token));
+        Params.CommitSize        = ArenaDefaultCommitSize;
+
+        RoutineArena = AllocateArena(Params);
+    }
+
+    if(!RoutineArena)
+    {
+        return Result;
+    }
+
 
     os_handle FileHandle = OSFindFile(FileName);
     if(!OSIsValidHandle(FileHandle))
@@ -25,56 +42,15 @@ CreateStyleSubregistry(byte_string FileName, memory_arena *RoutineArena, memory_
 
     style_file_debug_info Debug = {0};
     Debug.FileContent = File;
-    Debug.FileName    = ByteString(0, 0);
+    Debug.FileName    = FileName;
 
     tokenized_style_file TokenizedFile = TokenizeStyleFile(File, RoutineArena, &Debug);
     if(TokenizedFile.CanBeParsed)
     {
-        Result = ParseStyleFile(&TokenizedFile, OutputArena, &Debug);
+        Result = ParseStyleFile(&TokenizedFile, RoutineArena, OutputArena, &Debug);
     }
 
     OSReleaseFile(FileHandle);
-
-    return Result;
-}
-
-internal ui_style_registry *
-CreateStyleRegistry(byte_string *FileNames, u32 Count, memory_arena *OutputArena)
-{
-    ui_style_registry *Result = 0;
-
-    memory_arena *RoutineArena = {0};
-    {
-        memory_arena_params Params = {0};
-        Params.AllocatedFromLine = __LINE__;
-        Params.AllocatedFromFile = __FILE__;
-        Params.ReserveSize       = StyleParser_MaximumFileSize + (StyleParser_MaximumTokenPerFile * sizeof(style_token));
-        Params.CommitSize        = ArenaDefaultCommitSize;
-    }
-
-    if(RoutineArena)
-    {
-        Result = PushArray(OutputArena, ui_style_registry, 1);
-        if(Result)
-        {
-            for (u32 Idx = 0; Idx < Count; ++Idx)
-            {
-                ui_style_subregistry *Registry = CreateStyleSubregistry(FileNames[Idx], RoutineArena, OutputArena);
-                if(Registry)
-                {
-                    AppendToLinkedList(Result, Registry, Result->Count);
-                }
-            }
-        }
-        else
-        {
-            ConsoleWriteMessage(byte_string_literal("Allocation Failure: CreateStyleRegistry"), ConsoleMessage_Error, &Console);
-        }
-    }
-    else
-    {
-        ConsoleWriteMessage(byte_string_literal("Allocation Failure: CreateStyleRegistry"), ConsoleMessage_Error, &Console);
-    }
 
     return Result;
 }
@@ -100,7 +76,7 @@ IsValidStyleTokenBuffer(style_token_buffer *Buffer)
 internal b32
 IsValidStyleFile(tokenized_style_file *File)
 {
-    b32 Result = (File->StyleCount > 0) && (IsValidStyleTokenBuffer(&File->Buffer));
+    b32 Result = (File->StylesCount > 0) && (IsValidStyleTokenBuffer(&File->Buffer));
     return Result;
 }
 
@@ -127,15 +103,15 @@ GetStyleToken(style_token_buffer *Buffer, i64 Index)
 }
 
 internal style_token *
-EmitStyleToken(style_token_buffer *Buffer, StyleToken_Type Type, u32 AtLine, u8 *InFile)
+EmitStyleToken(style_token_buffer *Buffer, StyleToken_Type Type, u64 AtLine, u64 AtByte)
 {
     style_token *Result = GetStyleToken(Buffer, Buffer->Count++);
 
     if(Result)
     {
-        Result->FilePointer = InFile;
-        Result->LineInFile  = AtLine;
-        Result->Type        = Type;
+        Result->ByteInFile = AtByte;
+        Result->LineInFile = AtLine;
+        Result->Type       = Type;
     }
 
     return Result;
@@ -283,17 +259,16 @@ ReadIdentifier(os_read_file *File)
     return Result;
 }
 
-internal vec4_unit
+internal style_vector
 ReadVector(os_read_file *File, style_file_debug_info *Debug)
 {
-    vec4_unit Result = (vec4_unit){0};
+    style_vector Result = {0};
 
     if(PeekFile(File, 0) == '[')
     {
         AdvanceFile(File, 1);
 
-        u32 VectorSize = 0;
-        while(VectorSize < 4)
+        while(Result.Size < 4)
         {
             SkipWhiteSpaces(File);
 
@@ -303,7 +278,7 @@ ReadVector(os_read_file *File, style_file_debug_info *Debug)
                 ui_unit Unit = ReadUnit(File, Debug);
                 if(Unit.Type != UIUnit_None)
                 {
-                    Result.Values[VectorSize++] = Unit;
+                    Result.V.Values[Result.Size++] = Unit;
 
                     SkipWhiteSpaces(File);
 
@@ -346,14 +321,13 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
     Result.Buffer.Tokens = PushArray(Arena, style_token, StyleParser_MaximumTokenPerFile);
     Result.Buffer.Size   = StyleParser_MaximumTokenPerFile;
 
-    u64 AtLine = 0;
-
     while (IsValidFile(&File))
     {
         SkipWhiteSpaces(&File);
 
         u8  Char   = PeekFile(&File, 0);
-        u8 *InFile = PeekFilePointer(&File);
+        u64 AtLine = Debug->CurrentLineInFile;
+        u64 AtByte = File.At;
 
         if (IsAlpha(Char))
         {
@@ -366,14 +340,14 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
                     style_keyword_table_entry Entry = StyleKeywordTable[Idx];
                     if(ByteStringMatches(Identifier, Entry.Name, StringMatch_NoFlag))
                     {
-                        Token = EmitStyleToken(&Result.Buffer, Entry.TokenType, AtLine, InFile);
+                        Token = EmitStyleToken(&Result.Buffer, Entry.TokenType, AtLine, AtByte);
                         break;
                     }
                 }
 
                 if(Token == 0)
                 {
-                    Token = EmitStyleToken(&Result.Buffer, StyleToken_Identifier, AtLine, InFile);
+                    Token = EmitStyleToken(&Result.Buffer, StyleToken_Identifier, AtLine, AtByte);
                     if(Token)
                     {
                         Token->Identifier = Identifier;
@@ -381,7 +355,7 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
                 }
                 else if(Token->Type == StyleToken_Style)
                 {
-                    ++Result.StyleCount;
+                    ++Result.StylesCount;
                 }
             }
             else
@@ -395,7 +369,7 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
 
         if (IsDigit(Char))
         {
-            style_token *Token = EmitStyleToken(&Result.Buffer, StyleToken_Unit, AtLine, InFile);
+            style_token *Token = EmitStyleToken(&Result.Buffer, StyleToken_Unit, AtLine, AtByte);
             if (Token)
             {
                 ui_unit Unit = ReadUnit(&File, Debug);
@@ -420,7 +394,7 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
                 AdvanceFile(&File, 1);
             }
 
-            AtLine += 1;
+            ++Debug->CurrentLineInFile;
 
             continue;
         }
@@ -429,7 +403,7 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
         {
             if (PeekFile(&File, 1) == '=')
             {
-                EmitStyleToken(&Result.Buffer, StyleToken_Assignment, AtLine, InFile);
+                EmitStyleToken(&Result.Buffer, StyleToken_Assignment, AtLine, AtByte);
                 AdvanceFile(&File, 2);
             }
             else
@@ -442,7 +416,7 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
 
         if (Char == '[')
         {
-            style_token *Token = EmitStyleToken(&Result.Buffer, StyleToken_Vector, AtLine, InFile);
+            style_token *Token = EmitStyleToken(&Result.Buffer, StyleToken_Vector, AtLine, AtByte);
             if (Token)
             {
                 Token->Vector = ReadVector(&File, Debug);
@@ -461,7 +435,7 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
                 if(PeekFile(&File, 0) == '"')
                 {
 
-                    style_token *Token = EmitStyleToken(&Result.Buffer, StyleToken_String, AtLine, InFile);
+                    style_token *Token = EmitStyleToken(&Result.Buffer, StyleToken_String, AtLine, AtByte);
                     if (Token)
                     {
                         Token->Identifier = String;
@@ -481,7 +455,7 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
         if (Char == '{' || Char == '}' || Char == ';' || Char == '.' || Char == ',' || Char == '%' || Char == '@')
         {
             AdvanceFile(&File, 1);
-            EmitStyleToken(&Result.Buffer, (StyleToken_Type)Char, AtLine, InFile);
+            EmitStyleToken(&Result.Buffer, (StyleToken_Type)Char, AtLine, AtByte);
 
             continue;
         }
@@ -492,9 +466,9 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
         break;
     }
 
-    EmitStyleToken(&Result.Buffer, StyleToken_EndOfFile, AtLine, 0);
+    style_token *EndOfFile = EmitStyleToken(&Result.Buffer, StyleToken_EndOfFile, 0, 0);
 
-    Assert(Result.Buffer.At == 0);
+    Result.CanBeParsed = (EndOfFile && 1);
 
     return Result;
 }
@@ -504,7 +478,7 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
 internal style_effect
 ParseStyleEffect(style_token_buffer *Buffer, style_file_debug_info *Debug)
 {
-    style_effect Effect = {0};
+    style_effect Effect = {StyleEffect_None};
 
     style_token *AtSymbol = PeekStyleToken(Buffer, 0, Debug);
     if(AtSymbol->Type == StyleToken_AtSymbol)
@@ -623,7 +597,7 @@ ParseStyleAttribute(style_token_buffer *Buffer, style_var_table *VarTable, style
         if (Value->Type == StyleToken_Unit || Value->Type == StyleToken_String || Value->Type == StyleToken_Vector)
         {
             Attribute.ParsedAs = Value->Type;
-            Attribute.Unit     = Value->Unit; // NOTE: Is this fine? The unions are the same.
+            Attribute.Vector   = Value->Vector; // HACK: Copies the largest union value. Unsure if UB..
 
             EatStyleToken(Buffer, 1);
         }
@@ -652,6 +626,8 @@ ParseStyleAttribute(style_token_buffer *Buffer, style_var_table *VarTable, style
             return Attribute;
         }
     }
+
+    Attribute.IsSet = (!Attribute.HadError);
 
     return Attribute;
 }
@@ -833,24 +809,25 @@ ParseStyleVariable(style_token_buffer *Buffer, style_file_debug_info *Debug)
 }
 
 internal ui_style_subregistry *
-ParseStyleFile(tokenized_style_file *File, memory_arena *Arena, style_file_debug_info *Debug)
+ParseStyleFile(tokenized_style_file *File, memory_arena *RoutineArena, memory_arena *OutputArena, style_file_debug_info *Debug)
 {
-    ui_style_subregistry *Result = PushArray(Arena, ui_style_subregistry, 1);
+    ui_style_subregistry *Result = PushArray(OutputArena, ui_style_subregistry, 1);
 
     if(Result)
     {
-        Result->Styles = PushArray(Arena, ui_cached_style, File->StyleCount);
-
-        memory_region TransientData = EnterMemoryRegion(Arena);
+        // Persistent Allocations
+        Result->StylesCount    = 0;
+        Result->StylesCapacity = File->StylesCount;
+        Result->Styles         = PushArray(OutputArena, ui_cached_style, File->StylesCount);
 
         style_var_table *VarTable = 0;
         {
             style_var_table_params Params = {0};
-            Params.EntryCount = 0;
-            Params.HashCount  = 0;
+            Params.EntryCount = StyleParser_MaximumVarPerFile;
+            Params.HashCount  = StyleParser_HashEntryPerFile;
 
             size_t Footprint      = GetStyleVarTableFootprint(Params);
-            u8    *VarTableMemory = PushArray(Arena, u8, Footprint);
+            u8    *VarTableMemory = PushArray(RoutineArena, u8, Footprint);
 
             VarTable = PlaceStyleVarTableInMemory(Params, VarTableMemory);
         }
@@ -882,12 +859,7 @@ ParseStyleFile(tokenized_style_file *File, memory_arena *Arena, style_file_debug
                 Style.Header = ParseStyleHeader(&File->Buffer, Debug);
                 Style.Block  = ParseStyleBlock(&File->Buffer, VarTable, Debug);
 
-                // TODO: Kinda have to create an empty style...
-
-                if(!Style.Header.HadError && Style.Block.AttributesCount > 0)
-                {
-                    CacheStyle(&Style, Result, Debug);
-                }
+                CacheStyle(&Style, Result, Debug);
 
                 Next = PeekStyleToken(&File->Buffer, 0, Debug);
             }
@@ -896,8 +868,6 @@ ParseStyleFile(tokenized_style_file *File, memory_arena *Arena, style_file_debug
         {
             ReportStyleParserError(Debug, error_message("Could not allocate style_var_table."));
         }
-
-        LeaveMemoryRegion(TransientData);
     }
     else
     {
@@ -1050,14 +1020,16 @@ ValidateAttributeFormatting(style_attribute *Attribute, style_file_debug_info *D
 
     case StyleProperty_Size:
     {
-        if(Attribute->ParsedAs != StyleToken_Vector || Attribute->VectorSize != 2)
+        if(Attribute->ParsedAs != StyleToken_Vector || Attribute->Vector.Size != 2)
         {
             ErrorMessage = byte_string_literal("Invalid Format. Should be [Vector][X, Y]");
             break;
         }
 
-        if(!((Attribute->Vector.X.Type == UIUnit_Float32 || Attribute->Vector.X.Type == UIUnit_Percent) &&
-             (Attribute->Vector.Y.Type == UIUnit_Float32 || Attribute->Vector.Y.Type == UIUnit_Percent)))
+        vec4_unit Vector = Attribute->Vector.V;
+
+        if(!((Vector.X.Type == UIUnit_Float32 || Vector.X.Type == UIUnit_Percent) &&
+             (Vector.Y.Type == UIUnit_Float32 || Vector.Y.Type == UIUnit_Percent)))
         {
             ErrorMessage = byte_string_literal("Invalid Format. Should be [(Float OR Percent), (Float OR Percent)]");
             break;
@@ -1066,13 +1038,13 @@ ValidateAttributeFormatting(style_attribute *Attribute, style_file_debug_info *D
 
     case StyleProperty_Padding:
     {
-        if(Attribute->ParsedAs != StyleToken_Vector || Attribute->VectorSize != 4)
+        if(Attribute->ParsedAs != StyleToken_Vector || Attribute->Vector.Size != 4)
         {
             ErrorMessage = byte_string_literal("Invalid Format. Should be [Vector][X, Y, Z, W]");
             break;
         }
 
-        vec4_unit Vector = Attribute->Vector;
+        vec4_unit Vector = Attribute->Vector.V;
 
         if(Vector.X.Type != UIUnit_Float32 || Vector.Y.Type != UIUnit_Float32 ||
            Vector.Z.Type != UIUnit_Float32 || Vector.W.Type != UIUnit_Float32)
@@ -1084,13 +1056,13 @@ ValidateAttributeFormatting(style_attribute *Attribute, style_file_debug_info *D
 
     case StyleProperty_Spacing:
     {
-        if(Attribute->ParsedAs != StyleToken_Vector || Attribute->VectorSize != 2)
+        if(Attribute->ParsedAs != StyleToken_Vector || Attribute->Vector.Size != 2)
         {
             ErrorMessage = byte_string_literal("Invalid Format. Should be [Vector][X, Y]");
             break;
         }
 
-        vec4_unit Vector = Attribute->Vector;
+        vec4_unit Vector = Attribute->Vector.V;
 
         if(Vector.X.Type != UIUnit_Float32 || Vector.Y.Type != UIUnit_Float32)
         {
@@ -1104,13 +1076,13 @@ ValidateAttributeFormatting(style_attribute *Attribute, style_file_debug_info *D
     case StyleProperty_Color:
     case StyleProperty_BorderColor:
     {
-        if(Attribute->ParsedAs != StyleToken_Vector || Attribute->VectorSize != 4)
+        if(Attribute->ParsedAs != StyleToken_Vector || Attribute->Vector.Size != 4)
         {
             ErrorMessage = byte_string_literal("Invalid Format. Should be [Vector][X, Y, Z, W]");
             break;
         }
 
-        vec4_unit Vector = Attribute->Vector;
+        vec4_unit Vector = Attribute->Vector.V;
 
         if(Vector.X.Type != UIUnit_Float32 || Vector.Y.Type != UIUnit_Float32 ||
            Vector.Z.Type != UIUnit_Float32 || Vector.W.Type != UIUnit_Float32)
@@ -1155,7 +1127,8 @@ ValidateAttributeFormatting(style_attribute *Attribute, style_file_debug_info *D
 
     case StyleProperty_CornerRadius:
     {
-        vec4_unit Vector = Attribute->Vector;
+        vec4_unit Vector = Attribute->Vector.V;
+
         if(Vector.X.Type != UIUnit_Float32 || Vector.Y.Type != UIUnit_Float32 ||
            Vector.Z.Type != UIUnit_Float32 || Vector.W.Type != UIUnit_Float32)
         {
@@ -1205,29 +1178,29 @@ ConvertAttributeToProperty(style_attribute Attribute)
     {
         case StyleProperty_Size:
         {
-            Property.Vec2.X = Attribute.Vector.X;
-            Property.Vec2.Y = Attribute.Vector.Y;
+            Property.Vec2.X = Attribute.Vector.V.X;
+            Property.Vec2.Y = Attribute.Vector.V.Y;
         } break;
 
         case StyleProperty_Color:
         case StyleProperty_BorderColor:
         case StyleProperty_TextColor:
         {
-            Property.Color = ToNormalizedColor(Attribute.Vector);
+            Property.Color = ToNormalizedColor(Attribute.Vector.V);
         } break;
 
         case StyleProperty_Padding:
         {
-            Property.Padding.Left  = Attribute.Vector.X.Float32;
-            Property.Padding.Top   = Attribute.Vector.Y.Float32;
-            Property.Padding.Right = Attribute.Vector.Z.Float32;
-            Property.Padding.Bot   = Attribute.Vector.W.Float32;
+            Property.Padding.Left  = Attribute.Vector.V.X.Float32;
+            Property.Padding.Top   = Attribute.Vector.V.Y.Float32;
+            Property.Padding.Right = Attribute.Vector.V.Z.Float32;
+            Property.Padding.Bot   = Attribute.Vector.V.W.Float32;
         } break;
 
         case StyleProperty_Spacing:
         {
-            Property.Spacing.Horizontal = Attribute.Vector.X.Float32;
-            Property.Spacing.Vertical   = Attribute.Vector.Y.Float32;
+            Property.Spacing.Horizontal = Attribute.Vector.V.X.Float32;
+            Property.Spacing.Vertical   = Attribute.Vector.V.Y.Float32;
         } break;
 
         case StyleProperty_FontSize:
@@ -1239,15 +1212,15 @@ ConvertAttributeToProperty(style_attribute Attribute)
 
         case StyleProperty_CornerRadius:
         {
-            Property.CornerRadius.TopLeft  = Attribute.Vector.X.Float32;
-            Property.CornerRadius.TopRight = Attribute.Vector.Y.Float32;
-            Property.CornerRadius.BotRight = Attribute.Vector.Z.Float32;
-            Property.CornerRadius.BotLeft  = Attribute.Vector.W.Float32;
+            Property.CornerRadius.TopLeft  = Attribute.Vector.V.X.Float32;
+            Property.CornerRadius.TopRight = Attribute.Vector.V.Y.Float32;
+            Property.CornerRadius.BotRight = Attribute.Vector.V.Z.Float32;
+            Property.CornerRadius.BotLeft  = Attribute.Vector.V.W.Float32;
         } break;
 
         case StyleProperty_Font:
         {
-            // TODO: Figure out what to do here.
+            // Assert(!"Implement this");
         } break;
 
         default:
@@ -1262,9 +1235,9 @@ ConvertAttributeToProperty(style_attribute Attribute)
 internal void
 CacheStyle(style *ParsedStyle, ui_style_subregistry *Registry, style_file_debug_info *Debug)
 {
-    Assert(Registry->StyleCount < Registry->StyleCapacity);
+    Assert(Registry->StylesCount < Registry->StylesCapacity);
 
-    ui_cached_style *CachedStyle = Registry->Styles + Registry->StyleCount++;
+    ui_cached_style *CachedStyle = Registry->Styles + Registry->StylesCount++;
     style_header    *Header      = &ParsedStyle->Header;
     style_block     *Block       = &ParsedStyle->Block;
 
@@ -1274,6 +1247,8 @@ CacheStyle(style *ParsedStyle, ui_style_subregistry *Registry, style_file_debug_
 
     ForEachEnum(StyleEffect_Type, StyleEffect_Count, Effect)
     {
+        b32 AtLeastOneIsSet = 0;
+
         ForEachEnum(StyleProperty_Type, StyleProperty_Count, Property)
         {
             style_attribute Attribute = Block->Attributes[Effect][Property];
@@ -1283,7 +1258,31 @@ CacheStyle(style *ParsedStyle, ui_style_subregistry *Registry, style_file_debug_
                 if(Attribute.IsSet)
                 {
                     CachedStyle->Properties[Effect][Property] = ConvertAttributeToProperty(Attribute);
+                    AtLeastOneIsSet = 1;
                 }
+            }
+            else
+            {
+                style_property EmptyProperty = {0};
+                EmptyProperty.Type = StyleProperty_None;
+
+                CachedStyle->Properties[Effect][Property] = EmptyProperty;
+            }
+        }
+
+        if(AtLeastOneIsSet)
+        {
+            if(Effect == StyleEffect_Base)
+            {
+                SetFlag(CachedStyle->Flags, CachedStyle_HasBaseStyle);
+            } else
+            if (Effect == StyleEffect_Hover)
+            {
+                SetFlag(CachedStyle->Flags, CachedStyle_HasHoverStyle);
+            } else
+            if (Effect == StyleEffect_Click)
+            {
+                SetFlag(CachedStyle->Flags, CachedStyle_HasClickStyle);
             }
         }
     }

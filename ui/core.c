@@ -87,7 +87,7 @@ UICreatePipeline(ui_pipeline_params Params)
 
     // Others
     {
-        Result.Registry = CreateStyleRegistry(Params.ThemeFiles, Params.ThemeCount, Result.StaticArena);
+        Result.Registry = CreateStyleRegistry(Params.ThemeFile, Result.StaticArena);
     }
 
     return Result;
@@ -112,7 +112,9 @@ UIPipelineExecute(ui_pipeline *Pipeline, render_pass_list *PassList)
 
     // Layout
     {
-        // NOTE: Temporary.
+        // NOTE: We set the root values to it's absolute width/height.
+        // Which is probably a mistake in the long run.
+
         LayoutRoot->Value.FinalWidth  = LayoutRoot->Value.Width.Float32;
         LayoutRoot->Value.FinalHeight = LayoutRoot->Value.Height.Float32;
 
@@ -286,27 +288,43 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_layout_node
         List         = &Node->BatchList;
     }
 
-    // TODO: Implement the override logic.
+    ui_cached_style *BaseStyle  = LayoutRoot->CachedStyle;
+    ui_cached_style  FinalStyle = *BaseStyle;
+    {
+        if(HasFlag(LayoutRoot->Flags, UILayoutNode_IsClicked) && HasFlag(BaseStyle->Flags, CachedStyle_HasClickStyle))
+        {
+            FinalStyle = SuperposeStyle(BaseStyle, StyleEffect_Click);
+            ClearFlag(LayoutRoot->Flags, UILayoutNode_IsClicked);
+            goto Draw;
+        }
 
-    ui_cached_style *Style = 0;
+        if(HasFlag(LayoutRoot->Flags, UILayoutNode_IsHovered) && HasFlag(BaseStyle->Flags, CachedStyle_HasHoverStyle))
+        {
+            FinalStyle = SuperposeStyle(BaseStyle, StyleEffect_Hover);
+            ClearFlag(LayoutRoot->Flags, UILayoutNode_IsHovered);
+            goto Draw;
+        }
+    }
+
+Draw:
 
     if (HasFlag(LayoutRoot->Flags, UILayoutNode_DrawBackground))
     {
         ui_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);
         Rect->RectBounds  = RectF32(Box->FinalX, Box->FinalY, Box->FinalWidth, Box->FinalHeight);
-        Rect->Color       = UIGetColor(Style);
-        Rect->CornerRadii = UIGetCornerRadius(Style);
-        Rect->Softness    = UIGetSoftness(Style);
+        Rect->Color       = UIGetColor(&FinalStyle);
+        Rect->CornerRadii = UIGetCornerRadius(&FinalStyle);
+        Rect->Softness    = UIGetSoftness(&FinalStyle);
     }
 
     if (HasFlag(LayoutRoot->Flags, UILayoutNode_DrawBorders))
     {
         ui_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);
         Rect->RectBounds  = RectF32(Box->FinalX, Box->FinalY, Box->FinalWidth, Box->FinalHeight);
-        Rect->Color       = UIGetBorderColor(Style);
-        Rect->CornerRadii = UIGetCornerRadius(Style);
-        Rect->BorderWidth = UIGetBorderWidth(Style);
-        Rect->Softness    = UIGetSoftness(Style);
+        Rect->Color       = UIGetBorderColor(&FinalStyle);
+        Rect->CornerRadii = UIGetCornerRadius(&FinalStyle);
+        Rect->BorderWidth = UIGetBorderWidth(&FinalStyle);
+        Rect->Softness    = UIGetSoftness(&FinalStyle);
     }
 
     if (HasFlag(LayoutRoot->Flags, UILayoutNode_DrawText))
@@ -317,7 +335,7 @@ UIPipelineBuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_layout_node
             Rect->SampleAtlas       = 1.f;
             Rect->AtlasSampleSource = Box->DisplayText->Glyphs[Idx].Source;
             Rect->RectBounds        = Box->DisplayText->Glyphs[Idx].Position;
-            Rect->Color             = UIGetTextColor(Style);
+            Rect->Color             = UIGetTextColor(&FinalStyle);
         }
     }
 

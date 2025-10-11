@@ -108,14 +108,19 @@ GetFreeLayoutNode(ui_layout_tree *Tree, UILayoutNode_Type Type)
     return Result;
 }
 
-
 internal ui_layout_node *
 InitializeLayoutNode(ui_cached_style *Style, UILayoutNode_Type Type, bit_field ConstantFlags, ui_layout_tree *Tree)
 {
     ui_layout_node *Node = GetFreeLayoutNode(Tree, Type);
     if(Node)
     {
-        Node->Flags = ConstantFlags;
+        Node->Flags       = ConstantFlags;
+        Node->CachedStyle = Style;
+
+        Node->Value.Width   = UIGetSize(Style).X;
+        Node->Value.Height  = UIGetSize(Style).Y;
+        Node->Value.Padding = UIGetPadding(Style);
+        Node->Value.Spacing = UIGetSpacing(Style);
 
         // Tree Hierarchy
         {
@@ -137,7 +142,16 @@ InitializeLayoutNode(ui_cached_style *Style, UILayoutNode_Type Type, bit_field C
 
         if(Style)
         {
-            if(UIGetBorderWidth(Style) > 0.f)
+            ui_color BackgroundColor = UIGetColor(Style);
+            f32      BorderWidth     = UIGetBorderWidth(Style);
+
+            if(IsVisibleColor(BackgroundColor))
+            {
+                Assert(!HasFlag(Node->Flags, UILayoutNode_DrawBackground));
+                SetFlag(Node->Flags, UILayoutNode_DrawBackground);
+            }
+
+            if(BorderWidth > 0.f)
             {
                 Assert(!HasFlag(Node->Flags, UILayoutNode_DrawBorders));
                 SetFlag(Node->Flags, UILayoutNode_DrawBorders);
@@ -147,6 +161,8 @@ InitializeLayoutNode(ui_cached_style *Style, UILayoutNode_Type Type, bit_field C
 
     return Node;
 }
+
+// [Pass]
 
 internal ui_hit_test
 HitTestLayout(vec2_f32 MousePosition, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
@@ -256,7 +272,7 @@ DEFINE_TYPED_QUEUE(Node, node, ui_layout_node *);
 internal void
 PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 {
-    if (Pipeline->LayoutTree)
+    if (Pipeline->LayoutTree && Pipeline->LayoutTree->NodeCount)
     {
         memory_region Region = EnterMemoryRegion(Pipeline->LayoutTree->Arena);
 
@@ -354,7 +370,7 @@ PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 internal void
 PreOrderMeasure(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 {
-    if (!Pipeline->LayoutTree) 
+    if (!Pipeline->LayoutTree || !Pipeline->LayoutTree->NodeCount) 
     {
         return;
     }

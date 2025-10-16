@@ -3,15 +3,27 @@
 internal void
 AlignGlyph(vec2_f32 Position, ui_glyph *Glyph)
 {
-    //Glyph->Position.Min.X = Position.X + Glyph->Offset.X;
-    //Glyph->Position.Min.Y = Position.Y + Glyph->Offset.Y;
-    //Glyph->Position.Max.X = Glyph->Position.Min.X + Glyph->Size.X;
-    //Glyph->Position.Max.Y = Glyph->Position.Min.Y + Glyph->Size.Y;
-
     Glyph->Position.Min.X = roundf(Position.X + Glyph->Offset.X);
     Glyph->Position.Min.Y = roundf(Position.Y + Glyph->Offset.Y);
     Glyph->Position.Max.X = roundf(Glyph->Position.Min.X + Glyph->Size.X);
     Glyph->Position.Max.Y = roundf(Glyph->Position.Min.Y + Glyph->Size.Y);
+}
+
+internal f32
+ConvertUnitToFloat(ui_unit Unit, f32 AvSpace)
+{
+    f32 Result = 0;
+
+    if(Unit.Type == UIUnit_Float32)
+    {
+        Result = Unit.Float32 <= AvSpace ? Unit.Float32 : AvSpace;
+    } else
+    if(Unit.Type == UIUnit_Percent)
+    {
+        Result = (Unit.Percent / 100.f) * AvSpace;
+    }
+
+    return Result;
 }
 
 // [Layout Tree/Nodes]
@@ -89,14 +101,13 @@ PlaceLayoutTreeInMemory(ui_layout_tree_params Params, void *Memory)
 }
 
 internal ui_layout_node *
-GetFreeLayoutNode(ui_layout_tree *Tree, UILayoutNode_Type Type)
+GetFreeLayoutNode(ui_layout_tree *Tree)
 {
     ui_layout_node *Result = 0;
 
     if (Tree->NodeCount < Tree->NodeCapacity)
     {
         Result = Tree->Nodes + Tree->NodeCount;
-        Result->Type  = Type;
         Result->Index = Tree->NodeCount;
 
         ++Tree->NodeCount;
@@ -106,10 +117,10 @@ GetFreeLayoutNode(ui_layout_tree *Tree, UILayoutNode_Type Type)
 }
 
 internal ui_layout_node *
-InitializeLayoutNode(ui_cached_style *Style, UILayoutNode_Type Type, bit_field ConstantFlags, byte_string Id, ui_pipeline *Pipeline)
+InitializeLayoutNode(ui_cached_style *Style, bit_field ConstantFlags, byte_string Id, ui_pipeline *Pipeline)
 {
     ui_layout_tree *Tree = Pipeline->LayoutTree;
-    ui_layout_node *Node = GetFreeLayoutNode(Tree, Type);
+    ui_layout_node *Node = GetFreeLayoutNode(Tree);
     if(Node)
     {
         Node->Value.Width   = UIGetSize(Style).X;
@@ -256,37 +267,37 @@ HitTestLayout(vec2_f32 MousePosition, ui_layout_node *Root, ui_pipeline *Pipelin
 }
 
 internal void
-DragUISubtree(vec2_f32 Delta, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
+DragUISubtree(vec2_f32 Delta, ui_layout_node *Node, ui_pipeline *Pipeline)
 {
     Assert(Delta.X != 0.f || Delta.Y != 0.f);
 
     // NOTE: Should we allow this mutation? It does work...
 
-    LayoutRoot->Value.FinalX += Delta.X;
-    LayoutRoot->Value.FinalY += Delta.Y;
+    Node->Value.FinalX += Delta.X;
+    Node->Value.FinalY += Delta.Y;
 
-    for (ui_layout_node *Child = LayoutRoot->First; Child != 0; Child = Child->Next)
+    for (ui_layout_node *Child = Node->First; Child != 0; Child = Child->Next)
     {
         DragUISubtree(Delta, Child, Pipeline);
     }
 }
 
 internal void
-ResizeUISubtree(vec2_f32 Delta, ui_layout_node *LayoutNode, ui_pipeline *Pipeline)
+ResizeUISubtree(vec2_f32 Delta, ui_layout_node *Node, ui_pipeline *Pipeline)
 {
-    Assert(LayoutNode->Value.Width.Type  != UIUnit_Percent);
-    Assert(LayoutNode->Value.Height.Type != UIUnit_Percent);
+    Assert(Node->Value.Width.Type  != UIUnit_Percent);
+    Assert(Node->Value.Height.Type != UIUnit_Percent);
 
     // NOTE: Should we allow this mutation? It does work...
 
-    LayoutNode->Value.Width.Float32  += Delta.X;
-    LayoutNode->Value.Height.Float32 += Delta.Y;
+    Node->Value.Width.Float32  += Delta.X;
+    Node->Value.Height.Float32 += Delta.Y;
 }
 
 DEFINE_TYPED_QUEUE(Node, node, ui_layout_node *);
 
 internal void
-PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
+PreOrderPlace(ui_layout_node *Root, ui_pipeline *Pipeline)
 {
     if (Pipeline->LayoutTree && Pipeline->LayoutTree->NodeCount)
     {
@@ -302,44 +313,71 @@ PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 
         if (Queue.Data)
         {
-            PushNodeQueue(&Queue, LayoutRoot);
+            PushNodeQueue(&Queue, Root);
 
             while (!IsNodeQueueEmpty(&Queue))
             {
-                ui_layout_node *Current = PopNodeQueue(&Queue);
-                ui_layout_box  *Box     = &Current->Value;
+                ui_layout_node *Node = PopNodeQueue(&Queue);
+                ui_layout_box  *Box  = &Node->Value;
 
-                // NOTE: Interesting that we apply padding here...
                 f32 CursorX = Box->FinalX + Box->Padding.Left;
                 f32 CursorY = Box->FinalY + Box->Padding.Top;
 
-               if(HasFlag(Current->Flags, UILayoutNode_PlaceChildrenX))
+                f32 MaxCursorX = CursorX + Box->FinalWidth;
+                f32 MaxCursorY = CursorY + Box->FinalHeight;
+                if(HasFlag(Node->Flags, UILayoutNode_IsScrollRegion))
                 {
-                    IterateLinkedList(Current->First, ui_layout_node *, Child)
+                    ui_scroll_context *Scroll = Box->ScrollContext;
+                    if(Scroll->Axis == ScrollAxis_X)
                     {
+                        MaxCursorX = FLT_MAX;
+                    }
+                    else
+                    {
+                        MaxCursorY = FLT_MAX;
+                    }
+                }
+
+
+               if(HasFlag(Node->Flags, UILayoutNode_PlaceChildrenX))
+                {
+                    IterateLinkedList(Node->First, ui_layout_node *, Child)
+                    {
+                        f32 Width = Child->Value.FinalWidth + Box->Spacing.Horizontal;
+                        if(CursorX + Width > MaxCursorX)
+                        {
+                            break;
+                        }
+
                         Child->Value.FinalX = CursorX;
                         Child->Value.FinalY = CursorY;
 
-                        CursorX += Child->Value.FinalWidth + Box->Spacing.Horizontal;
+                        CursorX += Width;
 
                         PushNodeQueue(&Queue, Child);
                     }
                 }
 
-                if(HasFlag(Current->Flags, UILayoutNode_PlaceChildrenY))
+                if(HasFlag(Node->Flags, UILayoutNode_PlaceChildrenY))
                 {
-                    IterateLinkedList(Current->First, ui_layout_node *, Child)
+                    IterateLinkedList(Node->First, ui_layout_node *, Child)
                     {
+                        f32 Height = Child->Value.FinalHeight + Box->Spacing.Vertical;
+                        if(CursorY + Height > MaxCursorY)
+                        {
+                            break;
+                        }
+
                         Child->Value.FinalX = CursorX;
                         Child->Value.FinalY = CursorY;
 
-                        CursorY += Child->Value.FinalHeight + Box->Spacing.Vertical;
+                        CursorY += Height;
 
                         PushNodeQueue(&Queue, Child);
                     }
                 }
 
-                if(HasFlag(Current->Flags, UILayoutNode_TextIsBound))
+                if(HasFlag(Node->Flags, UILayoutNode_TextIsBound))
                 {
                     ui_glyph_run *Run = Box->DisplayText;
 
@@ -384,7 +422,7 @@ PreOrderPlace(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
 }
 
 internal void
-PreOrderMeasure(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
+PreOrderMeasure(ui_layout_node *Root, ui_pipeline *Pipeline)
 {
     if (!Pipeline->LayoutTree || !Pipeline->LayoutTree->NodeCount) 
     {
@@ -407,37 +445,32 @@ PreOrderMeasure(ui_layout_node *LayoutRoot, ui_pipeline *Pipeline)
         return;
     }
 
-    PushNodeQueue(&Queue, LayoutRoot);
+    PushNodeQueue(&Queue, Root);
 
     while (!IsNodeQueueEmpty(&Queue))
     {
-        ui_layout_node *Current = PopNodeQueue(&Queue);
-        ui_layout_box  *Box     = &Current->Value;
+        ui_layout_node *Node = PopNodeQueue(&Queue);
 
-        f32 AvWidth  = Box->FinalWidth  - (Box->Padding.Left + Box->Padding.Right);
-        f32 AvHeight = Box->FinalHeight - (Box->Padding.Top  + Box->Padding.Bot);
-
-        IterateLinkedList(Current->First, ui_layout_node *, Child)
+        f32 AvWidth  = 0.f;
+        f32 AvHeight = 0.f;
+        if(HasFlag(Node->Flags, UILayoutNode_IsScrollRegion))
         {
-            ui_layout_box *CBox = &Child->Value;
+            ui_layout_box *Box = &Node->Value;
+            AvWidth  = Box->FinalWidth - (Box->Padding.Left + Box->Padding.Right);
+            AvHeight = FLT_MAX;
+        }
+        else
+        {
+            ui_layout_box *Box = &Node->Value;
+            AvWidth  = Box->FinalWidth  - (Box->Padding.Left + Box->Padding.Right);
+            AvHeight = Box->FinalHeight - (Box->Padding.Top  + Box->Padding.Bot  );
+        }
 
-            if (CBox->Width.Type == UIUnit_Percent)
-            {
-                CBox->FinalWidth = (CBox->Width.Percent / 100.f) * AvWidth;
-            }
-            else if (Box->Width.Type == UIUnit_Float32)
-            {
-                CBox->FinalWidth = CBox->Width.Float32 <= AvWidth ? CBox->Width.Float32 : AvWidth;
-            }
-
-            if (CBox->Height.Type == UIUnit_Percent)
-            {
-                CBox->FinalHeight = (CBox->Height.Percent / 100.f) * AvHeight;
-            }
-            else if (CBox->Height.Type == UIUnit_Float32)
-            {
-                CBox->FinalHeight = CBox->Height.Float32 <= AvHeight ? CBox->Height.Float32 : AvHeight;
-            }
+        IterateLinkedList(Node->First, ui_layout_node *, Child)
+        {
+            ui_layout_box *Box = &Child->Value;
+            Box->FinalWidth  = ConvertUnitToFloat(Box->Width , AvWidth);
+            Box->FinalHeight = ConvertUnitToFloat(Box->Height, AvHeight);
 
             PushNodeQueue(&Queue, Child);
         }
@@ -456,14 +489,13 @@ PostOrderMeasure(ui_layout_node *LayoutRoot)
 
     ui_layout_box *Box = &LayoutRoot->Value;
 
-    f32 InnerAvWidth = Box->FinalWidth - (Box->Padding.Left + Box->Padding.Right);
-
     if(HasFlag(LayoutRoot->Flags, UILayoutNode_TextIsBound))
     {
         ui_glyph_run *Run = Box->DisplayText;
 
-        f32 LineWidth = 0.f;
-        u32 LineCount = 0;
+        f32 InnerAvWidth = Box->FinalWidth - (Box->Padding.Left + Box->Padding.Right);
+        f32 LineWidth    = 0.f;
+        u32 LineCount    = 0;
 
         if(Run->GlyphCount)
         {
@@ -519,6 +551,11 @@ BindText(ui_layout_node *Node, byte_string Text, ui_font *Font, memory_arena *Ar
     }
 }
 
+internal void
+BindScrollContext(ui_layout_node *Node)
+{
+}
+
 // [Context]
 
 internal void
@@ -554,50 +591,33 @@ UILeaveSubtree(ui_pipeline *Pipeline)
     Tree->Parents = (layout_parent_stack){0};
 }
 
-// [Node ID Hashmap]
+// [Node ID]
 
-internal u64
-GetNodeIdTableFootprint(ui_node_id_table_params Params)
+#define NodeIdTable_EmptyMask  1 << 0       // 1st bit
+#define NodeIdTable_DeadMask   1 << 1       // 2nd bit
+#define NodeIdTable_TagMask    0xFF & ~0x03 // High 6 bits
+
+typedef struct ui_node_id_hash
 {
-    u64 GroupTotal = Params.GroupSize * Params.GroupCount;
+    u64 Value;
+} ui_node_id_hash;
 
-    u64 MetaDataSize = GroupTotal * sizeof(u8);
-    u64 BucketsSize  = GroupTotal * sizeof(ui_node_id_entry);
-    u64 Result       = sizeof(ui_node_id_table) + MetaDataSize + BucketsSize;
-
-    return Result;
-}
-
-internal ui_node_id_table *
-PlaceNodeIdTableInMemory(ui_node_id_table_params Params, void *Memory)
+typedef struct ui_node_id_entry
 {
-    Assert(Params.GroupSize == 16);
-    Assert(Params.GroupCount > 0 && IsPowerOfTwo(Params.GroupCount));
+    ui_node_id_hash Hash;
+    ui_layout_node *Target;
+} ui_node_id_entry;
 
-    ui_node_id_table *Result = 0;
+typedef struct ui_node_id_table
+{
+    u8               *MetaData;
+    ui_node_id_entry *Buckets;
 
-    if(Memory)
-    {
-        u64 GroupTotal = Params.GroupSize * Params.GroupCount;
+    u64 GroupSize;
+    u64 GroupCount;
 
-        u8 *              MetaData = (u8 *)Memory;
-        ui_node_id_entry *Entries  = (ui_node_id_entry *)(MetaData + GroupTotal);
-
-        Result = (ui_node_id_table *)(Entries + GroupTotal);
-        Result->MetaData   = MetaData;
-        Result->Buckets    = Entries;
-        Result->GroupSize  = Params.GroupSize;
-        Result->GroupCount = Params.GroupCount;
-        Result->HashMask   = Params.GroupCount - 1;
-
-        for(u32 Idx = 0; Idx < GroupTotal; ++Idx)
-        {
-            Result->MetaData[Idx] = NodeIdTable_EmptyMask;
-        }
-    }
-
-    return Result;
-}
+    u64 HashMask;
+} ui_node_id_table;
 
 internal b32
 IsValidNodeIdTable(ui_node_id_table *Table)
@@ -740,6 +760,49 @@ InsertNodeId(ui_node_id_hash Hash, ui_layout_node *Target, ui_node_id_table *Tab
     }
 }
 
+internal u64
+GetNodeIdTableFootprint(ui_node_id_table_params Params)
+{
+    u64 GroupTotal = Params.GroupSize * Params.GroupCount;
+
+    u64 MetaDataSize = GroupTotal * sizeof(u8);
+    u64 BucketsSize  = GroupTotal * sizeof(ui_node_id_entry);
+    u64 Result       = sizeof(ui_node_id_table) + MetaDataSize + BucketsSize;
+
+    return Result;
+}
+
+internal ui_node_id_table *
+PlaceNodeIdTableInMemory(ui_node_id_table_params Params, void *Memory)
+{
+    Assert(Params.GroupSize == 16);
+    Assert(Params.GroupCount > 0 && IsPowerOfTwo(Params.GroupCount));
+
+    ui_node_id_table *Result = 0;
+
+    if(Memory)
+    {
+        u64 GroupTotal = Params.GroupSize * Params.GroupCount;
+
+        u8 *              MetaData = (u8 *)Memory;
+        ui_node_id_entry *Entries  = (ui_node_id_entry *)(MetaData + GroupTotal);
+
+        Result = (ui_node_id_table *)(Entries + GroupTotal);
+        Result->MetaData   = MetaData;
+        Result->Buckets    = Entries;
+        Result->GroupSize  = Params.GroupSize;
+        Result->GroupCount = Params.GroupCount;
+        Result->HashMask   = Params.GroupCount - 1;
+
+        for(u32 Idx = 0; Idx < GroupTotal; ++Idx)
+        {
+            Result->MetaData[Idx] = NodeIdTable_EmptyMask;
+        }
+    }
+
+    return Result;
+}
+
 internal void
 SetNodeId(byte_string Id, ui_layout_node *Node, ui_node_id_table *Table)
 {
@@ -763,16 +826,12 @@ SetNodeId(byte_string Id, ui_layout_node *Node, ui_node_id_table *Table)
     }
 }
 
-// NOTE: Maybe we don't want to return the raw node...
-// Because we should disallow mutation by the user.
-
 internal ui_layout_node *
-UIFindNodeById(byte_string Id, ui_pipeline *Pipeline)
+UIFindNodeById(byte_string Id, ui_node_id_table *Table)
 {
-    ui_layout_node   *Result = 0;
-    ui_node_id_table *Table  = Pipeline->IdTable;
+    ui_layout_node *Result = 0;
 
-    if(IsValidNodeIdTable(Table))
+    if(IsValidByteString(Id) && IsValidNodeIdTable(Table))
     {
         ui_node_id_hash   Hash  = ComputeNodeIdHash(Id);
         ui_node_id_entry *Entry = FindNodeIdEntry(Hash, Table);
@@ -789,8 +848,27 @@ UIFindNodeById(byte_string Id, ui_pipeline *Pipeline)
     }
     else
     {
-        ConsoleWriteMessage(warn_message("Internal Error. Id table is not allocated correctly for this pipeline."), &Console);
+        ConsoleWriteMessage(warn_message("Invalid Arguments Provided. See ui/layout.h for information."), &Console);
     }
 
     return Result;
+}
+
+// [Scrolling]
+
+internal void
+ApplyScrollToContext(f32 ScrollDelta, ui_scroll_context *Context)
+{
+    f32 ScrollLimit  = Context->Axis == ScrollAxis_X ? Context->ContentSize.X : Context->ContentSize.Y;
+
+    Context->ScrollOffset += ScrollDelta;
+
+    if(Context->ScrollOffset > ScrollLimit)
+    {
+        Context->ScrollOffset = ScrollLimit;
+    }
+    else if(Context->ScrollOffset < 0.f)
+    {
+        Context->ScrollOffset = 0.f;
+    }
 }

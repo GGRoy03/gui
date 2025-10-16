@@ -1,19 +1,7 @@
 // [CONSTANTS]
 
-typedef enum UILayoutNode_Type
-{
-    UILayoutNode_None       = 0,
-    UILayoutNode_Window     = 1,
-    UILayoutNode_Button     = 2,
-    UILayoutNode_Label      = 3,
-    UILayoutNode_Header     = 4,
-    UILayoutNode_ScrollView = 5,
-} UILayoutNode_Type;
-
 typedef enum UILayoutNode_Flag
 {
-    UILayoutNode_NoFlag         = 0,
-
     // Draws
     UILayoutNode_DrawBackground = 1 << 0,
     UILayoutNode_DrawBorders    = 1 << 1,
@@ -29,12 +17,16 @@ typedef enum UILayoutNode_Flag
     UILayoutNode_IsResizable    = 1 << 7,
 
     // Layout Info
-    UILayoutNode_PlaceChildrenX = 1 << 8,
-    UILayoutNode_PlaceChildrenY = 1 << 9,
-    UILayoutNode_IsParent       = 1 << 10,
+    UILayoutNode_PlaceChildrenX  = 1 << 8,
+    UILayoutNode_PlaceChildrenY  = 1 << 9,
+    UILayoutNode_IsParent        = 1 << 10,
+    UILayoutNode_IsScrollRegion  = 1 << 11,
 
     // Binds
-    UILayoutNode_TextIsBound    = 1 << 11,
+    UILayoutNode_TextIsBound    = 1 << 12,
+
+    // Dirty/Stale/Pruned
+    UILayoutNode_IsPruned       = 1 << 13,
 } UILayoutNode_Flag;
 
 typedef enum LayoutTree_Constant
@@ -44,15 +36,21 @@ typedef enum LayoutTree_Constant
     LayoutTree_InvalidNodeIndex = 0xFFFFFFFF,
 } LayoutTree_Constant;
 
-typedef enum NodeIdTable_Constant
+typedef enum ScrollAxis_Type
 {
-    NodeIdTable_GroupSize = 16,
-    NodeIdTable_EmptyMask = 1 << 0,      // 1st bit
-    NodeIdTable_DeadMask  = 1 << 1,      // 2nd bit
-    NodeIdTable_TagMask   = 0xFF & ~0x03 // High 6 bits
-} NodeIdTable_Constant;
+    ScrollAxis_X = 0,
+    ScrollAxis_Y = 1,
+} ScrollAxis_Type;
 
 // [CORE TYPES]
+
+typedef struct ui_scroll_context
+{
+    vec2_f32        ContentSize;
+    vec2_f32        ContentWindow;
+    f32             ScrollOffset;
+    ScrollAxis_Type Axis;
+} ui_scroll_context;
 
 typedef struct ui_hit_test
 {
@@ -79,7 +77,8 @@ typedef struct ui_layout_box
     rect_f32 Clip;
 
     // Binds
-    ui_glyph_run *DisplayText;
+    ui_glyph_run      *DisplayText;
+    ui_scroll_context *ScrollContext;
 } ui_layout_box;
 
 // A simple tree is used for representing a layout.
@@ -97,12 +96,8 @@ struct ui_layout_node
     ui_layout_node *Next;
     ui_layout_node *Prev;
 
-    // Value
-    UILayoutNode_Type Type;
-    ui_layout_box     Value;
-
-    // Misc
-    bit_field Flags;
+    ui_layout_box Value;
+    bit_field     Flags;
 };
 
 typedef struct ui_layout_tree_params
@@ -125,38 +120,6 @@ typedef struct ui_layout_tree
     layout_parent_stack Parents;
 } ui_layout_tree;
 
-// A hashmap is used to query nodes per ID
-// An id is simply a string that can we be set
-// to whatever the user wants it to be.
-
-typedef struct ui_node_id_hash
-{
-    u64 Value;
-} ui_node_id_hash;
-
-typedef struct ui_node_id_entry
-{
-    ui_node_id_hash Hash;
-    ui_layout_node *Target;
-} ui_node_id_entry;
-
-typedef struct ui_node_id_table
-{
-    u8               *MetaData;
-    ui_node_id_entry *Buckets;
-
-    u64 GroupSize;
-    u64 GroupCount;
-
-    u64 HashMask;
-} ui_node_id_table;
-
-typedef struct ui_node_id_table_params
-{
-    u64 GroupSize;
-    u64 GroupCount;
-} ui_node_id_table_params;
-
 // [Tree Mutations]
 
 internal void DragUISubtree    (vec2_f32 Delta, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline);
@@ -177,8 +140,8 @@ internal u64                   GetLayoutTreeFootprint   (ui_layout_tree_params P
 internal ui_layout_tree_params SetDefaultTreeParams     (ui_layout_tree_params Params);
 internal ui_layout_tree      * PlaceLayoutTreeInMemory  (ui_layout_tree_params Params, void *Memory);
 internal b32                   IsValidLayoutNode        (ui_layout_node *Node);
-internal ui_layout_node      * InitializeLayoutNode     (ui_cached_style *Style, UILayoutNode_Type Type, bit_field ConstantFlags, byte_string Id, ui_pipeline *Pipeline);
-internal ui_layout_node      * GetFreeLayoutNode        (ui_layout_tree *Tree, UILayoutNode_Type Type);
+internal ui_layout_node      * InitializeLayoutNode     (ui_cached_style *Style, bit_field ConstantFlags, byte_string Id, ui_pipeline *Pipeline);
+internal ui_layout_node      * GetFreeLayoutNode        (ui_layout_tree *Tree);
 
 // [Binds]
 
@@ -189,15 +152,63 @@ internal void BindText  (ui_layout_node *Node, byte_string Text, ui_font *Font, 
 internal void UIBeginSubtree  (ui_layout_node *Parent, ui_pipeline *Pipeline);
 internal void UIEndSubtree    (ui_pipeline *Pipeline);
 
-// [Node Id]
+// -------------------------------------------------------------------------------------------------------------------
+// NodeIdTable_Size:
+//  NodeIdTable_128Bits is the default size for this table which uses 128 SIMD to find/insert in the table
+//
+// ui_node_id_table_params
+//  GroupSize : How many values per "groups" this must be one of NodeIDTableSize
+//  GroupCount: How many groups the table contains, this must be a power of two (Asserted in PlaceNodeIdTableInMemory)
+//  This table never resizes and the amount of slots must acount for the worst case scenario.
+//  Number of slots is computed by GroupSize * GroupCount.
+//
+// GetNodeIdTableFootprint:
+//   Return the number of bytes required to store a node-id table for `Params`.
+//   The caller must allocate at least this many bytes (aligned for ui_node_id_entry/ui_node_id_table)
+//   before calling PlaceNodeIdTableInMemory.
+//
+// PlaceNodeIdTableInMemory:
+//   Initialize a ui_node_id_table inside the caller-supplied Memory block and return a pointer
+//   to the placed ui_node_id_table. Does NOT allocate memory. If Memory == NULL the function
+//   returns NULL, thus caller must only check that the returned memory is non-null.
+//   Caller owns the memory and is responsible for managing it.
+// -------------------------------------------------------------------------------------------------------------------
 
-internal u64                GetNodeIdTableFootprint      (ui_node_id_table_params Params);
-internal ui_node_id_table * PlaceNodeIdTableInMemory     (ui_node_id_table_params Params, void *Memory);
-internal b32                IsValidNodeIdTable           (ui_node_id_table *Table);
-internal u32                GetNodeIdGroupIndexFromHash  (ui_node_id_hash Hash, ui_node_id_table *Table);
-internal u8                 GetNodeIdTagFromHash         (ui_node_id_hash Hash);
-internal ui_node_id_hash    ComputeNodeIdHash            (byte_string Id);
-internal ui_node_id_entry * FindNodeIdEntry              (ui_node_id_hash Hash, ui_node_id_table *Table);
-internal void               InsertNodeId                 (ui_node_id_hash Hash, ui_layout_node *Node, ui_node_id_table *Table);
-internal void               SetNodeId                    (byte_string Id, ui_layout_node *Node, ui_node_id_table *Table);
-internal ui_layout_node   * UIFindNodeById               (byte_string Id, ui_pipeline *Pipeline);
+typedef enum NodeIdTable_Size
+{
+    NodeIdTable_128Bits = 16, // 128/8
+} NodeIdTable_Size;
+
+typedef struct ui_node_id_table_params
+{
+    NodeIdTable_Size GroupSize;
+    u64              GroupCount;
+} ui_node_id_table_params;
+
+internal u64                GetNodeIdTableFootprint   (ui_node_id_table_params Params);
+internal ui_node_id_table * PlaceNodeIdTableInMemory  (ui_node_id_table_params Params, void *Memory);
+
+// -------------------------------------------------------------------------------------------------------------------
+// ui_node_id_table:
+//   Opaque pointer.
+//
+// SetNodeId:
+//  Given a byte_string we try to insert and a node we try to insert the entry into the table.
+//  If the table or the node are invalid, this function has no effect. (Log)
+//  If an entry with the same name already exists, this function has no effect. (Log)
+//  Otherwise, the id will be linked to the name in the table and you can find it with UIFindNodeById
+//
+// UIFindNodeById:
+//  Given a byte string we try to query the corresponding node.
+//  Returns the node if found (Must be inserted via SetNodeId) or 0 if not.
+//  If the table or the byte_string is invalid, this function has no effect.
+// -------------------------------------------------------------------------------------------------------------------
+
+typedef struct ui_node_id_table ui_node_id_table;
+
+internal void               SetNodeId       (byte_string Id, ui_layout_node *Node, ui_node_id_table *Table);
+internal ui_layout_node   * UIFindNodeById  (byte_string Id, ui_node_id_table *Table);
+
+// [Scrolling]
+
+internal void ApplyScrollToContext(f32 ScrollDelta, ui_scroll_context *Context);

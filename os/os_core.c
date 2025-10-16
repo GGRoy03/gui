@@ -10,6 +10,89 @@ ProcessInputMessage(os_button_state *NewState, b32 IsDown)
     }
 }
 
+internal vec2_f32
+OSGetMousePosition(void)
+{
+    os_inputs *Inputs = OSGetInputs();
+    vec2_f32   Result = Inputs->MousePosition;
+
+    return Result;
+}
+
+internal vec2_f32
+OSGetMouseDelta(void)
+{
+    os_inputs *Inputs = OSGetInputs();
+    vec2_f32   Result = Inputs->MouseDelta;
+
+    return Result;
+}
+
+internal f32
+OSGetScrollDelta(void)
+{
+    os_inputs *Inputs = OSGetInputs();
+    f32        Result = Inputs->ScrollDelta;
+
+    return Result;
+}
+
+internal b32
+OSIsMouseClicked(OSMouseButton_Type Button)
+{
+    os_inputs       *Inputs = OSGetInputs();
+    os_button_state *State  = &Inputs->MouseButtons[Button];
+    b32              Result = (State->EndedDown && State->HalfTransitionCount > 0);
+
+    return Result;
+}
+
+internal b32
+OSIsMouseHeld(OSMouseButton_Type Button)
+{
+    os_inputs       *Inputs = OSGetInputs();
+    os_button_state *State  = &Inputs->MouseButtons[Button];
+    b32              Result = (State->EndedDown && State->HalfTransitionCount == 0);
+
+    return Result;
+}
+
+internal b32 
+OSIsMouseReleased(OSMouseButton_Type Button)
+{
+    os_inputs       *Inputs = OSGetInputs();
+    os_button_state *State  = &Inputs->MouseButtons[Button];
+    b32              Result = (!State->EndedDown && State->HalfTransitionCount > 0);
+
+    return Result;
+}
+
+internal void
+OSClearInputs(void)
+{
+    os_inputs *Inputs = OSGetInputs();
+
+    Inputs->ScrollDelta   = 0.f;
+    Inputs->MouseDelta    = Vec2F32(0.f, 0.f);
+    Inputs->IsActiveFrame = 0;
+
+    for (u32 Idx = 0; Idx < OS_KeyboardButtonCount; Idx++)
+    {
+        Inputs->KeyboardButtons[Idx].HalfTransitionCount = 0;
+    }
+
+    for (u32 Idx = 0; Idx < OS_MouseButtonCount; Idx++)
+    {
+        Inputs->MouseButtons[Idx].HalfTransitionCount = 0;
+    }
+}
+
+internal b32
+OSIsActiveFrame(void)
+{
+    return 1;
+}
+
 // [Agnostic File API]
 
 internal b32 

@@ -88,7 +88,15 @@ typedef struct os_glyph_info
 
 // [Inputs]
 
-internal void ProcessInputMessage(os_button_state *NewState, b32 IsDown);
+internal void      ProcessInputMessage  (os_button_state *NewState, b32 IsDown);
+internal vec2_f32  OSGetMousePosition   (void);
+internal vec2_f32  OSGetMouseDelta      (void);
+internal f32       OSGetScrollDelta     (void);
+internal b32       OSIsMouseClicked     (OSMouseButton_Type Button);
+internal b32       OSIsMouseHeld        (OSMouseButton_Type Button);
+internal b32       OSIsMouseReleased    (OSMouseButton_Type Button);
+internal void      OSClearInputs        (void);
+internal b32       OSIsActiveFrame      (void);
 
 // [Files]
 
@@ -108,13 +116,6 @@ internal void         OSReleaseFile  (os_handle Handle);
 internal os_system_info * OSGetSystemInfo     (void);
 internal os_inputs      * OSGetInputs         (void);
 internal vec2_i32         OSGetClientSize     (void);
-internal b32              OSIsActiveFrame     (void);
-internal vec2_f32         OSGetMousePosition  (void);
-internal vec2_f32         OSGetMouseDelta     (void);
-internal b32              OSIsMouseClicked    (OSMouseButton_Type Button);
-internal b32              OSIsMouseHeld       (OSMouseButton_Type Button);
-internal b32              OSIsMouseReleased   (OSMouseButton_Type Button);
-internal void             OSClearInputs       (void);
 
 // [Memory]
 

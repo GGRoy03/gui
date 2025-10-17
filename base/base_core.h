@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <math.h>
+#include <float.h>
 
 // [Detect Compiler]
 

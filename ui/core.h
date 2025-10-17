@@ -98,6 +98,8 @@ typedef struct ui_rect
     f32              BorderWidth, Softness, SampleAtlas, _P0; // Style Params
 } ui_rect;
 
+typedef struct ui_style_registry ui_style_registry;
+
 typedef struct ui_pipeline_params
 {
     byte_string ThemeFile;
@@ -122,15 +124,6 @@ struct ui_pipeline
     memory_arena *StaticArena;
 };
 
-// One of the three program global (GAME, UI, RENDERER)
-
-typedef struct ui_font_list
-{
-    ui_font *First;
-    ui_font *Last;
-    u32      Count;
-} ui_font_list;
-
 typedef struct ui_pipeline_list
 {
     ui_pipeline *First;
@@ -138,18 +131,29 @@ typedef struct ui_pipeline_list
     u32          Count;
 } ui_pipeline_list;
 
+
+typedef struct ui_font ui_font;
+typedef struct ui_font_list
+{
+    ui_font *First;
+    ui_font *Last;
+    u32      Count;
+} ui_font_list;
+
 typedef struct ui_state
 {
     // Resources
     ui_font_list     Fonts;
     ui_pipeline_list Pipelines;
+    memory_arena    *StaticData;
 
     // State
     ui_pipeline    *TargetPipeline;
     ui_layout_node *CapturedNode;
     UIIntent_Type   Intent;
 
-    memory_arena *StaticData;
+    // Systems
+    console_queue Console;
 } ui_state;
 
 global ui_state UIState;

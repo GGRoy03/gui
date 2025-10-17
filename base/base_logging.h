@@ -22,13 +22,12 @@ typedef enum ConsoleMessagePoll_Result
 
 typedef enum ConsoleMessage_Constant
 {
-    ConsoleMessage_CountPerPool  = 64,
     ConsoleMessage_MaximumLength = 512,
 } ConsoleMessage_Constant;
 
-#define info_message(Message)  ConsoleMessage_Info , byte_string_literal(Message)
-#define error_message(Message) ConsoleMessage_Error, byte_string_literal(Message)
-#define warn_message(Message)  ConsoleMessage_Warn , byte_string_literal(Message)
+#define info_message(Message)  ConsoleMessage_Info , byte_string_literal(Message), &UIState.Console
+#define error_message(Message) ConsoleMessage_Error, byte_string_literal(Message), &UIState.Console
+#define warn_message(Message)  ConsoleMessage_Warn , byte_string_literal(Message), &UIState.Console
 
 // [CORE TYPES]
 
@@ -56,10 +55,6 @@ struct console_queue
 
     console_queue_node Sentinel;
 };
-
-// [Globals]
-
-global console_queue Console;
 
 // [PRODUCER API]
 

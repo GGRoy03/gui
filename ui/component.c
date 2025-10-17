@@ -12,7 +12,7 @@ UIWindow_(byte_string Id, u32 StyleIndex, ui_pipeline *Pipeline)
         SetFlag(Flags, UILayoutNode_IsParent);
     }
 
-    InitializeLayoutNode(Style, UILayoutNode_Window, Flags, Id, Pipeline);
+    InitializeLayoutNode(Style, Flags, Id, Pipeline);
 }
 
 internal void
@@ -24,7 +24,7 @@ UIButton_(byte_string Id, u32 StyleIndex, ui_click_callback *Callback, ui_pipeli
     // TODO: Figure out what we want to do with callbacks.
     Useless(Callback);
 
-    InitializeLayoutNode(Style, UILayoutNode_Button, Flags, Id, Pipeline);
+    InitializeLayoutNode(Style, Flags, Id, Pipeline);
 }
 
 internal void
@@ -38,7 +38,7 @@ UIHeader_(byte_string Id, u32 StyleIndex, ui_pipeline *Pipeline)
         SetFlag(Flags, UILayoutNode_PlaceChildrenX);
     }
 
-    InitializeLayoutNode(Style, UILayoutNode_Header, Flags, Id, Pipeline);
+    InitializeLayoutNode(Style, Flags, Id, Pipeline);
 }
 
 internal void
@@ -49,11 +49,12 @@ UIScrollView_(byte_string Id, u32 StyleIndex, ui_pipeline *Pipeline)
 
     // Constants Flags
     {
-        SetFlag(Flags, UILayoutNode_PlaceChildrenY);
         SetFlag(Flags, UILayoutNode_IsParent);
+        SetFlag(Flags, UILayoutNode_PlaceChildrenY);
+        SetFlag(Flags, UILayoutNode_IsScrollRegion);
     }
 
-    InitializeLayoutNode(Style, UILayoutNode_ScrollView, Flags, Id, Pipeline);
+    InitializeLayoutNode(Style, Flags, Id, Pipeline);
 }
 
 internal void
@@ -62,7 +63,7 @@ UILabel_(byte_string Id, u32 StyleIndex, byte_string Text, ui_pipeline *Pipeline
     ui_cached_style *Style = GetCachedStyle(Pipeline->Registry, StyleIndex);
     bit_field        Flags = 0;
 
-    ui_layout_node *Node = InitializeLayoutNode(Style, UILayoutNode_Label, Flags, Id, Pipeline);
+    ui_layout_node *Node = InitializeLayoutNode(Style, Flags, Id, Pipeline);
     if(IsValidLayoutNode(Node))
     {
         BindText(Node, Text, UIGetFont(Style), Pipeline->StaticArena);

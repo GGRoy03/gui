@@ -16,7 +16,7 @@ DisableWarning(4201)
 
 // [Core Types]
 
-typedef struct gpu_font_objects
+typedef struct gpu_font_context
 {
     ID3D11Texture2D          *GlyphCache;
     ID3D11ShaderResourceView *GlyphCacheView;
@@ -24,7 +24,7 @@ typedef struct gpu_font_objects
     ID3D11Texture2D          *GlyphTransfer;
     ID3D11ShaderResourceView *GlyphTransferView;
     IDXGISurface             *GlyphTransferSurface;
-} gpu_font_objects;
+} gpu_font_context;
 
 typedef struct d3d11_rect_uniform_buffer
 {
@@ -39,7 +39,7 @@ typedef struct d3d11_input_layout
               u32                       Count;
 } d3d11_input_layout;
 
-typedef struct d3d11_backend
+typedef struct d3d11_renderer
 {
     // Base Objects
     ID3D11Device           *Device;
@@ -60,7 +60,7 @@ typedef struct d3d11_backend
 
     // State
     vec2_i32 LastResolution;
-} d3d11_backend;
+} d3d11_renderer;
 
 // [Globals]
 

@@ -53,23 +53,18 @@ UIBeginFrame()
 {
     ui_state *State = &UIState;
 
+    // Clear the state if needed
     b32 MouseReleased = OSIsMouseReleased(OSMouseButton_Left);
     if(MouseReleased)
     {
         State->CapturedNode = 0;
         State->Intent       = UIIntent_None;
     }
-
-    ui_pipeline_list *PipelineList  = &State->Pipelines;
-    b32               IsActiveFrame = OSIsActiveFrame();
-    IterateLinkedList(PipelineList->First, ui_pipeline *, Pipeline)
-    {
-        Pipeline->IsStale = IsActiveFrame;
-    }
 }
 
 // TODO: Lerp the drag-delta or something if vsync is activated. Also, figure
-// out if this introduces too much delay on the cursor and whatnot.
+// out if this introduces too much delay on the cursor and whatnot. Yeah I am not sure
+// if this should even exist?
 
 internal void
 UIEndFrame()
@@ -133,8 +128,6 @@ UIEndFrame()
     } break;
 
     }
-
-    SubmitRenderCommands();
 }
 
 // [Pipeline]
@@ -184,7 +177,7 @@ UICreatePipeline(ui_pipeline_params Params)
         // Node Id Table
         {
             ui_node_id_table_params Params = { 0 };
-            Params.GroupSize = NodeIdTable_GroupSize;
+            Params.GroupSize  = NodeIdTable_128Bits;
             Params.GroupCount = 32;
 
             u64   Footprint = GetNodeIdTableFootprint(Params);
@@ -253,16 +246,14 @@ UIPipelineExecute(ui_pipeline *Pipeline)
     {
         b32      MouseIsClicked = OSIsMouseClicked(OSMouseButton_Left);
         vec2_f32 MousePosition  = OSGetMousePosition();
+        f32      ScrollDelta    = OSGetScrollDelta();
 
         ui_hit_test Hit = HitTestLayout(MousePosition, LayoutRoot, Pipeline);
         if (Hit.Success)
         {
-            Assert(Hit.Node);
-            Assert(Hit.Intent != UIIntent_None);
-
             if (MouseIsClicked)
             {
-                if (HasFlag(Hit.Node->Flags, UILayoutNode_None))
+                if (HasFlag(Hit.Node->Flags, NoFlag))
                 {
                     // TODO: Callback or something?
                 }
@@ -272,6 +263,12 @@ UIPipelineExecute(ui_pipeline *Pipeline)
                 State->TargetPipeline = Pipeline;
 
                 SetFlag(Hit.Node->Flags, UILayoutNode_IsClicked);
+            }
+
+            if(HasFlag(Hit.Node->Flags, UILayoutNode_IsScrollRegion))
+            {
+                //Assert(Hit.Node->Value.ScrollContext);
+                //ApplyScrollToContext(ScrollDelta, Hit.Node->Value.ScrollContext);
             }
 
             SetFlag(Hit.Node->Flags, UILayoutNode_IsHovered);
@@ -311,17 +308,7 @@ BuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_layout_node *Root)
             Node = PushArray(Pipeline->FrameArena, rect_group_node, 1);
             Node->BatchList.BytesPerInstance = sizeof(ui_rect);
 
-            if (!UIParams->First)
-            {
-                UIParams->First = Node;
-            }
-
-            if (UIParams->Last)
-            {
-                UIParams->Last->Next = Node;
-            }
-
-            UIParams->Last = Node;
+            AppendToLinkedList(UIParams, Node, UIParams->Count);
         }
 
         Node->Params = NewParams;        // BUG: This is simply wrong.
@@ -379,6 +366,15 @@ BuildDrawList(ui_pipeline *Pipeline, render_pass *Pass, ui_layout_node *Root)
 
 Draw:
 
+    if(HasFlag(Root->Flags, UILayoutNode_IsScrollRegion))
+    {
+        // NOTE: When drawing we just check every first citizen to check which
+        // node is visible in the window? Uhm... We cannot fully prunes nodes.
+        // I guess there likes 2 clipping part: We draw anything that starts at
+        // least in the scoll viewport. And then that will overflow so we push
+        // a rect.
+    }
+
     if (HasFlag(Root->Flags, UILayoutNode_DrawBackground))
     {
         ui_rect *Rect = PushDataInBatchList(Pipeline->FrameArena, List);
@@ -415,6 +411,9 @@ Draw:
 
     IterateLinkedList(Root->First, ui_layout_node *, Child)
     {
-        BuildDrawList(Pipeline, Pass, Child);
+        if(!(HasFlag(Child->Flags, UILayoutNode_IsPruned)))
+        {
+            BuildDrawList(Pipeline, Pass, Child);
+        }
     }
 }

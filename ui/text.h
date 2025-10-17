@@ -63,8 +63,8 @@ struct ui_font
     ui_font *Next;
 
     // Backend
-    gpu_font_objects GPUFontObjects;
-    os_font_objects  OSFontObjects;
+    gpu_font_context GPUContext;
+    os_font_context  OSContext;
 
     // Info
     vec2_f32    TextureSize;

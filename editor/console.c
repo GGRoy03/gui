@@ -12,13 +12,13 @@ ConsolePrintMessage(byte_string Message, ConsoleMessage_Severity Severity, ui_la
     case ConsoleMessage_Info:
     {
         TextColor = UIColor(0.01f, 0.71f, 0.99f, 1.f);
-        Prefix    = byte_string_literal("[Info]  => ");
+        Prefix    = byte_string_literal("[Info] => ");
     } break;
 
     case ConsoleMessage_Warn:
     {
         TextColor = UIColor(0.99f, 0.62f, 0.01f, 1.f);
-        Prefix    = byte_string_literal("[Warn]  => ");
+        Prefix    = byte_string_literal("[Warn] => ");
     } break;
 
     case ConsoleMessage_Error:
@@ -72,20 +72,32 @@ ConsoleUI(editor_console_ui *ConsoleUI)
             ArenaParams.ReserveSize       = Kilobyte(64);
             ArenaParams.CommitSize        = Kilobyte(4);
         }
-        ConsoleUI->Arena = AllocateArena(ArenaParams);
+
+        ConsoleUI->MessageLimit = ConsoleConstant_MessageCountLimit;
+        ConsoleUI->Arena        = AllocateArena(ArenaParams);
 
         UISubtreeBlock(0, ConsoleUI->Pipeline)
         {
             UIWindowBlock(ConsoleStyle_Window, ConsoleUI->Pipeline)
             {
-                UIScrollViewBlockID(ui_id("Console_ScrollBuffer"), ConsoleStyle_MessageView, ConsoleUI->Pipeline)
-                {
-                }
+                UIScrollViewID(ui_id("Console_ScrollBuffer"), ConsoleStyle_MessageView, ConsoleUI->Pipeline);
             }
         }
 
-        ConsoleWriteMessage(info_message("ABCDEFGHIJKLMNOPQRSTUVWXYZ"), &Console);
-        ConsoleWriteMessage(info_message("abcdefghijklmnopqrstuvwxyz"), &Console);
+        ConsoleWriteMessage(info_message("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+        ConsoleWriteMessage(info_message("abcdefghijklmnopqrstuvwxyz"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
+        ConsoleWriteMessage(info_message("I am trying to overflow"));
 
         ConsoleUI->IsInitialized = 1;
     }
@@ -94,10 +106,10 @@ ConsoleUI(editor_console_ui *ConsoleUI)
 
     // Drain The Queue
     {
-        ui_layout_node     *ScrollBuffer = UIFindNodeById(ui_id("Console_ScrollBuffer"), ConsoleUI->Pipeline);
+        ui_layout_node     *ScrollBuffer = UIFindNodeById(ui_id("Console_ScrollBuffer"), ConsoleUI->Pipeline->IdTable);
         console_queue_node *Node         = 0;
 
-        while((Node = PopConsoleMessageQueue(&Console)))
+        while((Node = PopConsoleMessageQueue(&UIState.Console)))
         {
             ConsolePrintMessage(ByteString(Node->Value.Text, Node->Value.TextSize), Node->Value.Severity, ScrollBuffer);
             FreeConsoleNode(Node);

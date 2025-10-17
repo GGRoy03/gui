@@ -13,12 +13,6 @@ typedef enum RenderPass_Type
     RenderPass_Count = 1,
 } RenderPass_Type;
 
-// [FORWARD DECLARATIONS]
-
-typedef struct direct_glyph_table direct_glyph_table;
-
-// [CORE TYPES]
-
 // Batch types
 // A batch is a linked list of raw byte data
 
@@ -77,6 +71,7 @@ typedef struct render_pass_params_ui
 {
     rect_group_node *First;
     rect_group_node *Last;
+    u32              Count;
 } render_pass_params_ui;
 
 // Stats Types
@@ -133,20 +128,10 @@ global render_state RenderState;
 
 // [Globals]
 
-read_only global u32 UIPassDefaultBatchCount       = 10;
-read_only global u32 UIPassDefaultGroupCount       = 20;
-read_only global u32 UIPassDefaultPassCount        = 5;
-read_only global u32 UIPassDefaultRenderedDataSize = Kilobyte(50);
-read_only global u32 UIPassDefaultPaddingSize      = Kilobyte(25);
-
 read_only global u64 RenderPassDataSizeTable[] =
 {
     80, // Inputs to UI pass (ui_rect)
 };
-
-// [FORWARD DECLARATIONS]
-
-typedef struct gpu_font_objects gpu_font_objects;
 
 // [Handles]
 
@@ -162,13 +147,16 @@ internal b32           CanMergeGroupParams  (rect_group_params *Old, rect_group_
 
 // [PER-RENDERER API]
 
-internal render_handle InitializeRenderer    (memory_arena *Arena);
-internal void          SubmitRenderCommands  (void);
+internal render_handle InitializeRenderer    (void *HWindow, vec2_i32 Resolution, memory_arena *Arena);
+internal void          SubmitRenderCommands  (render_handle HRenderer, vec2_i32 Resolution, render_pass_list *RenderPassList);
 
 // [Text]
 
-internal b32  CreateGlyphCache      (render_handle BackendHandle, vec2_f32 Size, gpu_font_objects *FontObjects);
-internal void ReleaseGlyphCache     (gpu_font_objects *FontObjects);
-internal b32  CreateGlyphTransfer   (render_handle Backend, vec2_f32 Size, gpu_font_objects *FontObjects);
-internal void ReleaseGlyphTransfer  (gpu_font_objects *FontObjects);
-external void TransferGlyph         (rect_f32 Rect, render_handle RendererHandle, gpu_font_objects *FontObjects);
+typedef struct gpu_font_context gpu_font_context;
+
+internal b32  IsValidGPUFontContext  (gpu_font_context *Context);
+internal b32  CreateGlyphCache       (render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext);
+internal b32  CreateGlyphTransfer    (render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext);
+internal void ReleaseGlyphCache      (gpu_font_context *FontContext);
+internal void ReleaseGlyphTransfer   (gpu_font_context *FontContext);
+external void TransferGlyph          (rect_f32 Rect, render_handle HRenderer, gpu_font_context *FontContext);

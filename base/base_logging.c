@@ -163,11 +163,10 @@ GetTimeStamp(void)
     return 0;
 }
 
-// NOTE: I cannot find a better way to do this allocation.
+// WARN: I cannot find a better way to do this allocation.
 // This makes it very simple to malloc/free, but is probably
 // not the best way. At least the behavior is simple and clear
-// producer allocates and consumer frees. This also uses a malloc/free
-// instead of the classic OSReserve/OSCommit/OSRelease which is annoying.
+// producer allocates and consumer frees.
 
 external void
 ConsoleWriteMessage(ConsoleMessage_Severity Severity, byte_string Message, console_queue *Queue)

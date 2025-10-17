@@ -1,47 +1,23 @@
 // [HELPERS]
 
+internal d3d11_renderer *
+D3D11GetRenderer(render_handle HRenderer)
+{
+    d3d11_renderer *Result = (d3d11_renderer *)HRenderer.u64[0];
+    return Result;
+}
+
 internal ID3D11ShaderResourceView *
-D3D11GetShaderViewFromHandle(render_handle Handle)
+D3D11GetShaderView(render_handle Handle)
 {
     ID3D11ShaderResourceView *Result = (ID3D11ShaderResourceView *)Handle.u64[0];
     return Result;
 }
 
-internal void
-D3D11Release(d3d11_backend *Backend)
-{
-    if (Backend)
-    {
-        if (Backend->Device)
-        {
-            ID3D11Device_Release(Backend->Device);
-            Backend->Device = 0;
-        }
-
-        if (Backend->DeviceContext)
-        {
-            ID3D11DeviceContext_Release(Backend->DeviceContext);
-            Backend->DeviceContext = 0;
-        }
-
-        if (Backend->RenderView)
-        {
-            ID3D11RenderTargetView_Release(Backend->RenderView);
-            Backend->RenderView = 0;
-        }
-
-        if (Backend->SwapChain)
-        {
-            IDXGISwapChain1_Release(Backend->SwapChain);
-            Backend->SwapChain = 0;
-        }
-    }
-}
-
 internal ID3D11Buffer *
-D3D11GetVertexBuffer(u64 Size, d3d11_backend *Backend)
+D3D11GetVertexBuffer(u64 Size, d3d11_renderer *Renderer)
 {
-    ID3D11Buffer *Result = Backend->VBuffer64KB;
+    ID3D11Buffer *Result = Renderer->VBuffer64KB;
 
     if(Size > Kilobyte(64))
     {
@@ -50,16 +26,46 @@ D3D11GetVertexBuffer(u64 Size, d3d11_backend *Backend)
     return Result;
 }
 
+internal void
+D3D11Release(d3d11_renderer *Renderer)
+{
+    if (Renderer)
+    {
+        if (Renderer->Device)
+        {
+            ID3D11Device_Release(Renderer->Device);
+            Renderer->Device = 0;
+        }
+
+        if (Renderer->DeviceContext)
+        {
+            ID3D11DeviceContext_Release(Renderer->DeviceContext);
+            Renderer->DeviceContext = 0;
+        }
+
+        if (Renderer->RenderView)
+        {
+            ID3D11RenderTargetView_Release(Renderer->RenderView);
+            Renderer->RenderView = 0;
+        }
+
+        if (Renderer->SwapChain)
+        {
+            IDXGISwapChain1_Release(Renderer->SwapChain);
+            Renderer->SwapChain = 0;
+        }
+    }
+}
+
 // [PER-RENDERER API]
 
 internal render_handle
-InitializeRenderer(memory_arena *Arena)
+InitializeRenderer(void *HWindow, vec2_i32 Resolution, memory_arena *Arena)
 {
-    render_handle  Result  = { 0 };
-    d3d11_backend *Backend = PushArray(Arena, d3d11_backend, 1); 
-    HRESULT        Error   = S_OK;
+    render_handle   Result   = { 0 };
+    d3d11_renderer *Renderer = PushArray(Arena, d3d11_renderer, 1); 
+    HRESULT         Error    = S_OK;
 
-    // BUG: Causing some weird debug messages.
     {
         UINT CreateFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
         #ifndef NDEBUG
@@ -68,7 +74,7 @@ InitializeRenderer(memory_arena *Arena)
         D3D_FEATURE_LEVEL Levels[] = { D3D_FEATURE_LEVEL_11_0 };
         Error = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
                                   CreateFlags, Levels, ARRAYSIZE(Levels),
-                                  D3D11_SDK_VERSION, &Backend->Device, NULL, &Backend->DeviceContext);
+                                  D3D11_SDK_VERSION, &Renderer->Device, NULL, &Renderer->DeviceContext);
         if (FAILED(Error))
         {
             return Result;
@@ -83,7 +89,7 @@ InitializeRenderer(memory_arena *Arena)
 
     {
         IDXGIDevice *DXGIDevice = 0;
-        Error = ID3D11Device_QueryInterface(Backend->Device, &IID_IDXGIDevice, (void **)&DXGIDevice);
+        Error = ID3D11Device_QueryInterface(Renderer->Device, &IID_IDXGIDevice, (void **)&DXGIDevice);
         if (DXGIDevice)
         {
             IDXGIAdapter *DXGIAdapter = 0;
@@ -94,7 +100,7 @@ InitializeRenderer(memory_arena *Arena)
                 IDXGIAdapter_GetParent(DXGIAdapter, &IID_IDXGIFactory2, (void **)&Factory);
                 if (Factory)
                 {
-                    HWND WindowHandle = OSWin32GetWindowHandle();
+                    HWND Window = (HWND)HWindow;
 
                     DXGI_SWAP_CHAIN_DESC1 Desc = { 0 };
                     Desc.Format           = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -104,9 +110,11 @@ InitializeRenderer(memory_arena *Arena)
                     Desc.Scaling          = DXGI_SCALING_NONE;
                     Desc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
-                    Error = IDXGIFactory2_CreateSwapChainForHwnd(Factory, (IUnknown *)Backend->Device, WindowHandle,
-                                                                 &Desc, 0, 0, &Backend->SwapChain);
-                    IDXGIFactory_MakeWindowAssociation(Factory, WindowHandle, DXGI_MWA_NO_ALT_ENTER);
+                    Error = IDXGIFactory2_CreateSwapChainForHwnd(Factory, (IUnknown *)Renderer->Device,
+                                                                 Window, &Desc, 0, 0,
+                                                                 &Renderer->SwapChain);
+
+                    IDXGIFactory_MakeWindowAssociation(Factory, Window, DXGI_MWA_NO_ALT_ENTER);
                     IDXGIFactory2_Release(Factory);
                 }
 
@@ -118,7 +126,7 @@ InitializeRenderer(memory_arena *Arena)
 
         if (FAILED(Error))
         {
-            D3D11Release(Backend);
+            D3D11Release(Renderer);
             return Result;
         }
     }
@@ -126,17 +134,17 @@ InitializeRenderer(memory_arena *Arena)
     // Render Target View
     {
         ID3D11Texture2D *BackBuffer = 0;
-        Error = IDXGISwapChain1_GetBuffer(Backend->SwapChain, 0, &IID_ID3D11Texture2D, (void **)&BackBuffer);
+        Error = IDXGISwapChain1_GetBuffer(Renderer->SwapChain, 0, &IID_ID3D11Texture2D, (void **)&BackBuffer);
         if(BackBuffer)
         {
-            Error = ID3D11Device_CreateRenderTargetView(Backend->Device, (ID3D11Resource*)BackBuffer, NULL, &Backend->RenderView);
+            Error = ID3D11Device_CreateRenderTargetView(Renderer->Device, (ID3D11Resource*)BackBuffer, NULL, &Renderer->RenderView);
 
             ID3D11Texture2D_Release(BackBuffer);
         }
 
         if(FAILED(Error))
         {
-            D3D11Release(Backend);
+            D3D11Release(Renderer);
             return Result;
         }
     }
@@ -149,17 +157,17 @@ InitializeRenderer(memory_arena *Arena)
         Desc.BindFlags      = D3D11_BIND_VERTEX_BUFFER;
         Desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-        Error = Backend->Device->lpVtbl->CreateBuffer(Backend->Device, &Desc, NULL, &Backend->VBuffer64KB);
+        Error = Renderer->Device->lpVtbl->CreateBuffer(Renderer->Device, &Desc, NULL, &Renderer->VBuffer64KB);
         if(FAILED(Error))
         {
-            D3D11Release(Backend);
+            D3D11Release(Renderer);
             return Result;
         }
     }
 
     // Default Shaders
     {
-        ID3D11Device       *Device  = Backend->Device;
+        ID3D11Device       *Device  = Renderer->Device;
         ID3D11InputLayout  *ILayout = 0;
         ID3D11VertexShader *VShader = 0;
         ID3D11PixelShader  *PShader = 0;
@@ -194,8 +202,8 @@ InitializeRenderer(memory_arena *Arena)
 
             VShaderSrcBlob->lpVtbl->Release(VShaderSrcBlob);
 
-            Backend->VShaders[Type] = VShader;
-            Backend->ILayouts[Type] = ILayout;
+            Renderer->VShaders[Type] = VShader;
+            Renderer->ILayouts[Type] = ILayout;
         }
 
         ForEachEnum(RenderPass_Type, RenderPass_Count, Type)
@@ -220,13 +228,13 @@ InitializeRenderer(memory_arena *Arena)
 
             PShaderSrcBlob->lpVtbl->Release(PShaderSrcBlob);
 
-            Backend->PShaders[Type] = PShader;
+            Renderer->PShaders[Type] = PShader;
         }
     }
 
     // Uniform Buffers
     {
-        ID3D11Device *Device = Backend->Device;
+        ID3D11Device *Device = Renderer->Device;
 
         ForEachEnum(RenderPass_Type, RenderPass_Count, Type)
         {
@@ -242,14 +250,12 @@ InitializeRenderer(memory_arena *Arena)
 
             Device->lpVtbl->CreateBuffer(Device, &Desc, 0, &Buffer);
 
-            Backend->UBuffers[Type] = Buffer;
+            Renderer->UBuffers[Type] = Buffer;
         }
     }
 
-    // Default State
+    // Blending
     {
-        Backend->LastResolution = OSGetClientSize();
-
         D3D11_BLEND_DESC BlendDesc = {0};
         BlendDesc.RenderTarget[0].BlendEnable           = TRUE;
         BlendDesc.RenderTarget[0].SrcBlend              = D3D11_BLEND_SRC_ALPHA;
@@ -260,7 +266,7 @@ InitializeRenderer(memory_arena *Arena)
         BlendDesc.RenderTarget[0].BlendOpAlpha          = D3D11_BLEND_OP_ADD;
         BlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-        if (FAILED(Backend->Device->lpVtbl->CreateBlendState(Backend->Device, &BlendDesc, &Backend->DefaultBlendState)))
+        if (FAILED(Renderer->Device->lpVtbl->CreateBlendState(Renderer->Device, &BlendDesc, &Renderer->DefaultBlendState)))
         {
         }
     }
@@ -276,30 +282,39 @@ InitializeRenderer(memory_arena *Arena)
         Desc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
         Desc.MaxLOD         = D3D11_FLOAT32_MAX;
 
-        Error = Backend->Device->lpVtbl->CreateSamplerState(Backend->Device, &Desc, &Backend->AtlasSamplerState);
+        Error = Renderer->Device->lpVtbl->CreateSamplerState(Renderer->Device, &Desc, &Renderer->AtlasSamplerState);
         if (FAILED(Error))
         {
         }
     }
 
-    Result.u64[0] = (u64)Backend;
+    // Default State
+    {
+        Renderer->LastResolution = Resolution;
+    }
+
+    Result.u64[0] = (u64)Renderer;
     return Result;
 }
 
 internal void 
-SubmitRenderCommands(void)
+SubmitRenderCommands(render_handle HRenderer, vec2_i32 Resolution, render_pass_list *RenderPassList)
 {
-    d3d11_backend          *Backend        = (d3d11_backend *)RenderState.Renderer.u64[0];
-    render_pass_list       *RenderPassList = &RenderState.PassList;
-    ID3D11DeviceContext    *DeviceContext  = Backend->DeviceContext;
-    ID3D11RenderTargetView *RenderView     = Backend->RenderView; 
-    IDXGISwapChain1        *SwapChain      = Backend->SwapChain;
+    d3d11_renderer *Renderer = D3D11GetRenderer(HRenderer);
+
+    if(!Renderer || !RenderPassList)
+    {
+        return;
+    }
+
+
+    ID3D11DeviceContext    *DeviceContext = Renderer->DeviceContext;
+    ID3D11RenderTargetView *RenderView    = Renderer->RenderView; 
+    IDXGISwapChain1        *SwapChain     = Renderer->SwapChain;
 
     // Update State
-    vec2_i32 Resolution = Backend->LastResolution;
+    vec2_i32 CurrentResolution = Renderer->LastResolution;
     {
-        vec2_i32 CurrentResolution = OSGetClientSize();
-
         if (!Vec2I32IsEqual(Resolution, CurrentResolution))
         {
             // TODO: Resize swap chain and whatever else we need.
@@ -335,7 +350,7 @@ SubmitRenderCommands(void)
                 rect_group_params NodeParams = Node->Params;
 
                 // Vertex Buffer
-                ID3D11Buffer *VBuffer = D3D11GetVertexBuffer(BatchList.ByteCount, Backend);
+                ID3D11Buffer *VBuffer = D3D11GetVertexBuffer(BatchList.ByteCount, Renderer);
                 {
                     D3D11_MAPPED_SUBRESOURCE Resource = { 0 };
                     DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)VBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
@@ -353,7 +368,7 @@ SubmitRenderCommands(void)
                 }
 
                 // Uniform Buffers
-                ID3D11Buffer *UniformBuffer = Backend->UBuffers[RenderPass_UI];
+                ID3D11Buffer *UniformBuffer = Renderer->UBuffers[RenderPass_UI];
                 {
                     d3d11_rect_uniform_buffer Uniform = { 0 };
                     Uniform.Transform[0]        = Vec4F32(NodeParams.Transform.c0r0, NodeParams.Transform.c0r1, NodeParams.Transform.c0r2, 0);
@@ -369,14 +384,14 @@ SubmitRenderCommands(void)
                 }
 
                 // Pipeline Info
-                ID3D11InputLayout        *ILayout   = Backend->ILayouts[RenderPass_UI];
-                ID3D11VertexShader       *VShader   = Backend->VShaders[RenderPass_UI];
-                ID3D11PixelShader        *PShader   = Backend->PShaders[RenderPass_UI];
-                ID3D11ShaderResourceView *AtlasView = D3D11GetShaderViewFromHandle(NodeParams.AtlasTextureView);
+                ID3D11InputLayout        *ILayout   = Renderer->ILayouts[RenderPass_UI];
+                ID3D11VertexShader       *VShader   = Renderer->VShaders[RenderPass_UI];
+                ID3D11PixelShader        *PShader   = Renderer->PShaders[RenderPass_UI];
+                ID3D11ShaderResourceView *AtlasView = D3D11GetShaderView(NodeParams.AtlasTextureView);
 
                 // OM
-                DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &Backend->RenderView, 0);
-                DeviceContext->lpVtbl->OMSetBlendState(DeviceContext, Backend->DefaultBlendState, 0, 0xFFFFFFFF);
+                DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &Renderer->RenderView, 0);
+                DeviceContext->lpVtbl->OMSetBlendState(DeviceContext, Renderer->DefaultBlendState, 0, 0xFFFFFFFF);
 
                 // IA
                 u32 Stride = (u32)BatchList.BytesPerInstance;
@@ -390,7 +405,7 @@ SubmitRenderCommands(void)
                 DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &UniformBuffer);
                 DeviceContext->lpVtbl->PSSetShader(DeviceContext, PShader, 0, 0);
                 DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &AtlasView);
-                DeviceContext->lpVtbl->PSSetSamplers(DeviceContext, 0, 1, &Backend->AtlasSamplerState);
+                DeviceContext->lpVtbl->PSSetSamplers(DeviceContext, 0, 1, &Renderer->AtlasSamplerState);
 
                 // Draw
                 u32 InstanceCount = (u32)(BatchList.ByteCount / BatchList.BytesPerInstance);
@@ -407,7 +422,6 @@ SubmitRenderCommands(void)
     HRESULT Error = SwapChain->lpVtbl->Present(SwapChain, 0, 0);
     if (FAILED(Error))
     {
-        OSAbort(1);
     }
     DeviceContext->lpVtbl->ClearState(DeviceContext);
 
@@ -419,17 +433,24 @@ SubmitRenderCommands(void)
 // [Text]
 
 internal b32
-CreateGlyphCache(render_handle BackendHandle, vec2_f32 Size, gpu_font_objects *FontObjects)
+IsValidGPUFontContext(gpu_font_context *Context)
 {
-    b32            Result  = 0;
-    HRESULT        Error   = S_OK;
-    d3d11_backend *Backend = (d3d11_backend *)BackendHandle.u64[0];
+    b32 Result = (Context) && (Context->GlyphCache) && (Context->GlyphCacheView) && (Context->GlyphTransfer) && (Context->GlyphTransferView) && (Context->GlyphTransferSurface);
+    return Result;
+}
 
-    if (Backend && FontObjects)
+internal b32
+CreateGlyphCache(render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext)
+{
+    b32 Result  = 0;
+
+    if (IsValidRenderHandle(HRenderer))
     {
+        d3d11_renderer *Renderer = D3D11GetRenderer(HRenderer);
+
         D3D11_TEXTURE2D_DESC Desc = { 0 };
-        Desc.Width            = (UINT)Size.X;
-        Desc.Height           = (UINT)Size.Y;
+        Desc.Width            = (UINT)TextureSize.X;
+        Desc.Height           = (UINT)TextureSize.Y;
         Desc.MipLevels        = 1;
         Desc.ArraySize        = 1;
         Desc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -437,53 +458,48 @@ CreateGlyphCache(render_handle BackendHandle, vec2_f32 Size, gpu_font_objects *F
         Desc.Usage            = D3D11_USAGE_DEFAULT;
         Desc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
 
-        Error = Backend->Device->lpVtbl->CreateTexture2D(Backend->Device, &Desc, 0, &FontObjects->GlyphCache);
-        if (SUCCEEDED(Error))
+        Renderer->Device->lpVtbl->CreateTexture2D(Renderer->Device, &Desc, 0, &FontContext->GlyphCache);
+        if (FontContext->GlyphCache)
         {
-            Error  = Backend->Device->lpVtbl->CreateShaderResourceView(Backend->Device, (ID3D11Resource *)FontObjects->GlyphCache, 0, &FontObjects->GlyphCacheView);
-            Result = (FontObjects->GlyphCacheView != 0);
+            Renderer->Device->lpVtbl->CreateShaderResourceView(Renderer->Device, (ID3D11Resource *)FontContext->GlyphCache, 0, &FontContext->GlyphCacheView);
+            Result = (FontContext->GlyphCacheView != 0);
         }
-    }
-
-    if (FAILED(Error))
-    {
-        ReleaseGlyphCache(FontObjects);
     }
 
     return Result;
 }
 
 internal void
-ReleaseGlyphCache(gpu_font_objects *FontObjects)
+ReleaseGlyphCache(gpu_font_context *FontContext)
 {
-    if (FontObjects)
+    if (FontContext)
     {
-        if (FontObjects->GlyphCache)
+        if (FontContext->GlyphCache)
         {
-            FontObjects->GlyphCache->lpVtbl->Release(FontObjects->GlyphCache);
-            FontObjects->GlyphCache = 0;
+            FontContext->GlyphCache->lpVtbl->Release(FontContext->GlyphCache);
+            FontContext->GlyphCache = 0;
         }
 
-        if (FontObjects->GlyphCacheView)
+        if (FontContext->GlyphCacheView)
         {
-            FontObjects->GlyphCacheView->lpVtbl->Release(FontObjects->GlyphCacheView);
-            FontObjects->GlyphCacheView = 0;
+            FontContext->GlyphCacheView->lpVtbl->Release(FontContext->GlyphCacheView);
+            FontContext->GlyphCacheView = 0;
         }
     }
 }
 
 internal b32
-CreateGlyphTransfer(render_handle BackendHandle, vec2_f32 Size, gpu_font_objects *FontObjects)
+CreateGlyphTransfer(render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext)
 {
-    b32            Result  = 0;
-    HRESULT        Error   = S_OK;
-    d3d11_backend *Backend = (d3d11_backend *)BackendHandle.u64[0];
+    b32 Result  = 0;
 
-    if (Backend && FontObjects)
+    if (IsValidRenderHandle(HRenderer))
     {
+        d3d11_renderer *Renderer = D3D11GetRenderer(HRenderer);
+
         D3D11_TEXTURE2D_DESC Desc = {0};
-        Desc.Width            = (UINT)Size.X;
-        Desc.Height           = (UINT)Size.Y;
+        Desc.Width            = (UINT)TextureSize.X;
+        Desc.Height           = (UINT)TextureSize.Y;
         Desc.MipLevels        = 1;
         Desc.ArraySize        = 1;
         Desc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -491,14 +507,14 @@ CreateGlyphTransfer(render_handle BackendHandle, vec2_f32 Size, gpu_font_objects
         Desc.Usage            = D3D11_USAGE_DEFAULT;
         Desc.BindFlags        = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
-        Error = Backend->Device->lpVtbl->CreateTexture2D(Backend->Device, &Desc, 0, &FontObjects->GlyphTransfer);
-        if (SUCCEEDED(Error))
+        Renderer->Device->lpVtbl->CreateTexture2D(Renderer->Device, &Desc, 0, &FontContext->GlyphTransfer);
+        if (FontContext->GlyphTransfer)
         {
-            Error = Backend->Device->lpVtbl->CreateShaderResourceView(Backend->Device, (ID3D11Resource *)FontObjects->GlyphTransfer, 0, &FontObjects->GlyphTransferView);
-            if (SUCCEEDED(Error))
+            Renderer->Device->lpVtbl->CreateShaderResourceView(Renderer->Device, (ID3D11Resource *)FontContext->GlyphTransfer, 0, &FontContext->GlyphTransferView);
+            if (FontContext->GlyphTransferView)
             {
-                Error  = FontObjects->GlyphTransfer->lpVtbl->QueryInterface(FontObjects->GlyphTransfer, &IID_IDXGISurface, (void **)&FontObjects->GlyphTransferSurface);
-                Result = (FontObjects->GlyphTransferSurface != 0);
+                FontContext->GlyphTransfer->lpVtbl->QueryInterface(FontContext->GlyphTransfer, &IID_IDXGISurface, (void **)&FontContext->GlyphTransferSurface);
+                Result = (FontContext->GlyphTransferSurface != 0);
             }
         }
     }
@@ -507,37 +523,37 @@ CreateGlyphTransfer(render_handle BackendHandle, vec2_f32 Size, gpu_font_objects
 }
 
 internal void
-ReleaseGlyphTransfer(gpu_font_objects *FontObjects)
+ReleaseGlyphTransfer(gpu_font_context *FontContext)
 {
-    if (FontObjects)
+    if (FontContext)
     {
-        if (FontObjects->GlyphTransfer)
+        if (FontContext->GlyphTransfer)
         {
-            FontObjects->GlyphTransfer->lpVtbl->Release(FontObjects->GlyphTransfer);
-            FontObjects->GlyphTransfer = 0;
+            FontContext->GlyphTransfer->lpVtbl->Release(FontContext->GlyphTransfer);
+            FontContext->GlyphTransfer = 0;
         }
 
-        if (FontObjects->GlyphTransferView)
+        if (FontContext->GlyphTransferView)
         {
-            FontObjects->GlyphTransferView->lpVtbl->Release(FontObjects->GlyphTransferView);
-            FontObjects->GlyphTransferView = 0;
+            FontContext->GlyphTransferView->lpVtbl->Release(FontContext->GlyphTransferView);
+            FontContext->GlyphTransferView = 0;
         }
 
-        if (FontObjects->GlyphTransferSurface)
+        if (FontContext->GlyphTransferSurface)
         {
-            FontObjects->GlyphTransferSurface->lpVtbl->Release(FontObjects->GlyphTransferSurface);
-            FontObjects->GlyphTransferSurface = 0;
+            FontContext->GlyphTransferSurface->lpVtbl->Release(FontContext->GlyphTransferSurface);
+            FontContext->GlyphTransferSurface = 0;
         }
     }
 }
 
 external void
-TransferGlyph(rect_f32 Rect, render_handle RendererHandle, gpu_font_objects *FontObjects)
+TransferGlyph(rect_f32 Rect, render_handle HRenderer, gpu_font_context *FontContext)
 {
-    d3d11_backend *Backend = (d3d11_backend *)RendererHandle.u64[0];;
-
-    if (Backend && FontObjects)
+    if (IsValidRenderHandle(HRenderer) && IsValidGPUFontContext(FontContext))
     {
+        d3d11_renderer *Renderer = D3D11GetRenderer(HRenderer);
+
         D3D11_BOX SourceBox;
         SourceBox.left   = 0;
         SourceBox.top    = 0;
@@ -546,8 +562,8 @@ TransferGlyph(rect_f32 Rect, render_handle RendererHandle, gpu_font_objects *Fon
         SourceBox.bottom = (UINT)(Rect.Max.Y - Rect.Min.Y);
         SourceBox.back   = 1;
 
-        Backend->DeviceContext->lpVtbl->CopySubresourceRegion(Backend->DeviceContext, (ID3D11Resource *)FontObjects->GlyphCache,
+        Renderer->DeviceContext->lpVtbl->CopySubresourceRegion(Renderer->DeviceContext, (ID3D11Resource *)FontContext->GlyphCache,
                                                               0, (UINT)Rect.Min.X, (UINT)Rect.Min.Y, 0, 
-                                                              (ID3D11Resource *)FontObjects->GlyphTransfer, 0, &SourceBox);
+                                                              (ID3D11Resource *)FontContext->GlyphTransfer, 0, &SourceBox);
     }
 }

@@ -3,7 +3,7 @@
 internal render_handle
 GetFontAtlas(ui_font *Font)
 {
-    render_handle Result = RenderHandle((u64)Font->GPUFontObjects.GlyphCacheView);
+    render_handle Result = RenderHandle((u64)Font->GPUContext.GlyphCacheView);
     return Result;
 }
 
@@ -33,35 +33,33 @@ UILoadFont(byte_string Name, f32 Size)
 
             stbrp_init_target(&Result->AtlasContext, TextureSize.X, TextureSize.Y, Result->AtlasNodes, TextureSize.X);
 
-            if(CreateGlyphCache(Renderer, Result->TextureSize, &Result->GPUFontObjects))
+            if(CreateGlyphCache(Renderer, Result->TextureSize, &Result->GPUContext))
             {
-                if(CreateGlyphTransfer(Renderer, Result->TextureSize, &Result->GPUFontObjects))
+                if(CreateGlyphTransfer(Renderer, Result->TextureSize, &Result->GPUContext))
                 {
-                    if(OSAcquireFontObjects(Name, Size, &Result->GPUFontObjects, &Result->OSFontObjects))
+                    if(OSAcquireFontContext(Name, Size, &Result->GPUContext, &Result->OSContext))
                     {
-                        Result->LineHeight = OSGetLineHeight(Result->Size, &Result->OSFontObjects);
+                        Result->LineHeight = OSGetLineHeight(Result->Size, &Result->OSContext);
                         AppendToLinkedList(FontList, Result, FontList->Count);
                     }
-                    else
-                    {
-                        ReleaseGlyphCache(&Result->GPUFontObjects);
-                        ReleaseGlyphTransfer(&Result->GPUFontObjects);
-                    }
                 }
-                else
-                {
-                    ReleaseGlyphCache(&Result->GPUFontObjects);
-                }
+            }
+
+            if(!Result)
+            {
+                ReleaseGlyphCache(&Result->GPUContext);
+                ReleaseGlyphTransfer(&Result->GPUContext);
+                OSReleaseFontContext(&Result->OSContext);
             }
         }
         else
         {
-            ConsoleWriteMessage(error_message("Failed to allocate memory when calling UILoadFont."), &Console);
+            ConsoleWriteMessage(error_message("Failed to allocate memory when calling UILoadFont."));
         }
     }
     else
     {
-        ConsoleWriteMessage(error_message("One or more arguments given to UILoadFont is invalid."), &Console);
+        ConsoleWriteMessage(error_message("One or more arguments given to UILoadFont is invalid."));
     }
 
     return Result;
@@ -170,7 +168,7 @@ CreateGlyphRun(byte_string Text, ui_font *Font, memory_arena *Arena)
 
             if(!State->IsRasterized)
             {
-                os_glyph_info Info = OSGetGlyphInfo(UTF8Stream, &Font->OSFontObjects, Font->Size);
+                os_glyph_info Info = OSGetGlyphInfo(UTF8Stream, Font->Size, &Font->OSContext);
                 f32           Padding     = 2.f;
                 f32           HalfPadding = 1.f;
 
@@ -187,7 +185,7 @@ CreateGlyphRun(byte_string Text, ui_font *Font, memory_arena *Arena)
                     PaddedRect.Max.X = (f32)(STBRect.x + Info.Size.X + HalfPadding);
                     PaddedRect.Max.Y = (f32)(STBRect.y + Info.Size.Y + HalfPadding);
 
-                    State->IsRasterized = OSRasterizeGlyph(UTF8Stream, PaddedRect, &Font->OSFontObjects);
+                    State->IsRasterized = OSRasterizeGlyph(UTF8Stream, PaddedRect, &Font->OSContext);
                     State->Source.Min.X = PaddedRect.Min.X;
                     State->Source.Min.Y = PaddedRect.Min.Y;
                     State->Source.Max.X = PaddedRect.Max.X;
@@ -196,11 +194,11 @@ CreateGlyphRun(byte_string Text, ui_font *Font, memory_arena *Arena)
                     State->AdvanceX     = Info.AdvanceX;
                     State->Size         = Info.Size;
 
-                    TransferGlyph(PaddedRect, Renderer, &Font->GPUFontObjects);
+                    TransferGlyph(PaddedRect, Renderer, &Font->GPUContext);
                 }
                 else
                 {
-                    ConsoleWriteMessage(warn_message("Could not pack glyph inside the texture in CreateGlyphRun"), &Console);
+                    ConsoleWriteMessage(warn_message("Could not pack glyph inside the texture in CreateGlyphRun"));
                 }
             }
 
@@ -212,7 +210,7 @@ CreateGlyphRun(byte_string Text, ui_font *Font, memory_arena *Arena)
     }
     else
     {
-        ConsoleWriteMessage(warn_message("One or more arguments passed to CreateGlyphRun is invalid"), &Console);
+        ConsoleWriteMessage(warn_message("One or more arguments passed to CreateGlyphRun is invalid"));
     }
 
     return Result;

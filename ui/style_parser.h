@@ -261,5 +261,5 @@ internal void           CacheStyle                   (style *ParsedStyle, ui_sty
 // [Error Handling]
 
 internal void  SynchronizeParser       (style_token_buffer *Buffer, StyleToken_Type StopAt, style_file_debug_info *Debug);
-internal void  ReportStyleParserError  (style_file_debug_info *Debug, ConsoleMessage_Severity Severity, byte_string Message);
-internal void  ReportStyleFileError    (style_file_debug_info *Debug, ConsoleMessage_Severity Severity, byte_string Message);
+internal void  ReportStyleParserError  (style_file_debug_info *Debug, ConsoleMessage_Severity Severity, byte_string Message, console_queue *Console);
+internal void  ReportStyleFileError    (style_file_debug_info *Debug, ConsoleMessage_Severity Severity, byte_string Message, console_queue *Console);

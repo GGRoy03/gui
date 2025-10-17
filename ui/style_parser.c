@@ -1342,7 +1342,7 @@ SynchronizeParser(style_token_buffer *Buffer, StyleToken_Type StopAt, style_file
 }
 
 internal void
-ReportStyleFileError(style_file_debug_info *Debug, ConsoleMessage_Severity Severity, byte_string Message)
+ReportStyleFileError(style_file_debug_info *Debug, ConsoleMessage_Severity Severity, byte_string Message, console_queue *Console)
 {
     u8          Buffer[Kilobyte(4)] = {0};
     byte_string Error               = ByteString(Buffer, 0);
@@ -1350,11 +1350,11 @@ ReportStyleFileError(style_file_debug_info *Debug, ConsoleMessage_Severity Sever
     Error.Size += snprintf((char *)Error.String             , sizeof(Buffer), "[File %s | Line: %u]", Debug->FileName.String, Debug->CurrentLineInFile);
     Error.Size += snprintf((char *)Error.String + Error.Size, sizeof(Buffer), "[%s]", Message.String);
 
-    ReportStyleParserError(Debug, Severity, Error);
+    ReportStyleParserError(Debug, Severity, Error, Console);
 }
 
 internal void
-ReportStyleParserError(style_file_debug_info *Debug, ConsoleMessage_Severity Severity, byte_string Message)
+ReportStyleParserError(style_file_debug_info *Debug, ConsoleMessage_Severity Severity, byte_string Message, console_queue *Console)
 {
     if(Severity == ConsoleMessage_Error)
     {
@@ -1365,5 +1365,5 @@ ReportStyleParserError(style_file_debug_info *Debug, ConsoleMessage_Severity Sev
         Debug->WarningCount++;
     }
 
-    ConsoleWriteMessage(Severity, Message, &Console);
+    ConsoleWriteMessage(Severity, Message, Console);
 }

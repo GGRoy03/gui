@@ -86,7 +86,6 @@ PushArena(memory_arena *Arena, u64 Size, u64 Alignment)
         b32 CommitResult = OSCommitMemory(CommitPointer, CommitSize);
         if(!CommitResult)
         {
-            OSAbort(1);
         }
 
         Active->Committed = CommitPostClamped;

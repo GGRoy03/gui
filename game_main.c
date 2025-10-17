@@ -17,8 +17,10 @@
 
 // [Source Files]
 #include "base/base_inc.c"
-#include "os/os_inc.c"
 #include "render/render_inc.c"
 #include "ui/ui_inc.c"
-#include "game/game_inc.c"
 #include "editor/editor_inc.c"
+#include "os/os_inc.c"
+
+// NOTE: Some of the code depends on OS functions, but the OS depends on all of
+// the other code, so we inverse the h and c file ordering.

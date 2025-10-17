@@ -150,11 +150,34 @@ internal b32           CanMergeGroupParams  (rect_group_params *Old, rect_group_
 internal render_handle InitializeRenderer    (void *HWindow, vec2_i32 Resolution, memory_arena *Arena);
 internal void          SubmitRenderCommands  (render_handle HRenderer, vec2_i32 Resolution, render_pass_list *RenderPassList);
 
-// [Text]
+
+// CreateGlyphCache:
+//   Creates the GPU resource used as the persistent glyph cache.
+//   Populates FontContext with the cache-related resources on success.
+//   Returns 1 on success, 0 on failure.
+//   The caller is responsible for freeing the resources allocated by using ReleaseGlyphCache if this function fails.
+//
+// CreateGlyphTransfer:
+//   Creates the GPU resource used as the transfer/render target for rasterizing glyphs.
+//   Populates FontContext with the transfer-related resources on success.
+//   Returns 1 on success, 0 on failure.
+//   The caller is responsible for freeing the resources allocated by using ReleaseGlyphTransfer if this function fails.
+//
+// ReleaseGlyphCache:
+//   Releases/cleans any resources associated with the glyph cache stored in FontContext.
+//   Safe to call with NULL. After this call the cache-related fields in FontContext are invalid.
+//
+// ReleaseGlyphTransfer:
+//   Releases/cleans any resources associated with the transfer/render-target in FontContext.
+//   Safe to call with NULL. After this call the transfer-related fields in FontContext are invalid.
+//
+// TransferGlyph:
+//   Copies a rectangular region from the transfer resource into the persistent glyph cache.
+//   Rect describes the area to copy and the destination offset inside the cache.
+//   Typical flow: create transfer resource -> rasterize glyphs into it -> call TransferGlyph to copy into cache.
 
 typedef struct gpu_font_context gpu_font_context;
 
-internal b32  IsValidGPUFontContext  (gpu_font_context *Context);
 internal b32  CreateGlyphCache       (render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext);
 internal b32  CreateGlyphTransfer    (render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext);
 internal void ReleaseGlyphCache      (gpu_font_context *FontContext);

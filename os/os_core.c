@@ -87,12 +87,6 @@ OSClearInputs(void)
     }
 }
 
-internal b32
-OSIsActiveFrame(void)
-{
-    return 1;
-}
-
 // [Agnostic File API]
 
 internal b32 

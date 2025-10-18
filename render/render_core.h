@@ -150,7 +150,6 @@ internal b32           CanMergeGroupParams  (rect_group_params *Old, rect_group_
 internal render_handle InitializeRenderer    (void *HWindow, vec2_i32 Resolution, memory_arena *Arena);
 internal void          SubmitRenderCommands  (render_handle HRenderer, vec2_i32 Resolution, render_pass_list *RenderPassList);
 
-
 // CreateGlyphCache:
 //   Creates the GPU resource used as the persistent glyph cache.
 //   Populates FontContext with the cache-related resources on success.
@@ -175,11 +174,12 @@ internal void          SubmitRenderCommands  (render_handle HRenderer, vec2_i32 
 //   Copies a rectangular region from the transfer resource into the persistent glyph cache.
 //   Rect describes the area to copy and the destination offset inside the cache.
 //   Typical flow: create transfer resource -> rasterize glyphs into it -> call TransferGlyph to copy into cache.
+//   Generally use a 2D allocator to generate the rect.
 
 typedef struct gpu_font_context gpu_font_context;
 
-internal b32  CreateGlyphCache       (render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext);
-internal b32  CreateGlyphTransfer    (render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext);
-internal void ReleaseGlyphCache      (gpu_font_context *FontContext);
-internal void ReleaseGlyphTransfer   (gpu_font_context *FontContext);
-external void TransferGlyph          (rect_f32 Rect, render_handle HRenderer, gpu_font_context *FontContext);
+internal b32  CreateGlyphCache      (render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext);
+internal b32  CreateGlyphTransfer   (render_handle HRenderer, vec2_f32 TextureSize, gpu_font_context *FontContext);
+internal void ReleaseGlyphCache     (gpu_font_context *FontContext);
+internal void ReleaseGlyphTransfer  (gpu_font_context *FontContext);
+external void TransferGlyph         (rect_f32 Rect, render_handle HRenderer, gpu_font_context *FontContext);

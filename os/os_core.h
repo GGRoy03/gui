@@ -94,7 +94,6 @@ internal b32       OSIsMouseClicked     (OSMouseButton_Type Button);
 internal b32       OSIsMouseHeld        (OSMouseButton_Type Button);
 internal b32       OSIsMouseReleased    (OSMouseButton_Type Button);
 internal void      OSClearInputs        (void);
-internal b32       OSIsActiveFrame      (void);
 
 // [Files]
 

@@ -23,10 +23,10 @@ typedef enum UILayoutNode_Flag
     UILayoutNode_IsScrollRegion  = 1 << 11,
 
     // Binds
-    UILayoutNode_TextIsBound    = 1 << 12,
+    UILayoutNode_TextIsBound     = 1 << 12,
 
     // Dirty/Stale/Pruned
-    UILayoutNode_IsPruned       = 1 << 13,
+    UILayoutNode_IsPruned        = 1 << 13,
 } UILayoutNode_Flag;
 
 typedef enum LayoutTree_Constant

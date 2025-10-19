@@ -145,9 +145,17 @@ IntersectRectF32(rect_f32 R1, rect_f32 R2)
 internal b32
 IsPointInRect(rect_f32 Target, vec2_f32 Point)
 {
-	b32 Result = (Point.X <= Target.Max.X && Point.X >= Target.Min.X) &&
-		         (Point.Y <= Target.Max.Y && Point.Y >= Target.Min.Y);
-	return Result;
+    b32 Result = (Point.X <= Target.Max.X && Point.X >= Target.Min.X) &&
+                 (Point.Y <= Target.Max.Y && Point.Y >= Target.Min.Y);
+    return Result;
+}
+
+internal b32
+RectsIntersect(rect_f32 A, rect_f32 B)
+{
+    b32 Result = !((A.Max.X <= B.Min.X) || (A.Min.X >= B.Max.X) ||
+                   (A.Max.Y <= B.Min.Y) || (A.Min.Y >= B.Max.Y));
+    return Result;
 }
 
 internal f32

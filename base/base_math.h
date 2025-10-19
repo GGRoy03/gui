@@ -15,11 +15,11 @@ typedef struct vec2_f32
 DisableWarning(4201)
 typedef struct vec4_f32
 {
-	union
-	{
-		struct { f32 X; f32 Y; f32 Z; f32 W; };
-		f32 Values[4];
-	};
+    union
+    {
+        struct { f32 X; f32 Y; f32 Z; f32 W; };
+        f32 Values[4];
+    };
 } vec4_f32;
 
 typedef struct vec2_i32
@@ -71,6 +71,7 @@ internal f32      Vec2F32Length  (vec2_f32 Vec);
 internal rect_f32 IntersectRectF32  (rect_f32 R1, rect_f32 R2);
 internal b32      IsPointInRect     (rect_f32 Target, vec2_f32 Point);
 internal f32      RoundedRectSDF    (vec2_f32 LocalPosition, vec2_f32 RectHalfSize, f32 Radius);
+internal b32      RectsIntersect    (rect_f32 A, rect_f32 B);
 
 // [Ranges]
 

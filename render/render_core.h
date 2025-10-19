@@ -49,6 +49,7 @@ typedef struct rect_group_params
     vec2_f32      AtlasTextureSize;
     matrix_3x3    Transform;
     render_handle AtlasTextureView;
+    rect_f32      Clip;
 } rect_group_params;
 
 // Group Types
@@ -141,9 +142,9 @@ internal b32           RenderHandleMatches    (render_handle H1, render_handle H
 
 // [Batches]
 
-internal void        * PushDataInBatchList  (memory_arena *Arena, render_batch_list *BatchList);
-internal render_pass * GetRenderPass        (memory_arena *Arena, RenderPass_Type Type);
-internal b32           CanMergeGroupParams  (rect_group_params *Old, rect_group_params *New);
+internal void        * PushDataInBatchList      (memory_arena *Arena, render_batch_list *BatchList);
+internal render_pass * GetRenderPass            (memory_arena *Arena, RenderPass_Type Type);
+internal b32           CanMergeRectGroupParams  (rect_group_params *Old, rect_group_params *New);
 
 // [PER-RENDERER API]
 

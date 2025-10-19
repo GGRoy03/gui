@@ -288,6 +288,23 @@ InitializeRenderer(void *HWindow, vec2_i32 Resolution, memory_arena *Arena)
         }
     }
 
+    // Raster State
+    {
+        D3D11_RASTERIZER_DESC Desc = {0};
+        Desc.FillMode              = D3D11_FILL_SOLID;
+        Desc.CullMode              = D3D11_CULL_BACK;
+        Desc.FrontCounterClockwise = FALSE;
+        Desc.DepthClipEnable       = TRUE;
+        Desc.ScissorEnable         = TRUE; 
+        Desc.MultisampleEnable     = FALSE;
+        Desc.AntialiasedLineEnable = FALSE;
+
+        Error = Renderer->Device->lpVtbl->CreateRasterizerState(Renderer->Device, &Desc, &Renderer->RasterSt[RenderPass_UI]);
+        if(FAILED(Error))
+        {
+        }
+    }
+
     // Default State
     {
         Renderer->LastResolution = Resolution;
@@ -342,6 +359,7 @@ SubmitRenderCommands(render_handle HRenderer, vec2_i32 Resolution, render_pass_l
 
             // Rasterizer
             D3D11_VIEWPORT Viewport = { 0.0f, 0.0f, (f32)Resolution.X, (f32)Resolution.Y, 0.0f, 1.0f };
+            DeviceContext->lpVtbl->RSSetState(DeviceContext, Renderer->RasterSt[RenderPass_UI]);
             DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
 
             for (rect_group_node *Node = Params.First; Node != 0; Node = Node->Next)
@@ -406,6 +424,36 @@ SubmitRenderCommands(render_handle HRenderer, vec2_i32 Resolution, render_pass_l
                 DeviceContext->lpVtbl->PSSetShader(DeviceContext, PShader, 0, 0);
                 DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &AtlasView);
                 DeviceContext->lpVtbl->PSSetSamplers(DeviceContext, 0, 1, &Renderer->AtlasSamplerState);
+
+                // Scissor
+                {
+                    rect_f32   Clip = NodeParams.Clip;
+                    D3D11_RECT Rect = {0};
+
+                    if (Clip.Min.X == 0 && Clip.Min.Y == 0 && Clip.Max.X == 0 && Clip.Max.Y == 0)
+                    {
+                        Rect.left   = 0;
+                        Rect.right  = Resolution.X;
+                        Rect.top    = 0;
+                        Rect.bottom = Resolution.Y;
+                    } else
+                    if (Clip.Min.X > Clip.Max.X || Clip.Min.Y > Clip.Max.Y)
+                    {
+                        Rect.left   = 0;
+                        Rect.right  = 0;
+                        Rect.top    = 0;
+                        Rect.bottom = 0;
+                    }
+                    else
+                    {
+                        Rect.left   = Clip.Min.X;
+                        Rect.right  = Clip.Max.X;
+                        Rect.top    = Clip.Min.Y;
+                        Rect.bottom = Clip.Max.Y;
+                    }
+
+                    DeviceContext->lpVtbl->RSSetScissorRects(DeviceContext, 1, &Rect);
+                }
 
                 // Draw
                 u32 InstanceCount = (u32)(BatchList.ByteCount / BatchList.BytesPerInstance);

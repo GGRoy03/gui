@@ -86,14 +86,22 @@ GetRenderPass(memory_arena *Arena,  RenderPass_Type Type)
 }
 
 internal b32
-CanMergeGroupParams(rect_group_params *Old, rect_group_params *New)
+CanMergeRectGroupParams(rect_group_params *Old, rect_group_params *New)
 {
+    // If the old value had some texture and it is not the same, then we can't merge.
     if (IsValidRenderHandle(Old->AtlasTextureView) && !RenderHandleMatches(Old->AtlasTextureView, New->AtlasTextureView))
     {
         return 0;
     }
 
+    // If the old value has a different transform, then we can't merge.
     if (!Mat3x3AreEqual(&Old->Transform, &New->Transform))
+    {
+        return 0;
+    }
+
+    // If the clip is different, then we can't merge.
+    if(MemoryCompare(&Old->Clip, &New->Clip, sizeof(rect_f32)) != 0)
     {
         return 0;
     }

@@ -183,7 +183,13 @@ typedef struct style_property_table_entry
     StyleProperty_Type PropertyType;
 } style_property_table_entry;
 
-// [GLOBALS]
+typedef struct style_unit_keyword_entry
+{
+    byte_string Name;
+    UIUnit_Type UnitType;
+} style_unit_keyword_entry;
+
+// [Tables]
 
 read_only global style_keyword_table_entry StyleKeywordTable[] = 
 {
@@ -211,6 +217,11 @@ read_only global style_property_table_entry StylePropertyTable[] =
     {byte_string_compile("borderwidth") , StyleProperty_BorderWidth },
     {byte_string_compile("bordercolor") , StyleProperty_BorderColor },
     {byte_string_compile("cornerradius"), StyleProperty_CornerRadius},
+};
+
+read_only global style_unit_keyword_entry StyleUnitKeywordTable[] =
+{
+    {byte_string_compile("auto"), UIUnit_Auto},
 };
 
 // [Runtime API]

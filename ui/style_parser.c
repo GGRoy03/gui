@@ -151,27 +151,27 @@ internal ui_unit
 ReadUnit(os_read_file *File, style_file_debug_info *Debug)
 {
     ui_unit Result = {0};
-    f64     Number = 0;
 
-    while (IsValidFile(File))
+    if (IsDigit(PeekFile(File, 0)))
     {
-        u8 Char = PeekFile(File, 0);
-        if (IsDigit(Char))
+        f64 Number = 0;
+        while (IsValidFile(File))
         {
-            Number = (Number * 10) + (Char - '0');
+            u8 Char = PeekFile(File, 0);
+            if (IsDigit(Char))
+            {
+                Number = (Number * 10) + (Char - '0');
+                AdvanceFile(File, 1);
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if(IsValidFile(File) && PeekFile(File, 0) == '.')
+        {
             AdvanceFile(File, 1);
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    if (IsValidFile(File))
-    {
-        if (PeekFile(File, 0) == StyleToken_Period)
-        {
-            AdvanceFile(File, 1); // Consumes '.'
 
             f64 C = 1.0 / 10.0;
             while (IsValidFile(File))
@@ -189,31 +189,9 @@ ReadUnit(os_read_file *File, style_file_debug_info *Debug)
                     break;
                 }
             }
-
-            if (IsValidFile(File))
-            {
-                if (PeekFile(File, 0) == StyleToken_Percent)
-                {
-                    Result.Type = UIUnit_Percent;
-
-                    if (Number >= 0.f && Number <= 100.f)
-                    {
-                        Result.Percent = (f32)Number;
-                        AdvanceFile(File, 1);
-                    }
-                    else
-                    {
-                        ReportStyleFileError(Debug, error_message("Percent value must be: 0% <= Value <= 100%"));
-                    }
-                }
-                else
-                {
-                    Result.Type    = UIUnit_Float32;
-                    Result.Float32 = (f32)Number;
-                }
-            }
         }
-        else if (PeekFile(File, 0) == StyleToken_Percent)
+
+        if(IsValidFile(File) && PeekFile(File, 0) == '%')
         {
             Result.Type = UIUnit_Percent;
 
@@ -232,6 +210,30 @@ ReadUnit(os_read_file *File, style_file_debug_info *Debug)
             Result.Type    = UIUnit_Float32;
             Result.Float32 = (f32)Number;
         }
+    } else
+    if (IsAlpha(PeekFile(File, 0)))
+    {
+        byte_string Identifier = ReadIdentifier(File);
+        if(IsValidByteString(Identifier))
+        {
+            for(u32 Idx = 0; Idx < ArrayCount(StyleUnitKeywordTable); ++Idx)
+            {
+                style_unit_keyword_entry Entry = StyleUnitKeywordTable[Idx];
+                if(ByteStringMatches(Identifier, Entry.Name, NoFlag))
+                {
+                    Result.Type = Entry.UnitType;
+                    break;
+                }
+            }
+        }
+
+        if(Result.Type == UIUnit_None)
+        {
+            ReportStyleFileError(Debug, error_message("Found invalid identifier in file."));
+        }
+    } else
+    {
+        ReportStyleFileError(Debug, error_message("Could not parse identifier."));
     }
 
     return Result;
@@ -268,37 +270,28 @@ ReadVector(os_read_file *File, style_file_debug_info *Debug)
     {
         SkipWhiteSpaces(File);
 
-        u8 Character = PeekFile(File, 0);
-        if(IsDigit(Character))
+        ui_unit Unit = ReadUnit(File, Debug);
+        if (Unit.Type != UIUnit_None)
         {
-            ui_unit Unit = ReadUnit(File, Debug);
-            if(Unit.Type != UIUnit_None)
+            Result.V.Values[Result.Size++] = Unit;
+
+            SkipWhiteSpaces(File);
+
+            u8 Character = PeekFile(File, 0);
+            if (Character == ',')
             {
-                Result.V.Values[Result.Size++] = Unit;
-
-                SkipWhiteSpaces(File);
-
-                Character = PeekFile(File, 0);
-                if(Character == ',')
-                {
-                    AdvanceFile(File, 1);
-                    continue;
-                }
-                else if(Character == ']')
-                {
-                    AdvanceFile(File, 1);
-                    break;
-                }
-                else
-                {
-                    break;
-                }
+                AdvanceFile(File, 1);
+                continue;
             }
-        }
-        else
-        {
-            ReportStyleFileError(Debug, error_message("A vector must only contain numerical values."));
-            break;
+            else if (Character == ']')
+            {
+                AdvanceFile(File, 1);
+                break;
+            }
+            else
+            {
+                break;
+            }
         }
     }
 
@@ -1026,15 +1019,6 @@ ValidateAttributeFormatting(style_attribute *Attribute, style_file_debug_info *D
         if(Attribute->ParsedAs != StyleToken_Vector || Attribute->Vector.Size != 2)
         {
             ErrorMessage = byte_string_literal("Invalid Format. Should be [Vector][X, Y]");
-            break;
-        }
-
-        vec4_unit Vector = Attribute->Vector.V;
-
-        if(!((Vector.X.Type == UIUnit_Float32 || Vector.X.Type == UIUnit_Percent) &&
-             (Vector.Y.Type == UIUnit_Float32 || Vector.Y.Type == UIUnit_Percent)))
-        {
-            ErrorMessage = byte_string_literal("Invalid Format. Should be [(Float OR Percent), (Float OR Percent)]");
             break;
         }
     } break;

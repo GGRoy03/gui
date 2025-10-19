@@ -64,10 +64,13 @@ typedef struct os_inputs
 {
     b32             IsActiveFrame;
     os_button_state KeyboardButtons[OS_KeyboardButtonCount];
-    f32             ScrollDelta;
     vec2_f32        MousePosition;
     vec2_f32        MouseDelta;
     os_button_state MouseButtons[OS_MouseButtonCount];
+
+    // Mouse
+    f32 ScrollDeltaInLines;
+    i32 WheelScrollLine;
 } os_inputs;
 
 typedef struct os_read_file
@@ -110,9 +113,9 @@ internal void         OSReleaseFile  (os_handle Handle);
 
 // [OS State]
 
-internal os_system_info * OSGetSystemInfo     (void);
-internal os_inputs      * OSGetInputs         (void);
-internal vec2_i32         OSGetClientSize     (void);
+internal os_system_info * OSGetSystemInfo  (void);
+internal os_inputs      * OSGetInputs      (void);
+internal vec2_i32         OSGetClientSize  (void);
 
 // [Memory]
 
@@ -120,17 +123,11 @@ internal void *OSReserveMemory  (u64 Size);
 internal b32   OSCommitMemory   (void *Memory, u64 Size);
 internal void  OSRelease        (void *Memory);
 
-// [Windowing]
-
-internal b32  OSUpdateWindow  (void);
-internal void OSSetCursor     (OSCursor_Type Type);
-
 // [Misc]
 
-internal void        OSSleep                    (u32 Milliseconds);
-internal void        OSAbort                    (i32 ExitCode);
-internal b32         OSIsValidHandle            (os_handle Handle);
-internal byte_string OSAppendToLaunchDirectory  (byte_string Input, memory_arena *Arena);
+internal void  OSAbort          (i32 ExitCode);
+internal b32   OSIsValidHandle  (os_handle Handle);
+internal void  OSSetCursor      (OSCursor_Type Type);
 
 // OSAcquireFontContext:
 //   Acquires the font context for a given font.

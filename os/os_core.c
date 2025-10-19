@@ -32,7 +32,7 @@ internal f32
 OSGetScrollDelta(void)
 {
     os_inputs *Inputs = OSGetInputs();
-    f32        Result = Inputs->ScrollDelta;
+    f32        Result = Inputs->ScrollDeltaInLines;
 
     return Result;
 }
@@ -72,9 +72,8 @@ OSClearInputs(void)
 {
     os_inputs *Inputs = OSGetInputs();
 
-    Inputs->ScrollDelta   = 0.f;
-    Inputs->MouseDelta    = Vec2F32(0.f, 0.f);
-    Inputs->IsActiveFrame = 0;
+    Inputs->ScrollDeltaInLines = 0.f;
+    Inputs->MouseDelta         = Vec2F32(0.f, 0.f);
 
     for (u32 Idx = 0; Idx < OS_KeyboardButtonCount; Idx++)
     {

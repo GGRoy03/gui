@@ -34,6 +34,16 @@ OSWin32WindowProc(HWND Handle, UINT Message, WPARAM WParam, LPARAM LParam)
         Inputs->MousePosition.Y = (f32)MouseY;
     } break;
 
+    case WM_MOUSEWHEEL:
+    {
+        i32 Delta = GET_WHEEL_DELTA_WPARAM(WParam) / 10;
+
+        f32 Notches = Delta / (f32)WHEEL_DELTA;
+        f32 Lines   = Notches * Inputs->WheelScrollLine;
+
+        Inputs->ScrollDeltaInLines += Lines;
+    } break;
+
     case WM_KEYDOWN:
     case WM_KEYUP:
     case WM_SYSKEYDOWN:
@@ -157,6 +167,8 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
 
     // OS State (Always query system info first since arena depends on it)
     {
+        SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &OSWin32State.Inputs.WheelScrollLine, 0);
+
         memory_arena_params Params = {0};
         {
             Params.AllocatedFromFile = __FILE__;

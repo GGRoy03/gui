@@ -154,10 +154,12 @@ internal rect_f32
 InsetRectF32(rect_f32 Rect, f32 Size)
 {
     rect_f32 Result = Rect;
-    Result.Min.X = ClampBot(0.f, Rect.Min.X - Size);
-    Result.Min.Y = ClampBot(0.f, Rect.Min.Y - Size);
+    Result.Min.X = ClampBot(0.f, Rect.Min.X + Size);
+    Result.Min.Y = ClampBot(0.f, Rect.Min.Y + Size);
     Result.Max.X = ClampBot(0.f, Rect.Max.X - Size);
     Result.Max.Y = ClampBot(0.f, Rect.Max.Y - Size);
+
+    Assert(RectsIntersect(Rect, Result));
 
     return Result;
 }

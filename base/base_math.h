@@ -51,6 +51,11 @@ typedef struct matrix_4x4
 //   Helper Constructors. Parameters are self-explanatory
 //
 // IntersectRectF32:
+//   Returns the geometric intersection of A and B.
+//   If B is inside A, B is returned.
+//   If A is inside B, A is returned.
+//   If they partially overlap, the geometric overlap is returned.
+//   If they do not overlap, a 0 rect is returned.
 //
 // IsPointInRect:
 //   returns 1 if a given point is inside the rectangle, else 0.
@@ -66,6 +71,10 @@ typedef struct matrix_4x4
 //
 // RectsIntersect:
 //   returns 1 if the rects instersect in any way, else return 0.
+//
+// InsetRectF32:
+//   Simply insets a rect by some value. Clamped to 0 if rect ends up negative.
+//   Meant to be used by rects that represent a positive 2D rectangle.
 
 typedef struct rect_f32
 {
@@ -82,6 +91,8 @@ internal b32      IsPointInRect     (rect_f32 Target, vec2_f32 Point);
 internal f32      RoundedRectSDF    (vec2_f32 LocalPosition, vec2_f32 RectHalfSize, f32 Radius);
 internal b32      RectsIntersect    (rect_f32 A, rect_f32 B);
 internal rect_f32 InsetRectF32      (rect_f32 Rect, f32 Size);
+
+// --------------------------------------------------------
 
 // [Constructors]
 

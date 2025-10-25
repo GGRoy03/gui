@@ -86,7 +86,7 @@ typedef struct ui_glyph
     rect_f32 Position;
     rect_f32 Source;
     vec2_f32 Offset;
-    vec2_i32 Size;
+    vec2_i32 Size;       // NOTE: Do I really need to keep this?
     f32      AdvanceX;
 } ui_glyph;
 
@@ -107,8 +107,9 @@ internal ui_font * UIQueryFont  (byte_string Name, f32 Size);
 
 // [Glyphs]
 
-internal glyph_entry * GetGlyphEntry          (glyph_table *Table, u32 Index);
-internal u32         * GetSlotPointer         (glyph_table *Table, glyph_hash Hash);
-internal glyph_entry * GetSentinel            (glyph_table *Table);
-internal void          UpdateGlyphCacheEntry  (glyph_table *Table, glyph_state New);
-internal ui_glyph_run  CreateGlyphRun         (byte_string Text, ui_font *Font, memory_arena *Arena);
+// ----------------------------------------------------------------------------------
+//
+
+internal u64            GetGlyphRunFootprint  (byte_string Text);
+internal ui_glyph_run * CreateGlyphRun        (byte_string Text, ui_font *Font, void *Memory);
+internal void           UpdateGlyphCacheEntry (glyph_table *Table, glyph_state New);

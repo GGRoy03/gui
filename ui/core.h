@@ -8,16 +8,6 @@ typedef enum UIUnit_Type
     UIUnit_Auto    = 3,
 } UIUnit_Type;
 
-typedef enum UIIntent_Type
-{
-    UIIntent_None     = 0,
-    UIIntent_Hover    = 1,
-    UIIntent_ResizeX  = 2,
-    UIIntent_ResizeY  = 3,
-    UIIntent_ResizeXY = 4,
-    UIIntent_Drag     = 5,
-} UIIntent_Type;
-
 // [FORWARD DECLARATIONS]
 
 typedef struct ui_style         ui_style;
@@ -110,8 +100,6 @@ typedef struct ui_node
     b32 CanUse;
     u32 IndexInTree;
     u32 SubtreeId;
-
-    ui_subtree *ChainSubtree;
 
     // Runtime Properties
     ui_node (*SetTextColor)  (ui_color Color, ui_pipeline *Pipeline);
@@ -213,6 +201,53 @@ internal void RecordUIHoverEvent  (ui_node Node, ui_pipeline *Source, ui_event_l
 
 // ------------------------------------------------------------------------------------
 
+#include <immintrin.h>
+
+typedef struct ui_resource_table ui_resource_table;
+
+typedef enum UIResource_Type
+{
+    UIResource_None = 0,
+    UIResource_Text = 1,
+} UIResource_Type;
+
+typedef struct ui_resource_key
+{
+    __m128i Value;
+} ui_resource_key;
+
+typedef struct ui_resource_stats
+{
+    u64 CacheHitCount;
+    u64 CacheMissCount;
+} ui_resource_stats;
+
+typedef struct ui_resource_table_params
+{
+    u32 HashSlotCount;
+    u32 EntryCount;
+} ui_resource_table_params;
+
+typedef struct ui_resource_state
+{
+    u32 Id;
+
+    UIResource_Type Type;
+    void            *Resource;
+} ui_resource_state;
+
+internal u64                 GetResourceTableFootprint   (ui_resource_table_params Params);
+internal ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_params Params, void *Memory);
+
+internal ui_resource_key GetNodeResource  (u32 NodeId, ui_subtree *Subtree);
+
+internal ui_resource_key   MakeTextResourceKey  (byte_string Text);
+internal ui_resource_state FindResourceByKey    (ui_resource_key Key, ui_resource_table *Table);
+
+internal void              UpdateTextResource   (u32 Id, byte_string Text, ui_font *Font, ui_resource_table *Table);
+
+// ------------------------------------------------------------------------------------
+
 typedef struct ui_style_registry ui_style_registry;
 
 typedef struct ui_pipeline_list
@@ -233,8 +268,12 @@ typedef struct ui_font_list
 typedef struct ui_state
 {
     // Resources
+    ui_resource_table *ResourceTable;
+
+    // NOTE: What about this?
     ui_font_list     Fonts;
     ui_pipeline_list Pipelines;
+
     memory_arena    *StaticData;
 
     // State
@@ -256,27 +295,24 @@ internal ui_corner_radius UICornerRadius     (f32 TopLeft, f32 TopRight, f32 Bot
 internal vec2_unit        Vec2Unit           (ui_unit U0, ui_unit U1);
 internal b32              IsNormalizedColor  (ui_color Color);
 
-// ui_subtree & ui_subtree_node & ui_subtree_list:
-//
-// ui_pipeline_params & ui_pipeline:
-//
-// UIBeginPipeline:
-//
-// UICreatePipeline:
+// ------------------
 
 typedef struct ui_subtree_params
 {
     b32 CreateNew;
-    u64 LayoutNodeCount;
-    u64 LayoutNodeDepth;
+    u64 NodeCount;
 } ui_subtree_params;
 
 typedef struct ui_subtree
 {
     // Persistent
-    u64             Id;
-    ui_layout_tree *LayoutTree;
-    ui_node_style  *ComputedStyles;
+    u64              Id;
+    ui_layout_tree  *LayoutTree;
+    ui_node_style   *ComputedStyles;
+    ui_resource_key *Resources;
+
+    // Frame
+    memory_arena *FrameData;
 
     // State
     ui_node LastNode;
@@ -308,7 +344,7 @@ struct ui_pipeline
 
     // State
     ui_style_registry *Registry;
-    ui_node_id_table  *IdTable;     // NOTE: Should this be stored on the tree?
+    ui_node_id_table  *IdTable;  // NOTE: Should this be stored on the tree? Think so
 
     // Frame/State
     ui_event_list Events;
@@ -321,7 +357,6 @@ struct ui_pipeline
 
     // Memory
     memory_arena *StaticArena;
-    memory_arena *FrameArena;
 };
 
 #define UISubtree(Params, Pipeline) DeferLoop(UIBeginSubtree(Params, Pipeline), UIEndSubtree(Params));
@@ -329,8 +364,8 @@ struct ui_pipeline
 internal void          UIBeginSubtree       (ui_subtree_params Params, ui_pipeline *Pipeline);
 internal void          UIEndSubtree         (ui_subtree_params Params);
 
-internal void          UIBeginPipeline       (ui_pipeline *Pipeline);
 internal ui_pipeline * UICreatePipeline      (ui_pipeline_params Params);
+internal void          UIBeginAllSubtrees    (ui_pipeline *Pipeline);
 internal void          UIExecuteAllSubtrees  (ui_pipeline *Pipeline);
 
 internal ui_subtree  * FindSubtree           (ui_node Node, ui_pipeline *Pipeline);

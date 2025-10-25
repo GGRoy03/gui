@@ -24,11 +24,6 @@ internal vec2_f32 GetScrollTranslation     (ui_layout_node *Node);
 // ui_layout_tree:
 //   Opaque types the user does not need to know about.
 //
-// ui_layout_tree_params:
-//   Parameters used when allocating trees.
-//   If NodeCount == 0 -> It will default to some value.
-//   If NodeDepth == 0 -> It will default to some value.
-//
 // GetLayoutTreeFootprint:
 //   Returns the size of the memory needed to call PlaceLayoutTreeInMemory.
 //   Parameters will apply their default values if needed.
@@ -38,26 +33,13 @@ internal vec2_f32 GetScrollTranslation     (ui_layout_node *Node);
 //   You are responsible for managing this memory.
 //   If memory is 0, it will fall through and 0 will be returned, thus you must only check that this function doesn't return 0.
 //
-//   ui_layout_tree_params Params    = {0};                                                ---> Default Parameters will be set!
-//   u64                   Footprint = GetLayoutTreeFootprint(Params);                     ---> Query the footprint!
-//   ui_layout_tree        *Tree     = PlaceLayoutTreeInMemory(Params, malloc(Footprint)); ---> Place in memory!
-//   if(Tree)                                                                              ---> Check if the memory is valid!
-//   {
-//      ...
-//   }
-//
-// GetTreeSize:
-//   Query the tree size after placing in memory. Useful is it's possible the tree params contained default
-//   values. Make sure the tree is initialized before calling this.
-//
-// UIBuildNode:
-//   aaa
-//
 // UIEnterSubtree & UILeaveSubtree & UISubtree:
 //   ...
 
 typedef struct ui_layout_node  ui_layout_node;
 typedef struct ui_layout_tree  ui_layout_tree;
+
+#define InvalidUINodeIndex 0xFFFFFFFF
 
 typedef enum UILayoutNode_Flag
 {
@@ -83,28 +65,14 @@ typedef enum UILayoutNode_Flag
     UILayoutNode_IsParent        = 1 << 12,
 } UILayoutNode_Flag;
 
-typedef enum LayoutTree_Constant
-{
-    LayoutTree_DefaultNodeCount = 4000,
-    LayoutTree_DefaultNodeDepth = 16,
-    LayoutTree_InvalidNodeIndex = 0xFFFFFFFF,
-} LayoutTree_Constant;
-
-typedef struct ui_layout_tree_params
-{
-    u64 NodeCount;
-    u64 NodeDepth;
-} ui_layout_tree_params;
-
-internal u64              GetLayoutTreeFootprint   (ui_layout_tree_params Params);
-internal ui_layout_tree * PlaceLayoutTreeInMemory  (ui_layout_tree_params Params, void *Memory);
-internal u64              GetTreeSize              (ui_layout_tree *Tree);
+internal u64              GetLayoutTreeFootprint   (u64 NodeCount);
+internal ui_layout_tree * PlaceLayoutTreeInMemory  (u64 NodeCount, void *Memory);
 
 internal ui_node          UIFindChild              (ui_node Node, u32 Index, ui_layout_tree *Tree);
 
 
-internal ui_node          UIBuildLayoutNode       (style_property BaseProperties[StyleProperty_Count], bit_field Flags, ui_subtree *Subtree, memory_arena *Arena);
-internal void             UIEnd                    (ui_pipeline *Pipeline);
+internal ui_node AllocateUINode(style_property Properties[StyleProperty_Count], bit_field Flags, ui_subtree *Subtree);
+internal void    UIEnd         (ui_pipeline *Pipeline); // NOTE: What?
 
 // -------------------------------------------------------------------------------------------------------------------
 // ui_hit_test:
@@ -113,19 +81,14 @@ internal void             UIEnd                    (ui_pipeline *Pipeline);
 //
 // ComputeLayout:
 
-internal void HitTestLayout  (ui_layout_tree *Tree, memory_arena *Arena);
-internal void ComputeLayout  (ui_layout_tree *Tree, memory_arena *Arena);
+internal void HitTestLayout  (ui_subtree *Subtree, memory_arena *Arena);
+internal void ComputeLayout  (ui_subtree *Subtree, memory_arena *Arena);
 internal void DrawLayout     (ui_subtree *Subtree, memory_arena *Arena);
 
 // [Tree Mutations]
 
 internal void DragUISubtree    (vec2_f32 Delta, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline);
 internal void ResizeUISubtree  (vec2_f32 Delta, ui_layout_node *LayoutNode, ui_pipeline *Pipeline);
-
-
-// [Binds]
-
-internal void BindText(ui_node Node, byte_string Text, ui_font *Font, ui_layout_tree *Tree, memory_arena *Arena);
 
 // -------------------------------------------------------------------------------------------------------------------
 // NodeIdTable_Size:

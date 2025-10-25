@@ -128,29 +128,43 @@ UpdateGlyphCacheEntry(glyph_table *Table, glyph_state New)
     }
 }
 
+// -----------------------------------------------------------------------------------
+// Glyph Run Public API Implementation
+
+internal u64
+GetGlyphRunFootprint(byte_string Text)
+{
+    u64 GlyphBufferSize = Text.Size * sizeof(ui_glyph);
+    u64 Result          = sizeof(ui_glyph_run) + GlyphBufferSize;
+    return Result;
+}
+
 // WARN: Known limitations:
 // 1) Only handles 1 byte UTF8 encoding
-// 2) Only handles direct glyph access
 
-internal ui_glyph_run
-CreateGlyphRun(byte_string Text, ui_font *Font, memory_arena *Arena)
+internal ui_glyph_run *
+CreateGlyphRun(byte_string Text, ui_font *Font, void *Memory)
 {
-    ui_glyph_run Result = {0};
-
-    // Global Access
+    ui_glyph_run *Result   = 0;
     render_handle Renderer = RenderState.Renderer;
 
-    if(IsValidByteString(Text) && IsValidRenderHandle(Renderer) && Arena)
+    if(Memory && IsValidByteString(Text) && IsValidRenderHandle(Renderer))
     {
-        Result.Glyphs     = PushArray(Arena, ui_glyph, Text.Size);
-        Result.LineHeight = Font->LineHeight;
-        Result.GlyphCount = Text.Size;
-        Result.Atlas      = GetFontAtlas(Font);
-        Result.AtlasSize  = Font->TextureSize;
+        render_handle Renderer = RenderState.Renderer;
+
+        ui_glyph *Glyphs = (ui_glyph *)Memory;
+
+        Result = (ui_glyph_run *)(Glyphs + Text.Size);
+        Result->Glyphs     = Glyphs;
+        Result->LineHeight = Font->LineHeight;
+        Result->GlyphCount = Text.Size;
+        Result->Atlas      = GetFontAtlas(Font);
+        Result->AtlasSize  = Font->TextureSize;
 
         for(u32 Idx = 0; Idx < Text.Size; ++Idx)
         {
             // NOTE: What kind of dogshit is this?
+            // Not even sure what this is...
 
             byte_string UTF8Stream = ByteString(&Text.String[Idx], 1);
 
@@ -201,10 +215,10 @@ CreateGlyphRun(byte_string Text, ui_font *Font, memory_arena *Arena)
                 }
             }
 
-            Result.Glyphs[Idx].Source   = State->Source;
-            Result.Glyphs[Idx].Offset   = State->Offset;
-            Result.Glyphs[Idx].AdvanceX = State->AdvanceX;
-            Result.Glyphs[Idx].Size     = State->Size;
+            Result->Glyphs[Idx].Source   = State->Source;
+            Result->Glyphs[Idx].Offset   = State->Offset;
+            Result->Glyphs[Idx].AdvanceX = State->AdvanceX;
+            Result->Glyphs[Idx].Size     = State->Size;
         }
     }
     else

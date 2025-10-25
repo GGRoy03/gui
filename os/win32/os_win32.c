@@ -169,16 +169,16 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
     {
         SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &OSWin32State.Inputs.WheelScrollLine, 0);
 
-        memory_arena_params Params = {0};
+        memory_arena_params ArenaParams = {0};
         {
-            Params.AllocatedFromFile = __FILE__;
-            Params.AllocatedFromLine = __LINE__;
-            Params.ReserveSize       = Megabyte(1);
-            Params.CommitSize        = Kilobyte(64);
+            ArenaParams.AllocatedFromFile = __FILE__;
+            ArenaParams.AllocatedFromLine = __LINE__;
+            ArenaParams.ReserveSize       = Megabyte(1);
+            ArenaParams.CommitSize        = Kilobyte(64);
         }
 
         OSWin32State.SystemInfo = OSWin32QuerySystemInfo();
-        OSWin32State.Arena      = AllocateArena(Params);
+        OSWin32State.Arena      = AllocateArena(ArenaParams);
 
         OSWin32InitializeDWriteFactory(&OSWin32State.DWriteFactory);
     }
@@ -198,16 +198,34 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
 
     // UI State
     {
-        memory_arena_params Params = {0};
+        // Static Data
         {
-            Params.AllocatedFromFile = __FILE__;
-            Params.AllocatedFromLine = __LINE__;
-            Params.ReserveSize       = Megabyte(1);
-            Params.CommitSize        = Kilobyte(64);
+            memory_arena_params Params = { 0 };
+            {
+                Params.AllocatedFromFile = __FILE__;
+                Params.AllocatedFromLine = __LINE__;
+                Params.ReserveSize = Megabyte(1);
+                Params.CommitSize = Kilobyte(64);
+            }
+
+            UIState.StaticData = AllocateArena(Params);
         }
 
-        UIState.StaticData = AllocateArena(Params);
+        // Resource Table
+        {
+            ui_resource_table_params  Params = { 0 };
+            void                     *Memory = 0;
+            {
+                Params.HashSlotCount = 512;
+                Params.EntryCount    = 2048;
 
+                u64 Footprint = GetResourceTableFootprint(Params);
+                Memory = PushArray(UIState.StaticData, u8, Footprint);
+            }
+            UIState.ResourceTable = PlaceResourceTableInMemory(Params, Memory);
+        }
+
+        // NOTE: Should this be here?
         InitializeConsoleMessageQueue(&UIState.Console);
     }
 

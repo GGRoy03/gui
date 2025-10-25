@@ -41,7 +41,9 @@ ConsolePrintMessage(byte_string Message, ConsoleMessage_Severity Severity, memor
 
     // NOTE: Love this, but it also means I need a LRU to manage resources.
     // Which is somehwat easy to do. Then I don't even have to worry about
-    // anything and I just override the text.
+    // anything and I just override the text. This also bypasses the 'compontent'
+    // way which is probably fine honestly. Because components are completely fake
+    // anyways.
 
     BufferNode.FindChild(0, ConsoleUI->Pipeline)
         .SetTextColor(TextColor, ConsoleUI->Pipeline);
@@ -51,7 +53,7 @@ ConsolePrintMessage(byte_string Message, ConsoleMessage_Severity Severity, memor
 internal void
 ConsoleUI(editor_console_ui *ConsoleUI)
 {
-    // TODO: Clear the Console's arena every frame
+    // TODO: Clear the Console's arena every frame?
 
     if(!ConsoleUI->IsInitialized)
     {
@@ -70,7 +72,7 @@ ConsoleUI(editor_console_ui *ConsoleUI)
 
         // Default Layout
         {
-            ui_subtree_params SubtreeParams = {.CreateNew = 1};
+            ui_subtree_params SubtreeParams = {.CreateNew = 1, .NodeCount = 1024};
 
             UISubtree(SubtreeParams, ConsoleUI->Pipeline)
             {
@@ -103,10 +105,9 @@ ConsoleUI(editor_console_ui *ConsoleUI)
             ConsoleWriteMessage(info_message("I am trying to overflow 11"));
             ConsoleWriteMessage(info_message("I am trying to overflow 12"));
         }
-
     }
 
-    UIBeginPipeline(ConsoleUI->Pipeline);
+    UIBeginAllSubtrees(ConsoleUI->Pipeline);
 
     // Drain The Queue
     {

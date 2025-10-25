@@ -6,14 +6,45 @@ UIComponentAll_(u32 StyleIndex, bit_field Flags, byte_string Text, ui_pipeline *
     ui_subtree *Subtree = Pipeline->CurrentSubtree;
     if(Subtree)
     {
-        Node = UIBuildLayoutNode(GetBaseStyle(StyleIndex, Pipeline->Registry), Flags, Subtree, Pipeline->FrameArena);
+        bit_field FinalFlags = Flags;
+
+        // Set draw flags depending on the style
+        style_property *BaseProperties = GetBaseStyle(StyleIndex, Pipeline->Registry);
+        {
+            ui_color BackgroundColor = UIGetColor(BaseProperties);
+            f32      BorderWidth     = UIGetBorderWidth(BaseProperties);
+
+            if(IsVisibleColor(BackgroundColor))
+            {
+                Assert(!HasFlag(Flags, UILayoutNode_DrawBackground));
+                SetFlag(FinalFlags, UILayoutNode_DrawBackground);
+            }
+
+            if(BorderWidth > 0.f)
+            {
+                Assert(!HasFlag(Flags, UILayoutNode_DrawBorders));
+                SetFlag(FinalFlags, UILayoutNode_DrawBorders);
+            }
+        }
+
+        Node = AllocateUINode(BaseProperties, FinalFlags, Subtree);
 
         if(Node.CanUse)
         {
             if(HasFlag(Flags, UILayoutNode_DrawText))
             {
                 ui_font *Font = UIGetFont(GetBaseStyle(StyleIndex, Pipeline->Registry));
-                BindText(Node, Text, Font, Subtree->LayoutTree, Pipeline->StaticArena);
+
+                ui_resource_key   Key   = MakeUITextResourceKey(Text);
+                ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
+                if(State.Type == UIResource_None)
+                {
+                    UpdateUITextResource(State.Id, Text, Font, UIState.ResourceTable);
+                }
+                else
+                {
+                    Assert(!"Not Implemented");
+                }
             }
 
             if(HasFlag(Flags, UILayoutNode_IsScrollable))

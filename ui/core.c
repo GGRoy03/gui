@@ -222,18 +222,281 @@ RecordUIHoverEvent(ui_node Node, ui_pipeline *Source, ui_event_list *Events, mem
 }
 
 // ----------------------------------------------------------------------------------
+// UI Resource Cache Private Implemntation
+
+typedef struct ui_resource_entry
+{
+    ui_resource_key Key;
+
+    u32 NextWithSameHashSlot;
+    u32 NextLRU;
+    u32 PrevLRU;
+
+    UIResource_Type ResourceType;
+    u64             ResourceSize;
+    void           *ResourceMemory;
+} ui_resource_entry;
+
+typedef struct ui_resource_table
+{
+    ui_resource_stats Stats;
+
+    u32 HashMask;
+    u32 HashSlotCount;
+    u32 EntryCount;
+
+    u32               *HashTable;
+    ui_resource_entry *Entries;
+} ui_resource_table;
+
+internal ui_resource_entry *
+GetResourceSentinel(ui_resource_table *Table)
+{
+    ui_resource_entry *Result = Table->Entries;
+    return Result;
+}
+
+internal u32 *
+GetResourceSlotPointer(ui_resource_key Key, ui_resource_table *Table)
+{
+    u32 HashIndex = _mm_cvtsi128_si32(Key.Value);
+    u32 HashSlot  = (HashIndex & Table->HashMask);
+
+    Assert(HashSlot < Table->HashSlotCount);
+
+    u32 *Result = &Table->HashTable[HashSlot];
+    return Result;
+}
+
+internal ui_resource_entry *
+GetResourceEntry(u32 Index, ui_resource_table *Table)
+{
+    Assert(Index < Table->EntryCount);
+
+    ui_resource_entry *Result = Table->Entries + Index;
+    return Result;
+}
+
+internal b32
+ResourceKeyAreEqual(ui_resource_key A, ui_resource_key B)
+{
+    __m128i Compare = _mm_cmpeq_epi32(A.Value, B.Value);
+    b32     Result  = (_mm_movemask_epi8(Compare) == 0xffff);
+
+    return Result;
+}
+
+internal u32
+PopFreeResourceEntry(ui_resource_table *Table)
+{
+    ui_resource_entry *Sentinel = GetResourceSentinel(Table);
+
+    // At initialization we populate sentinel's the hash chain such that:
+    // (Sentinel) -> (Slot) -> (Slot) -> (Slot)
+    // If (Sentinel) -> (Nothing), then we have no more slots available.
+
+    if(!Sentinel->NextWithSameHashSlot)
+    {
+        Assert(!"Not Implemented");
+    }
+
+    u32 Result = Sentinel->NextWithSameHashSlot;
+
+    ui_resource_entry *Entry = GetResourceEntry(Result, Table);
+    Sentinel->NextWithSameHashSlot = Entry->NextWithSameHashSlot;
+    Entry->NextWithSameHashSlot    = 0;
+
+    return Result;
+}
+
+// ----------------------------------------------------------------------------------
+// UI Resource Cache Public API
+
+internal u64
+GetResourceTableFootprint(ui_resource_table_params Params)
+{
+    u64 HashTableSize  = Params.HashSlotCount  * sizeof(u32);
+    u64 EntryArraySize = Params.EntryCount * sizeof(ui_resource_entry);
+    u64 Result         = sizeof(ui_resource_table) + HashTableSize + EntryArraySize;
+
+    return Result;
+}
+
+internal ui_resource_table *
+PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
+{
+    Assert(Params.EntryCount);
+    Assert(Params.HashSlotCount);
+    Assert(IsPowerOfTwo(Params.HashSlotCount));
+
+    ui_resource_table *Result = 0;
+
+    if(Memory)
+    {
+        u32               *HashTable = (u32 *)Memory;
+        ui_resource_entry *Entries   = (ui_resource_entry *)(HashTable + Params.HashSlotCount);
+
+        Result = (ui_resource_table *)(Entries + Params.EntryCount);
+        Result->HashTable     = HashTable;
+        Result->Entries       = Entries;
+        Result->EntryCount    = Params.EntryCount;
+        Result->HashSlotCount = Params.HashSlotCount;
+        Result->HashMask      = Params.HashSlotCount - 1;
+
+        for(u32 Idx = 0; Idx < Params.EntryCount; ++Idx)
+        {
+            ui_resource_entry *Entry = GetResourceEntry(Idx, Result);
+            if((Idx + 1) < Params.EntryCount)
+            {
+                Entry->NextWithSameHashSlot = Idx + 1;
+            }
+            else
+            {
+                Entry->NextWithSameHashSlot = 0;
+            }
+
+            Entry->ResourceType   = UIResource_None;
+            Entry->ResourceSize   = 0;
+            Entry->ResourceMemory = 0;
+        }
+    }
+
+    return Result;
+}
+
+internal ui_resource_key
+MakeUITextResourceKey(byte_string Text)
+{
+    u64             Hashed = HashByteString(Text);
+    ui_resource_key Key    = {.Value = _mm_set_epi64x(0, Hashed)};
+    return Key;
+}
+
+internal ui_resource_state
+FindUIResourceByKey(ui_resource_key Key, ui_resource_table *Table)
+{
+    ui_resource_entry *FoundEntry = 0;
+
+    u32 *Slot       = GetResourceSlotPointer(Key, Table);
+    u32  EntryIndex = Slot[0];
+
+    while(EntryIndex)
+    {
+        ui_resource_entry *Entry = GetResourceEntry(EntryIndex, Table);
+        if(ResourceKeyAreEqual(Entry->Key, Key))
+        {
+            FoundEntry = Entry;
+            break;
+        }
+
+        EntryIndex = Entry->NextWithSameHashSlot;
+    }
+
+    if(FoundEntry)
+    {
+        // If we hit an already existing entry we must pop it off the LRU chain.
+        // (Prev) -> (Entry) -> (Next)
+        // (Prev) -> (Next)
+
+        ui_resource_entry *Prev = GetResourceEntry(FoundEntry->PrevLRU, Table);
+        ui_resource_entry *Next = GetResourceEntry(FoundEntry->NextLRU, Table);
+
+        Prev->NextLRU = FoundEntry->NextLRU;
+        Next->PrevLRU = FoundEntry->PrevLRU;
+
+        ++Table->Stats.CacheHitCount;
+    }
+    else
+    {
+        // If we miss an entry we have to first allocate a new one.
+        // If we have some hash slot at X: Hash[X]
+        // Hash[X] -> (Index) -> (Index)
+        // (Entry) -> Hash[X] -> (Index) -> (Index)
+        // Hash[X] -> (Index) -> (Index) -> (Index)
+
+        EntryIndex = PopFreeResourceEntry(Table);
+        Assert(EntryIndex);
+
+        FoundEntry = GetResourceEntry(EntryIndex, Table);
+        FoundEntry->NextWithSameHashSlot = Slot[0];
+        FoundEntry->Key                  = Key;
+
+        Slot[0] = EntryIndex;
+
+        ++Table->Stats.CacheMissCount;
+    }
+
+    // Every time we access an entry we must assure that this new entry is now
+    // the most recent one in the LRU chain.
+    // What we have: (Sentinel) -> (Entry)    -> (Entry) -> (Entry)
+    // What we want: (Sentinel) -> (NewEntry) -> (Entry) -> (Entry) -> (Entry)
+
+    ui_resource_entry *Sentinel = GetResourceSentinel(Table);
+    FoundEntry->NextLRU = Sentinel->NextLRU;
+    FoundEntry->PrevLRU = 0;
+
+    ui_resource_entry *NextLRU = GetResourceEntry(Sentinel->NextLRU, Table);
+    NextLRU->PrevLRU  = EntryIndex;
+    Sentinel->NextLRU = EntryIndex;
+
+    ui_resource_state Result = {0};
+    Result.Id       = EntryIndex;
+    Result.Type     = FoundEntry->ResourceType;
+    Result.Resource = FoundEntry->ResourceMemory;
+
+    return Result;
+}
+
+internal void
+UpdateUITextResource(u32 Id, byte_string Text, ui_font *Font, ui_resource_table *Table)
+{
+    ui_resource_entry *Entry = GetResourceEntry(Id, Table);
+    Assert(Entry && "Resource Id is invalid");
+
+    // Then we use the Glyph Run API to malloc some memory. At least for now. And we update the entry.
+    // What happens when we update an entry that already has memory? Can just free it for now.
+
+    if(!Entry->ResourceMemory)
+    {
+        u64   Size   = GetGlyphRunFootprint(Text);
+        void *Memory = OSReserveMemory(Size);
+
+        if(Memory && OSCommitMemory(Memory, Size))
+        {
+            Entry->ResourceSize   = Size;
+            Entry->ResourceMemory = CreateGlyphRun(Text, Font, Memory);
+        }
+    }
+    else
+    {
+        Assert(!"Not implemented!");
+    }
+}
+
+internal ui_resource_key
+GetNodeResource(u32 NodeId, ui_subtree *Subtree)
+{
+    ui_resource_key Resource = Subtree->Resources[NodeId];
+    return Resource;
+}
+
+// ----------------------------------------------------------------------------------
 // Pipeline Public API Implementation
+
+// NOTE: 1 arena per subtree? We can then reclaim memory easily.
 
 internal void
 UIBeginSubtree(ui_subtree_params Params, ui_pipeline *Pipeline)
 {
-    Assert(Pipeline);
+    Assert(Pipeline && "Pipeline is NULL");
 
-    memory_arena *Persist   = Pipeline->StaticArena; Assert(Persist);
-    memory_arena *Transient = Pipeline->FrameArena;  Assert(Transient);
+    memory_arena *Persist = Pipeline->StaticArena;
+    Assert(Persist);
 
     if(Params.CreateNew)
     {
+        Assert(Params.NodeCount && "Cannot create a subtree with 0 nodes.");
+
         ui_subtree_node *SubtreeNode = PushStruct(Persist, ui_subtree_node);
         if(SubtreeNode)
         {
@@ -242,18 +505,27 @@ UIBeginSubtree(ui_subtree_params Params, ui_pipeline *Pipeline)
 
             ui_layout_tree *LayoutTree = 0;
             {
-                ui_layout_tree_params LayoutTreeParams = {0};
-                LayoutTreeParams.NodeCount = Params.LayoutNodeCount;
-                LayoutTreeParams.NodeDepth = Params.LayoutNodeDepth;
-
-                u64   Footprint = GetLayoutTreeFootprint(LayoutTreeParams);
+                u64   Footprint = GetLayoutTreeFootprint(Params.NodeCount);
                 void *Memory    = PushArray(Persist, u8, Footprint);
 
-                LayoutTree = PlaceLayoutTreeInMemory(LayoutTreeParams, Memory);
+                LayoutTree = PlaceLayoutTreeInMemory(Params.NodeCount, Memory);
             }
 
+            memory_arena *Arena = 0;
+            {
+                memory_arena_params Params = {0};
+                Params.AllocatedFromFile = __FILE__;
+                Params.AllocatedFromLine = __LINE__;
+                Params.ReserveSize       = Megabyte(1);
+                Params.CommitSize        = Kilobyte(16);
+
+                Arena = AllocateArena(Params);
+            }
+
+            SubtreeNode->Value.FrameData      = Arena;
             SubtreeNode->Value.LayoutTree     = LayoutTree;
-            SubtreeNode->Value.ComputedStyles = PushArray(Persist, ui_node_style, 0);
+            SubtreeNode->Value.ComputedStyles = PushArray(Persist, ui_node_style  , Params.NodeCount);
+            SubtreeNode->Value.Resources      = PushArray(Persist, ui_resource_key, Params.NodeCount);
             SubtreeNode->Value.Id             = Pipeline->NextSubtreeId++;
 
             Pipeline->CurrentSubtree = &SubtreeNode->Value;
@@ -265,17 +537,16 @@ UIBeginSubtree(ui_subtree_params Params, ui_pipeline *Pipeline)
     }
 }
 
+// NOTE: What was this for?
+
 internal void
 UIEndSubtree(ui_subtree_params Params)
 {
     Useless(Params);
 }
 
-internal void
-UIBeginPipeline(ui_pipeline *Pipeline)
-{
-    ClearArena(Pipeline->FrameArena);
-}
+// NOTE: This is thinning out which is good. Soon I won't need these allocations
+// I am guessing. This construct may still be useful.
 
 internal ui_pipeline *
 UICreatePipeline(ui_pipeline_params Params)
@@ -294,20 +565,6 @@ UICreatePipeline(ui_pipeline_params Params)
             ArenaParams.CommitSize        = Kilobyte(1);
 
             Result->StaticArena = AllocateArena(ArenaParams);
-        }
-
-        // NOTE: I wonder if we even want this rather than a user supplied arena.
-        // Unsure yet, so stick with this.
-
-        // Frame Arena
-        {
-            memory_arena_params ArenaParams = {0};
-            ArenaParams.AllocatedFromFile = __FILE__;
-            ArenaParams.AllocatedFromLine = __LINE__;
-            ArenaParams.ReserveSize       = Megabyte(1);
-            ArenaParams.CommitSize        = Kilobyte(1);
-
-            Result->FrameArena = AllocateArena(ArenaParams);
         }
 
         // Node Id Table
@@ -334,21 +591,32 @@ UICreatePipeline(ui_pipeline_params Params)
 }
 
 internal void
-UIExecuteAllSubtrees(ui_pipeline *Pipeline)
+UIBeginAllSubtrees(ui_pipeline *Pipeline)
 {
-    ui_subtree_list   *List     = &Pipeline->Subtrees;
-    memory_arena      *Arena    = Pipeline->FrameArena;
-    Assert(Arena);
+    Assert(Pipeline && "Pipeline Pointer is NULL.");
 
+    ui_subtree_list *List  = &Pipeline->Subtrees;
     IterateLinkedList(List, ui_subtree_node *, Node)
     {
-        ui_subtree     *Subtree    = &Node->Value;
-        ui_layout_tree *LayoutTree = Subtree->LayoutTree;
-        Assert(LayoutTree);
+        ui_subtree *Subtree = &Node->Value;
 
-        ComputeLayout(LayoutTree, Arena);
-        HitTestLayout(LayoutTree, Arena);
-        DrawLayout   (Subtree, Arena);
+        ClearArena(Subtree->FrameData);
+    }
+}
+
+internal void
+UIExecuteAllSubtrees(ui_pipeline *Pipeline)
+{
+    Assert(Pipeline && "Pipeline Pointer is NULL.");
+
+    ui_subtree_list *List = &Pipeline->Subtrees;
+    IterateLinkedList(List, ui_subtree_node *, Node)
+    {
+        ui_subtree *Subtree = &Node->Value;
+
+        ComputeLayout(Subtree, Subtree->FrameData);
+        HitTestLayout(Subtree, Subtree->FrameData);
+        DrawLayout   (Subtree, Subtree->FrameData);
     }
 }
 

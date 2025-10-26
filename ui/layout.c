@@ -46,12 +46,13 @@ typedef struct ui_layout_box
     f32 FinalHeight;
 
     // Layout Info
-    ui_unit    Width;
-    ui_unit    Height;
-    ui_spacing Spacing;
-    ui_padding Padding;
+    ui_unit        Width;
+    ui_unit        Height;
+    ui_spacing     Spacing;
+    ui_padding     Padding;
+    UIDisplay_Type Display;
 
-    // Resources
+    // Resources ( TODO: Make this a resource?)
     ui_scroll_context *ScrollContext;
 } ui_layout_box;
 
@@ -278,8 +279,7 @@ UIFindChild(ui_node Node, u32 Index, ui_layout_tree *Tree)
 internal ui_node
 AllocateUINode(style_property Properties[StyleProperty_Count], bit_field Flags, ui_subtree *Subtree)
 {
-    Assert(Subtree    && "Calling AllocateUINode with a NULL 'Subtree' pointer");
-    Assert(Properties && "Calling AllocateUINode with a NULL 'Properties' pointer");
+    Assert(Subtree && "Calling AllocateUINode with a NULL 'Subtree' pointer");
 
     ui_node Result = {.CanUse = 0};
 
@@ -313,7 +313,7 @@ AllocateUINode(style_property Properties[StyleProperty_Count], bit_field Flags, 
             }
         }
 
-        // Layout Info
+        if(Properties)
         {
             vec2_unit  Size    = UIGetSize(Properties);
             ui_spacing Spacing = UIGetSpacing(Properties);

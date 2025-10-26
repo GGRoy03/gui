@@ -93,8 +93,11 @@ GetSubtreeFromChain(ui_node_chain Chain, ui_pipeline *Pipeline)
 }
 
 internal ui_node
-SetTextColorInChain(ui_color Color, ui_pipeline *Pipeline)
+SetTextColorInChain(ui_color Color)
 {
+    ui_pipeline *Pipeline = GetCurrentPipeline();
+    Assert(Pipeline);
+
     ui_node     Node    = GetNodeFromChain(Pipeline->Chain);
     ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline); // NOTE: Not great.
 
@@ -107,20 +110,20 @@ SetTextColorInChain(ui_color Color, ui_pipeline *Pipeline)
 }
 
 internal ui_node
-FindChildInChain(u32 Index, ui_pipeline *Pipeline)
+FindChildInChain(u32 Index)
 {
+    ui_pipeline *Pipeline = GetCurrentPipeline();
+    Assert(Pipeline);
+
     ui_node     Node    = GetNodeFromChain(Pipeline->Chain);
-    ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline); // NOTE: Not great.
+    ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline);
 
     if(Subtree)
     {
         ui_layout_tree *LayoutTree = Subtree->LayoutTree;
         if(LayoutTree)
         {
-            // WARN: The problem is that I never set the subtree?
-            // Which causes us to query it again and again.
-
-            BeginNodeChain(UIFindChild(Node, Index, LayoutTree), Pipeline); // NOTE: Not great.
+            UIChain(UIFindChild(Node, Index, LayoutTree));
         }
     }
 
@@ -128,8 +131,31 @@ FindChildInChain(u32 Index, ui_pipeline *Pipeline)
 }
 
 internal ui_node
-SetNodeIdInChain(byte_string Id, ui_pipeline *Pipeline)
+ReserveChildrenInChain(u32 Count)
 {
+    ui_pipeline *Pipeline = GetCurrentPipeline();
+    Assert(Pipeline);
+
+    ui_node     Node    = GetNodeFromChain(Pipeline->Chain);
+    ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline);
+
+    if(Subtree)
+    {
+        for(u32 Idx = 0; Idx < Count; ++Idx)
+        {
+            AllocateUINode(0, 0, Subtree);
+        }
+    }
+
+    return Node;
+}
+
+internal ui_node
+SetNodeIdInChain(byte_string Id)
+{
+    ui_pipeline *Pipeline = GetCurrentPipeline();
+    Assert(Pipeline);
+
     ui_node     Node    = GetNodeFromChain(Pipeline->Chain);
     ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline);
 
@@ -141,24 +167,34 @@ SetNodeIdInChain(byte_string Id, ui_pipeline *Pipeline)
     return Node;
 }
 
-internal void
-BeginNodeChain(ui_node Node, ui_pipeline *Pipeline)
-{
-    ui_node_chain Chain = {0};
-    Chain.Node              = Node;
-    Chain.Node.SetTextColor = SetTextColorInChain;
-    Chain.Node.FindChild    = FindChildInChain;
-    Chain.Node.SetId        = SetNodeIdInChain;
-
-    Pipeline->Chain = Chain;
-}
-
 // -------------------------------------------------------------
 // UI Node Public API Implementation
 
 internal ui_node
-UIGetLast(ui_pipeline *Pipeline)
+UIChain(ui_node Node)
 {
+    ui_pipeline *Pipeline = GetCurrentPipeline();
+    Assert(Pipeline);
+
+    ui_node_chain Chain = {0};
+    Chain.Subtree              = FindSubtree(Node, Pipeline);
+    Chain.Node                 = Node;
+    Chain.Node.SetTextColor    = SetTextColorInChain;
+    Chain.Node.FindChild       = FindChildInChain;
+    Chain.Node.ReserveChildren = ReserveChildrenInChain;
+    Chain.Node.SetId           = SetNodeIdInChain;
+
+    Pipeline->Chain = Chain;
+
+    return Chain.Node;
+}
+
+internal ui_node
+UIGetLast(void)
+{
+    ui_pipeline *Pipeline = GetCurrentPipeline();
+    Assert(Pipeline);
+
     ui_node_chain Chain = Pipeline->Chain;
     ui_node       Node  = Chain.Node;
     return Node;
@@ -480,6 +516,16 @@ GetNodeResource(u32 NodeId, ui_subtree *Subtree)
     return Resource;
 }
 
+// -----------------------------------------------------------------------------------
+// UI Context Public Implementation
+
+internal ui_pipeline *
+GetCurrentPipeline()
+{
+    ui_pipeline *Pipeline = UIState.CurrentPipeline;
+    return Pipeline;
+}
+
 // ----------------------------------------------------------------------------------
 // Pipeline Public API Implementation
 
@@ -602,6 +648,8 @@ UIBeginAllSubtrees(ui_pipeline *Pipeline)
 
         ClearArena(Subtree->FrameData);
     }
+
+    UIState.CurrentPipeline = Pipeline;
 }
 
 internal void

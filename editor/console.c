@@ -1,61 +1,87 @@
-internal void
-ConsolePrintMessage(byte_string Message, ConsoleMessage_Severity Severity, memory_arena *Arena, ui_node BufferNode)
+typedef struct console_output
 {
-    editor_console_ui *ConsoleUI = &EditorUI.ConsoleUI;
+    byte_string Message;
+    ui_color    TextColor;
+} console_output;
 
-    ui_color    TextColor = UIColor(1.f, 1.f, 1.f, 1.f);
-    byte_string Prefix    = ByteString(0, 0);
+internal b32
+IsValidConsoleOutput(console_output Output)
+{
+    b32 Result = IsValidByteString(Output.Message) && IsVisibleColor(Output.TextColor);
+    return Result;
+}
 
-    switch(Severity)
+internal console_output
+FormatConsoleOutput(byte_string Message, ConsoleMessage_Severity Severity, memory_arena *Arena)
+{
+    console_output Result = {0};
+
+    if(IsValidByteString(Message))
     {
+        ui_color    TextColor = UIColor(1.f, 1.f, 1.f, 1.f);
+        byte_string Prefix    = ByteString(0, 0);
 
-    case ConsoleMessage_Info:
-    {
-        TextColor = UIColor(0.01f, 0.71f, 0.99f, 1.f);
-        Prefix    = byte_string_literal("[Info] => ");
-    } break;
+        switch(Severity)
+        {
 
-    case ConsoleMessage_Warn:
-    {
-        TextColor = UIColor(0.99f, 0.62f, 0.01f, 1.f);
-        Prefix    = byte_string_literal("[Warn] => ");
-    } break;
+        case ConsoleMessage_Info:
+        {
+            TextColor = UIColor(0.01f, 0.71f, 0.99f, 1.f);
+            Prefix    = byte_string_literal("[Info] => ");
+        } break;
 
-    case ConsoleMessage_Error:
-    {
-        TextColor = UIColor(0.99f, 0.01f, 0.11f, 1.f);
-        Prefix    = byte_string_literal("[Error] => ");
-    } break;
+        case ConsoleMessage_Warn:
+        {
+            TextColor = UIColor(0.99f, 0.62f, 0.01f, 1.f);
+            Prefix    = byte_string_literal("[Warn] => ");
+        } break;
 
-    case ConsoleMessage_Fatal:
-    {
-        TextColor = UIColor(0.99f, 0.01f, 0.11f, 1.f);
-        Prefix    = byte_string_literal("[Fatal] => ");
-    } break;
+        case ConsoleMessage_Error:
+        {
+            TextColor = UIColor(0.99f, 0.01f, 0.11f, 1.f);
+            Prefix    = byte_string_literal("[Error] => ");
+        } break;
 
-    default: break;
+        case ConsoleMessage_Fatal:
+        {
+            TextColor = UIColor(0.99f, 0.01f, 0.11f, 1.f);
+            Prefix    = byte_string_literal("[Fatal] => ");
+        } break;
 
+        default: break;
+
+        }
+
+        Result.Message   = ByteStringAppend(Message, Prefix, 0, Arena);
+        Result.TextColor = TextColor;
     }
 
-    byte_string FormattedMessage = ByteStringAppend(Message, Prefix, 0, Arena);
 
-    // NOTE: Love this, but it also means I need a LRU to manage resources.
-    // Which is somehwat easy to do. Then I don't even have to worry about
-    // anything and I just override the text. This also bypasses the 'compontent'
-    // way which is probably fine honestly. Because components are completely fake
-    // anyways.
-
-    BufferNode.FindChild(0, ConsoleUI->Pipeline)
-        .SetTextColor(TextColor, ConsoleUI->Pipeline);
-//      .SetText(FormattedMessage, ConsoleUI->Pipeline)
+    return Result;
 }
 
 internal void
-ConsoleUI(editor_console_ui *ConsoleUI)
+ConsolePrintMessage(console_output Output, ui_node BufferNode, editor_console_ui *Console)
 {
-    // TODO: Clear the Console's arena every frame?
+    if(IsValidConsoleOutput(Output))
+    {
+        u32 ChildIndex = Console->MessageHead++;
 
-    if(!ConsoleUI->IsInitialized)
+        UIChain(BufferNode).FindChild(ChildIndex)
+            .SetTextColor(Output.TextColor);
+    //      .SetStyle(ConsoleStyle_Message)
+    //      .SetText(FormattedMessage)
+    }
+}
+
+internal void
+ConsoleUI(editor_console_ui *Console)
+{
+    UIBeginAllSubtrees(Console->Pipeline);
+
+    // TODO: Clear the Console's arena every frame.
+
+    if(!Console->IsInitialized)
     {
         memory_arena_params ArenaParams = {0};
         {
@@ -65,24 +91,24 @@ ConsoleUI(editor_console_ui *ConsoleUI)
             ArenaParams.CommitSize        = Kilobyte(4);
         }
 
-        ConsoleUI->Pipeline      = UICreatePipeline((ui_pipeline_params){.ThemeFile = byte_string_literal("styles/console.cim")});
-        ConsoleUI->MessageLimit  = ConsoleConstant_MessageCountLimit;
-        ConsoleUI->Arena         = AllocateArena(ArenaParams);
-        ConsoleUI->IsInitialized = 1;
+        Console->Pipeline      = UICreatePipeline((ui_pipeline_params){.ThemeFile = byte_string_literal("styles/console.cim")});
+        Console->MessageLimit  = ConsoleConstant_MessageCountLimit;
+        Console->Arena         = AllocateArena(ArenaParams);
+        Console->IsInitialized = 1;
 
         // Default Layout
         {
             ui_subtree_params SubtreeParams = {.CreateNew = 1, .NodeCount = 1024};
 
-            UISubtree(SubtreeParams, ConsoleUI->Pipeline)
+            UISubtree(SubtreeParams, Console->Pipeline)
             {
-                UIWindow(ConsoleStyle_Window, ConsoleUI->Pipeline)
+                UIWindow(ConsoleStyle_Window, Console->Pipeline)
                 {
-                    UIScrollView(ConsoleStyle_MessageView, ConsoleUI->Pipeline)
+                    UIScrollView(ConsoleStyle_MessageView, Console->Pipeline)
                     {
-                        UIGetLast(ConsoleUI->Pipeline)
-                            .SetId(ui_id("Console_Buffer"), ConsoleUI->Pipeline);
-                    //      .ReserveChildren(60, ConsoleUI->Pipeline)
+                        UIGetLast()
+                            .SetId(ui_id("Console_Buffer"))
+                            .ReserveChildren(Console->MessageLimit);
                     }
                 }
             }
@@ -107,21 +133,22 @@ ConsoleUI(editor_console_ui *ConsoleUI)
         }
     }
 
-    UIBeginAllSubtrees(ConsoleUI->Pipeline);
-
     // Drain The Queue
     {
-        ui_node BufferNode = UIFindNodeById(ui_id("Console_Buffer"), ConsoleUI->Pipeline->IdTable);
+        ui_node BufferNode = UIFindNodeById(ui_id("Console_Buffer"), Console->Pipeline->IdTable);
         if (BufferNode.CanUse)
         {
             console_queue_node *Node = 0;
             while ((Node = PopConsoleMessageQueue(&UIState.Console)))
             {
-                ConsolePrintMessage(ByteString(Node->Value.Text, Node->Value.TextSize), Node->Value.Severity, ConsoleUI->Arena, BufferNode);
+                byte_string    RawMessage = ByteString(Node->Value.Text, Node->Value.TextSize);
+                console_output Output     = FormatConsoleOutput(RawMessage, Node->Value.Severity, Console->Arena);
+                ConsolePrintMessage(Output, BufferNode, Console);
+
                 FreeConsoleNode(Node);
             }
         }
     }
 
-    UIExecuteAllSubtrees(ConsoleUI->Pipeline);
+    UIExecuteAllSubtrees(Console->Pipeline);
 }

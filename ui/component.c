@@ -29,16 +29,17 @@ UIComponentAll_(u32 StyleIndex, bit_field Flags, byte_string Text, ui_pipeline *
 
         Node = AllocateUINode(BaseProperties, FinalFlags, Subtree);
 
+        // WARN: Still a work in progress.
+
         if(Node.CanUse)
         {
             if(HasFlag(Flags, UILayoutNode_DrawText))
             {
-                ui_font *Font = UIGetFont(GetBaseStyle(StyleIndex, Pipeline->Registry));
-
                 ui_resource_key   Key   = MakeUITextResourceKey(Text);
                 ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
                 if(State.Type == UIResource_None)
                 {
+                    ui_font *Font = UIGetFont(BaseProperties);
                     UpdateUITextResource(State.Id, Text, Font, UIState.ResourceTable);
                 }
                 else
@@ -54,7 +55,10 @@ UIComponentAll_(u32 StyleIndex, bit_field Flags, byte_string Text, ui_pipeline *
         }
     }
 
-    BeginNodeChain(Node, Pipeline);
+    // NOTE: Uhm... Maybe we want explicit chains as much as we can...
+    // And this whole UIGetLast is mistake?
+
+    UIChain(Node);
 
     return Node;
 }

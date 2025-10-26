@@ -8,6 +8,12 @@ typedef enum UIUnit_Type
     UIUnit_Auto    = 3,
 } UIUnit_Type;
 
+typedef enum UIDisplay_Type
+{
+    UIDisplay_None   = 0,
+    UIDisplay_Normal = 1, // NOTE: Placeholder, so we get something that isn't None.
+} UIDisplay_Type;
+
 // [FORWARD DECLARATIONS]
 
 typedef struct ui_style         ui_style;
@@ -102,13 +108,14 @@ typedef struct ui_node
     u32 SubtreeId;
 
     // Runtime Properties
-    ui_node (*SetTextColor)  (ui_color Color, ui_pipeline *Pipeline);
+    ui_node (*SetTextColor)     (ui_color Color);
 
     // Hierarchy
-    ui_node (*FindChild)     (u32 Index, ui_pipeline *Pipeline);
+    ui_node (*FindChild)        (u32 Index);
+    ui_node (*ReserveChildren)  (u32 Count);
 
     // Identifiers
-    ui_node (*SetId)         (byte_string Id, ui_pipeline *Pipeline);
+    ui_node (*SetId)            (byte_string Id);
 } ui_node;
 
 typedef struct ui_node_chain
@@ -117,9 +124,9 @@ typedef struct ui_node_chain
     ui_subtree *Subtree;
 } ui_node_chain;
 
-internal void    BeginNodeChain  (ui_node Node, ui_pipeline *Pipeline);
+internal ui_node UIChain    (ui_node Node);
 
-internal ui_node UIGetLast       (ui_pipeline *Pipeline);
+internal ui_node UIGetLast  (void);
 
 // ui_event:
 
@@ -285,6 +292,8 @@ typedef struct ui_state
 } ui_state;
 
 global ui_state UIState;
+
+internal ui_pipeline * GetCurrentPipeline  ();
 
 // [Helpers]
 

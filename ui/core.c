@@ -65,139 +65,129 @@ UIBeginFrame()
 // -------------------------------------------------------------
 // UI Node Private API Implementation
 
-internal ui_node
-GetNodeFromChain(ui_node_chain Chain)
+internal ui_node_chain *
+GetNodeChain(void)
 {
-    ui_node Node = Chain.Node;
-    return Node;
-}
+    ui_pipeline *Pipeline = GetCurrentPipeline();
+    Assert(Pipeline);
 
-internal ui_subtree *
-GetSubtreeFromChain(ui_node_chain Chain, ui_pipeline *Pipeline)
-{
-    ui_subtree *Result = 0;
-
-    if(Chain.Node.CanUse)
+    ui_node_chain *Result = Pipeline->Chain;
+    if(Result)
     {
-        if(Chain.Subtree)
-        {
-            Result = Chain.Subtree;
-        }
-        else
-        {
-            Result = FindSubtree(Chain.Node, Pipeline);
-        }
+        Assert(Result->Subtree);
+        Assert(Result->Node.CanUse);
     }
 
     return Result;
 }
 
-internal ui_node
+internal ui_node_chain *
 SetTextColorInChain(ui_color Color)
 {
-    ui_pipeline *Pipeline = GetCurrentPipeline();
-    Assert(Pipeline);
+    ui_node_chain *Result = GetNodeChain();
+    Assert(Result);
 
-    ui_node     Node    = GetNodeFromChain(Pipeline->Chain);
-    ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline); // NOTE: Not great.
+    // TODO: Set the color or something
 
-    if(Subtree)
-    {
-        SetUITextColor(Node, Color, Subtree, Pipeline->StaticArena);
-    }
-
-    return Node;
+    return Result;
 }
 
-internal ui_node
+internal ui_node_chain *
+SetStyleInChain(u32 StyleIndex)
+{
+    ui_node_chain *Result = GetNodeChain();
+    Assert(Result);
+
+    style_property *Props = GetBaseStyle(Result->Node.IndexInTree, 0);
+    // TODO: Call whatever is needed to set a style? Still unsure what I want.
+
+    return Result;
+}
+
+internal ui_node_chain *
 FindChildInChain(u32 Index)
 {
-    ui_pipeline *Pipeline = GetCurrentPipeline();
-    Assert(Pipeline);
+    ui_node_chain *Result = GetNodeChain();
+    Assert(Result);
 
-    ui_node     Node    = GetNodeFromChain(Pipeline->Chain);
-    ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline);
+    ui_node Child = FindLayoutChild(Result->Node, Index, Result->Subtree);
+    Result->Node = Child;
 
-    if(Subtree)
-    {
-        ui_layout_tree *LayoutTree = Subtree->LayoutTree;
-        if(LayoutTree)
-        {
-            UIChain(UIFindChild(Node, Index, LayoutTree));
-        }
-    }
-
-    return Node;
+    return Result;
 }
 
-internal ui_node
-ReserveChildrenInChain(u32 Count)
+internal ui_node_chain *
+ReserveChildrenInChain(u32 Amount)
 {
-    ui_pipeline *Pipeline = GetCurrentPipeline();
-    Assert(Pipeline);
+    ui_node_chain *Result = GetNodeChain();
+    Assert(Result);
 
-    ui_node     Node    = GetNodeFromChain(Pipeline->Chain);
-    ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline);
-
-    if(Subtree)
+    for(u32 Idx = 0; Idx < Amount; Idx++)
     {
-        for(u32 Idx = 0; Idx < Count; ++Idx)
-        {
-            AllocateUINode(0, 0, Subtree);
-        }
+        // TODO: Allocate a node or something?
     }
 
-    return Node;
+    return Result;
 }
 
-internal ui_node
+internal ui_node_chain *
 SetNodeIdInChain(byte_string Id)
 {
-    ui_pipeline *Pipeline = GetCurrentPipeline();
-    Assert(Pipeline);
+    ui_node_chain *Result = GetNodeChain();
+    Assert(Result);
 
-    ui_node     Node    = GetNodeFromChain(Pipeline->Chain);
-    ui_subtree *Subtree = GetSubtreeFromChain(Pipeline->Chain, Pipeline);
+    SetNodeId(Id, Result->Node, GetCurrentPipeline()->IdTable);
 
-    if(Subtree)
-    {
-        UISetNodeId(Id, Node, Pipeline->IdTable);
-    }
-
-    return Node;
+    return Result;
 }
 
 // -------------------------------------------------------------
 // UI Node Public API Implementation
 
-internal ui_node
+internal ui_node_chain *
 UIChain(ui_node Node)
 {
-    ui_pipeline *Pipeline = GetCurrentPipeline();
-    Assert(Pipeline);
+    ui_node_chain *Result  = 0;
+    ui_node_chain *Current = GetNodeChain();
+    ui_subtree    *Subtree = 0;
 
-    ui_node_chain Chain = {0};
-    Chain.Subtree              = FindSubtree(Node, Pipeline);
-    Chain.Node                 = Node;
-    Chain.Node.SetTextColor    = SetTextColorInChain;
-    Chain.Node.FindChild       = FindChildInChain;
-    Chain.Node.ReserveChildren = ReserveChildrenInChain;
-    Chain.Node.SetId           = SetNodeIdInChain;
+    if(!Current)
+    {
+        ui_pipeline *Pipeline = GetCurrentPipeline();
+        Assert(Pipeline);
 
-    Pipeline->Chain = Chain;
+        Subtree = FindSubtree(Node, Pipeline);
+    }
+    else
+    {
+        Subtree = Current->Subtree;
+    }
 
-    return Chain.Node;
+    Assert(Subtree);
+
+    Result = PushStruct(Subtree->FrameData, ui_node_chain);
+    Result->Node            = Node;
+    Result->Subtree         = Subtree;
+    Result->Prev            = Current;
+    Result->SetTextColor    = SetTextColorInChain;
+    Result->SetStyle        = SetStyleInChain;
+    Result->FindChild       = FindChildInChain;
+    Result->ReserveChildren = ReserveChildrenInChain;
+    Result->SetId           = SetNodeIdInChain;
+
+    GetCurrentPipeline()->Chain = Result;
+
+    return Result;
 }
 
-internal ui_node
+internal ui_node_chain *
 UIGetLast(void)
 {
     ui_pipeline *Pipeline = GetCurrentPipeline();
     Assert(Pipeline);
 
-    ui_node_chain Chain = Pipeline->Chain;
-    ui_node       Node  = Chain.Node;
-    return Node;
+    ui_node_chain *Result = Pipeline->Chain;
+    return Result;
 }
 
 // -------------------------------------------------------------
@@ -529,7 +519,12 @@ GetCurrentPipeline()
 // ----------------------------------------------------------------------------------
 // Pipeline Public API Implementation
 
-// NOTE: 1 arena per subtree? We can then reclaim memory easily.
+internal b32
+IsValidSubtree(ui_subtree *Subtree)
+{
+    b32 Result = (Subtree) && (Subtree->FrameData) && (Subtree->LayoutTree);
+    return Result;
+}
 
 internal void
 UIBeginSubtree(ui_subtree_params Params, ui_pipeline *Pipeline)
@@ -631,6 +626,8 @@ UICreatePipeline(ui_pipeline_params Params)
         }
 
         AppendToLinkedList((&State->Pipelines), Result, State->Pipelines.Count);
+
+        State->CurrentPipeline = Result;
     }
 
     return Result;

@@ -106,27 +106,28 @@ typedef struct ui_node
     b32 CanUse;
     u32 IndexInTree;
     u32 SubtreeId;
-
-    // Runtime Properties
-    ui_node (*SetTextColor)     (ui_color Color);
-
-    // Hierarchy
-    ui_node (*FindChild)        (u32 Index);
-    ui_node (*ReserveChildren)  (u32 Count);
-
-    // Identifiers
-    ui_node (*SetId)            (byte_string Id);
 } ui_node;
 
-typedef struct ui_node_chain
+typedef struct ui_node_chain ui_node_chain;
+struct ui_node_chain
 {
-    ui_node     Node;
-    ui_subtree *Subtree;
-} ui_node_chain;
+    ui_node        Node;
+    ui_subtree    *Subtree;
+    ui_node_chain *Prev;
 
-internal ui_node UIChain    (ui_node Node);
+    ui_node_chain  * (*SetTextColor)     (ui_color Color);
+    ui_node_chain  * (*SetStyle)         (u32 StyleIndex);
 
-internal ui_node UIGetLast  (void);
+    // Hierarchy
+    ui_node_chain * (*FindChild)        (u32 Index);
+    ui_node_chain * (*ReserveChildren)  (u32 Count);
+
+    // Misc
+    ui_node_chain * (*SetId)            (byte_string Id);
+};
+
+internal ui_node_chain * UIChain    (ui_node Node);
+internal ui_node_chain * UIGetLast  (void);
 
 // ui_event:
 
@@ -323,6 +324,9 @@ typedef struct ui_subtree
     // Frame
     memory_arena *FrameData;
 
+    // Info
+    u64 NodeCount;
+
     // State
     ui_node LastNode;
 } ui_subtree;
@@ -356,8 +360,8 @@ struct ui_pipeline
     ui_node_id_table  *IdTable;  // NOTE: Should this be stored on the tree? Think so
 
     // Frame/State
-    ui_event_list Events;
-    ui_node_chain Chain;
+    ui_event_list  Events;
+    ui_node_chain *Chain;
 
     // Subtree
     u64             NextSubtreeId;
@@ -369,6 +373,8 @@ struct ui_pipeline
 };
 
 #define UISubtree(Params, Pipeline) DeferLoop(UIBeginSubtree(Params, Pipeline), UIEndSubtree(Params));
+
+internal b32 IsValidSubtree  (ui_subtree *Subtree);
 
 internal void          UIBeginSubtree       (ui_subtree_params Params, ui_pipeline *Pipeline);
 internal void          UIEndSubtree         (ui_subtree_params Params);

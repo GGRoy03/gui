@@ -1,3 +1,5 @@
+// WARN: This is really garbage? Yeah this is complete shit and it kinda makes no sense...
+
 internal ui_node_chain * 
 UIComponentAll(u32 StyleIndex, bit_field Flags, byte_string Text)
 {
@@ -7,34 +9,9 @@ UIComponentAll(u32 StyleIndex, bit_field Flags, byte_string Text)
     ui_subtree *Subtree = Pipeline->CurrentSubtree;
     Assert(Subtree);
 
-    bit_field FinalFlags = Flags;
-
-    style_property *BaseProperties = GetBaseStyle(StyleIndex, Pipeline->Registry);
-    {
-        Assert(BaseProperties);
-
-        ui_color BackgroundColor = UIGetColor(BaseProperties);
-        f32      BorderWidth     = UIGetBorderWidth(BaseProperties);
-
-        if(IsVisibleColor(BackgroundColor))
-        {
-            Assert(!HasFlag(Flags, UILayoutNode_DrawBackground));
-            SetFlag(FinalFlags, UILayoutNode_DrawBackground);
-        }
-
-        if(BorderWidth > 0.f)
-        {
-            Assert(!HasFlag(Flags, UILayoutNode_DrawBorders));
-            SetFlag(FinalFlags, UILayoutNode_DrawBorders);
-        }
-    }
-
-    ui_node Node = AllocateUINode(BaseProperties, FinalFlags, Subtree);
+    ui_node Node = AllocateUINode(Flags, Subtree);
     Assert(Node.CanUse);
 
-    // NOTE: This is messy, but where should I do it? Uhmmm..
-    // I really hate this. How can I bind it? I can't be lazy
-    // it has to come from here->node style.
     ui_node_style *Style = GetNodeStyle(Node.IndexInTree, Subtree);
     Style->CachedStyleIndex = StyleIndex;
 
@@ -46,8 +23,12 @@ UIComponentAll(u32 StyleIndex, bit_field Flags, byte_string Text)
         ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
         if(State.Type == UIResource_None)
         {
-            ui_font *Font = UIGetFont(BaseProperties);
-             UpdateUITextResource(State.Id, Text, Font, UIState.ResourceTable);
+            style_property *BaseProperties = GetCachedProperties(StyleIndex, StyleState_Basic, Pipeline->Registry);
+            ui_font        *Font           = UIGetFont(BaseProperties);
+
+            Assert(Font);
+
+            UpdateUITextResource(State.Id, Text, Font, UIState.ResourceTable);
         }
         else
         {

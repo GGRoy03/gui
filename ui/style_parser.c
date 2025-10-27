@@ -473,9 +473,9 @@ TokenizeStyleFile(os_read_file File, memory_arena *Arena, style_file_debug_info 
 // [Parser]
 
 internal style_effect
-ParseStyleEffect(style_token_buffer *Buffer, style_file_debug_info *Debug)
+ParseStyleState(style_token_buffer *Buffer, style_file_debug_info *Debug)
 {
-    style_effect Effect = {StyleEffect_None};
+    style_effect Effect = {StyleState_None};
 
     style_token *AtSymbol = PeekStyleToken(Buffer, 0, Debug);
     if(AtSymbol->Type == StyleToken_AtSymbol)
@@ -483,18 +483,18 @@ ParseStyleEffect(style_token_buffer *Buffer, style_file_debug_info *Debug)
         style_token *Name = PeekStyleToken(Buffer, 1, Debug);
         if(Name->Type == StyleToken_Identifier)
         {
-            StyleEffect_Type EffectType = StyleEffect_None;
-            for(u32 Idx = 0; Idx < ArrayCount(StyleEffectTable); ++Idx)
+            StyleState_Type EffectType = StyleState_None;
+            for(u32 Idx = 0; Idx < ArrayCount(StyleStateTable); ++Idx)
             {
-                style_effect_table_entry Entry = StyleEffectTable[Idx];
+                style_state_table_entry Entry = StyleStateTable[Idx];
                 if(ByteStringMatches(Name->Identifier, Entry.Name, StringMatch_NoFlag))
                 {
-                    EffectType = Entry.EffectType;
+                    EffectType = Entry.StateType;
                     break;
                 }
             }
 
-            if(EffectType != StyleEffect_None)
+            if(EffectType != StyleState_None)
             {
                 Effect.Type = EffectType;
                 EatStyleToken(Buffer, 2);
@@ -639,7 +639,7 @@ ParseStyleBlock(style_token_buffer *Buffer, style_var_table *VarTable, style_fil
     {
         EatStyleToken(Buffer, 1);
 
-        StyleEffect_Type CurrentEffect = StyleEffect_None;
+        StyleState_Type CurrentEffect = StyleState_None;
 
         while(1)
         {
@@ -659,12 +659,12 @@ ParseStyleBlock(style_token_buffer *Buffer, style_var_table *VarTable, style_fil
             // Try to parse an @Effect if we find one, set it, otherwise
             // we found an attribute. At least, that's what we expect.
 
-            style_effect Effect = ParseStyleEffect(Buffer, Debug);
-            if(Effect.Type != StyleEffect_None)
+            style_effect Effect = ParseStyleState(Buffer, Debug);
+            if(Effect.Type != StyleState_None)
             {
                 CurrentEffect = Effect.Type;
             } else 
-            if(CurrentEffect != StyleEffect_None)
+            if(CurrentEffect != StyleState_None)
             {
                 style_attribute Attribute = ParseStyleAttribute(Buffer, VarTable, Debug);
                 if(!Attribute.HadError)
@@ -1216,6 +1216,13 @@ ConvertAttributeToProperty(style_attribute Attribute)
     return Property;
 }
 
+internal b32
+IsPropertySet(ui_cached_style *Style, StyleState_Type State, StyleProperty_Type Property)
+{
+    b32 Result = Style->Properties[State][Property].IsSet;
+    return Result;
+}
+
 internal void
 CacheStyle(style *ParsedStyle, ui_style_registry *Registry, style_file_debug_info *Debug)
 {
@@ -1231,52 +1238,52 @@ CacheStyle(style *ParsedStyle, ui_style_registry *Registry, style_file_debug_inf
     // Also, outputs the corresponding error messages.
     // Then if the value is still set, we cache it.
 
-    ForEachEnum(StyleEffect_Type, StyleEffect_Count, Effect)
+    ForEachEnum(StyleState_Type, StyleState_Count, State)
     {
         ForEachEnum(StyleProperty_Type, StyleProperty_Count, Property)
         {
-            style_attribute Attribute = Block->Attributes[Effect][Property];
+            style_attribute Attribute = Block->Attributes[State][Property];
             if(Attribute.IsSet)
             {
                 ValidateAttributeFormatting(&Attribute, Debug);
                 if(Attribute.IsSet)
                 {
-                    CachedStyle->Properties[Effect][Property] = ConvertAttributeToProperty(Attribute);
+                    CachedStyle->Properties[State][Property] = ConvertAttributeToProperty(Attribute);
                 }
             }
             else
             {
+                // NOTE: ?? Isn't it cleared to 0?
+
                 style_property EmptyProperty = {0};
                 EmptyProperty.Type = StyleProperty_None;
 
-                CachedStyle->Properties[Effect][Property] = EmptyProperty;
+                CachedStyle->Properties[State][Property] = EmptyProperty;
             }
         }
 
         // Load Fonts
 
-        if(PropertyIsSet(CachedStyle, Effect, StyleProperty_Font))
-        {
-            if(PropertyIsSet(CachedStyle, Effect, StyleProperty_FontSize))
-            {
-                byte_string FontName = Block->Attributes[Effect][StyleProperty_Font].String;
-                f32         FontSize = UIGetFontSize(GetBaseStyle(CachedStyle->CachedIndex, Registry));
-                if(IsValidByteString(FontName) && FontSize > 0.f)
-                {
-                    ui_font *Font = UIQueryFont(FontName, FontSize);
-                    if(!Font)
-                    {
-                        Font = UILoadFont(FontName, FontSize);
-                    }
+        // TODO: Need to check if the string is a valid string when trying to
+        // prune badly formatted attributes. Same for size, it should already be
+        // correctly formed.
 
-                    CachedStyle->Properties[Effect][StyleProperty_Font].Pointer = Font;
-                }
-                else
-                {
-                }
-            }
-            else
+        if(IsPropertySet(CachedStyle, State, StyleProperty_Font))
+        {
+            byte_string Name = Block->Attributes[State][StyleProperty_Font].String;
+
+            if(IsPropertySet(CachedStyle, State, StyleProperty_FontSize))
             {
+                style_property *Props = GetCachedProperties(CachedStyle->CachedIndex, StyleState_Basic, Registry);
+                f32 Size = UIGetFontSize(Props);
+
+                ui_font *Font = UIQueryFont(Name, Size);
+                if(!Font)
+                {
+                    Font = UILoadFont(Name, Size);
+                }
+
+                CachedStyle->Properties[State][StyleProperty_Font].Pointer = Font;
             }
         }
     }

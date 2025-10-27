@@ -114,13 +114,13 @@ typedef struct style_variable
 
 typedef struct style_effect
 {
-    StyleEffect_Type Type;
+    StyleState_Type Type;
 } style_effect;
 
 typedef struct style_block
 {
     u32             AttributesCount;
-    style_attribute Attributes[StyleEffect_Count][StyleProperty_Count];
+    style_attribute Attributes[StyleState_Count][StyleProperty_Count];
 } style_block;
 
 typedef struct style
@@ -171,11 +171,11 @@ typedef struct style_keyword_table_entry
     StyleToken_Type TokenType;
 } style_keyword_table_entry;
 
-typedef struct style_effect_table_entry
+typedef struct style_state_table_entry
 {
-    byte_string        Name;
-    StyleEffect_Type EffectType;
-} style_effect_table_entry;
+    byte_string     Name;
+    StyleState_Type StateType;
+} style_state_table_entry;
 
 typedef struct style_property_table_entry
 {
@@ -197,11 +197,10 @@ read_only global style_keyword_table_entry StyleKeywordTable[] =
     {byte_string_compile("var")  , StyleToken_Var  },
 };
 
-read_only global style_effect_table_entry StyleEffectTable[] = 
+read_only global style_state_table_entry StyleStateTable[] = 
 {
-    {byte_string_compile("base") , StyleEffect_Base },
-    {byte_string_compile("hover"), StyleEffect_Hover},
-    {byte_string_compile("click"), StyleEffect_Click},
+    {byte_string_compile("base") , StyleState_Basic},
+    {byte_string_compile("hover"), StyleState_Hover},
 };
 
 read_only global style_property_table_entry StylePropertyTable[] =

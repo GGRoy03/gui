@@ -116,8 +116,8 @@ struct ui_node_chain
     ui_node_chain *Prev;
 
     // Style
-    ui_node_chain  * (*SetTextColor)     (ui_color Color);
-    ui_node_chain  * (*SetStyle)         (u32 StyleIndex);
+    ui_node_chain  * (*SetTextColor)    (ui_color Color);
+    ui_node_chain  * (*SetStyle)        (u32 StyleIndex);
 
     // Layout
     ui_node_chain * (*FindChild)        (u32 Index);
@@ -143,9 +143,8 @@ typedef enum UIEvent_Type
 
 typedef struct ui_hover_event
 {
-    ui_pipeline *Source;
-    ui_node      Node;
-    u32          CachedStyleIndex;
+    u32         NodeIndex;
+    ui_subtree *Subtree;
 } ui_hover_event;
 
 typedef struct ui_click_event
@@ -205,7 +204,7 @@ typedef struct ui_event_list
 internal void RecordUIEvent       (ui_event Event, ui_event_list *Events, memory_arena *Arena);
 internal void ProcessUIEventList  (ui_event_list *Events);
 
-internal void RecordUIHoverEvent  (ui_node Node, ui_pipeline *Source, ui_event_list *Events, memory_arena *Arena);
+internal void RecordUIHoverEvent  (ui_node Node, ui_event_list *Events, memory_arena *Arena);
 
 // ------------------------------------------------------------------------------------
 

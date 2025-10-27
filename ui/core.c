@@ -210,10 +210,8 @@ ProcessUIEventList(ui_event_list *Events)
         {
             ui_hover_event Hover = Event->Hover;
 
-            style_property *HoverStyle = GetHoverStyle(Hover.CachedStyleIndex, Hover.Source->Registry);
-            if(HoverStyle)
-            {
-            }
+            ui_node_style *Style = GetNodeStyle(Hover.NodeIndex, Hover.Subtree);
+            Assert(Style);
         } break;
 
         case UIEvent_Click:
@@ -244,10 +242,8 @@ RecordUIEvent(ui_event Event, ui_event_list *Events, memory_arena *Arena)
 }
 
 internal void
-RecordUIHoverEvent(ui_node Node, ui_pipeline *Source, ui_event_list *Events, memory_arena *Arena)
+RecordUIHoverEvent(ui_node Node, ui_event_list *Events, memory_arena *Arena)
 {
-    ui_event Event = {.Type = UIEvent_Hover, .Hover.Node = Node, .Hover.Source = Source};
-    RecordUIEvent(Event, Events, Arena);
 }
 
 // ----------------------------------------------------------------------------------

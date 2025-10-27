@@ -82,12 +82,13 @@ UIGetFont(style_property Properties[StyleProperty_Count])
 // Style Manipulation Internal API
 
 internal void
-SetStyleProperty(ui_node Node, style_property Value, ui_subtree *Subtree)
+SetStyleProperty(ui_node Node, style_property Value, StyleState_Type State, ui_subtree *Subtree)
 {
     ui_node_style *NodeStyle = Subtree->ComputedStyles + Node.IndexInTree;
+
     if(NodeStyle)
     {
-        NodeStyle->Properties[Value.Type] = Value;
+        NodeStyle->Properties[State][Value.Type] = Value;
     }
 }
 
@@ -116,7 +117,7 @@ UISetTextColor(ui_node Node, ui_color Color, ui_subtree *Subtree)
     Assert(Subtree);
 
     style_property Property = {.Type = StyleProperty_TextColor, .Color = Color};
-    SetStyleProperty(Node, Property, Subtree);
+    SetStyleProperty(Node, Property, StyleState_Basic, Subtree);
 }
 
 //
@@ -135,28 +136,14 @@ GetNodeStyle(u32 Index, ui_subtree *Subtree)
 }
 
 internal style_property *
-GetBaseStyle(u32 StyleIndex, ui_style_registry *Registry)
+GetCachedProperties(u32 StyleIndex, StyleState_Type State, ui_style_registry *Registry)
 {
     style_property  *Result = 0;
     ui_cached_style *Cached = GetCachedStyle(StyleIndex, Registry);
 
     if(Cached)
     {
-        Result = Cached->Properties[StyleEffect_Base];
-    }
-
-    return Result;
-}
-
-internal style_property *
-GetHoverStyle(u32 StyleIndex, ui_style_registry *Registry)
-{
-    style_property  *Result = 0;
-    ui_cached_style *Cached = GetCachedStyle(StyleIndex, Registry);
-
-    if(Cached)
-    {
-        Result = Cached->Properties[StyleEffect_Hover];
+        Result = Cached->Properties[State];
     }
 
     return Result;
@@ -168,12 +155,5 @@ internal b32
 IsVisibleColor(ui_color Color)
 {
     b32 Result = (Color.A > 0.f);
-    return Result;
-}
-
-internal b32
-PropertyIsSet(ui_cached_style *Style, StyleEffect_Type Effect, StyleProperty_Type Property)
-{
-    b32 Result = Style->Properties[Effect][Property].IsSet;
     return Result;
 }

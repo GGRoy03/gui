@@ -44,38 +44,32 @@ typedef struct ui_layout_tree  ui_layout_tree;
 typedef enum UILayoutNode_Flag
 {
     // Draws
-    UILayoutNode_DrawBackground  = 1 << 0,
-    UILayoutNode_DrawBorders     = 1 << 1,
-    UILayoutNode_DrawText        = 1 << 2,
-    UILayoutNode_DoNotDraw       = 1 << 3,
+    UILayoutNode_DrawText        = 1 << 0,
+    UILayoutNode_DoNotDraw       = 1 << 1,
 
     // Batching
-    UILayoutNode_HasClip         = 1 << 4,
+    UILayoutNode_HasClip         = 1 << 2,
 
     // State
-    UILayoutNode_IsHoverable     = 1 << 5,
-    UILayoutNode_IsClickable     = 1 << 6,
-    UILayoutNode_IsDraggable     = 1 << 7,
-    UILayoutNode_IsResizable     = 1 << 8,
-    UILayoutNode_IsScrollable    = 1 << 9,
+    UILayoutNode_IsHoverable     = 1 << 3,
+    UILayoutNode_IsClickable     = 1 << 4,
+    UILayoutNode_IsDraggable     = 1 << 5,
+    UILayoutNode_IsResizable     = 1 << 6,
+    UILayoutNode_IsScrollable    = 1 << 7,
 
     // Layout Info
-    UILayoutNode_PlaceChildrenX  = 1 << 10,
-    UILayoutNode_PlaceChildrenY  = 1 << 11,
-    UILayoutNode_IsParent        = 1 << 12,
+    UILayoutNode_PlaceChildrenX  = 1 << 8,
+    UILayoutNode_PlaceChildrenY  = 1 << 9,
+    UILayoutNode_IsParent        = 1 << 10,
 } UILayoutNode_Flag;
 
 internal u64              GetLayoutTreeFootprint   (u64 NodeCount);
 internal ui_layout_tree * PlaceLayoutTreeInMemory  (u64 NodeCount, void *Memory);
+internal ui_node          AllocateUINode           (bit_field Flags, ui_subtree *Subtree);
+internal void             UIEnd                    (void);
 
 internal ui_node FindLayoutChild        (ui_node Node, u32 Index, ui_subtree *Subtree);
 internal void    ReserveLayoutChildren  (ui_node Node, u32 Amount, ui_subtree *Subtree);
-
-internal void    UIEnd                  (void);
-
-// NOTE: This API is not great..
-
-internal ui_node AllocateUINode(style_property Properties[StyleProperty_Count], bit_field Flags, ui_subtree *Subtree);
 
 // -------------------------------------------------------------------------------------------------------------------
 // ui_hit_test:

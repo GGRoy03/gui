@@ -18,15 +18,14 @@ typedef enum StyleProperty_Type
     StyleProperty_None         = 666,
 } StyleProperty_Type;
 
-typedef enum StyleEffect_Type
+typedef enum StyleState_Type
 {
-    StyleEffect_Base  = 0,
-    StyleEffect_Hover = 1,
-    StyleEffect_Click = 2,
-    StyleEffect_None  = 3,
+    StyleState_Basic = 0,
+    StyleState_Hover = 1,
 
-    StyleEffect_Count = 3,
-} StyleEffect_Type;
+    StyleState_None  = 2,
+    StyleState_Count = 2,
+} StyleState_Type;
 
 // [CORE TYPES]
 
@@ -49,7 +48,7 @@ typedef struct style_property
 
 typedef struct ui_cached_style
 {
-    style_property Properties[StyleEffect_Count][StyleProperty_Count];
+    style_property Properties[StyleState_Count][StyleProperty_Count];
     u32            CachedIndex;
 } ui_cached_style;
 
@@ -64,7 +63,7 @@ typedef struct ui_node_style
 {
     b32            LayoutInfoIsBound;
     u32            CachedStyleIndex;
-    style_property Properties[StyleProperty_Count];
+    style_property Properties[StyleState_Count][StyleProperty_Count];
 } ui_node_style;
 
 // UIGetBorderWidth:
@@ -95,10 +94,8 @@ internal ui_font         * UIGetFont          (style_property Properties[StylePr
 // GetHoverStyle:
 //
 
-internal ui_node_style * GetNodeStyle  (u32 Index, ui_subtree *Subtree);
-
-internal style_property * GetBaseStyle      (u32 StyleIndex, ui_style_registry *Registry);
-internal style_property * GetHoverStyle     (u32 CachedIndex, ui_style_registry *Registry);
+internal ui_node_style  * GetNodeStyle         (u32 NodeIndex, ui_subtree *Subtree);
+internal style_property * GetCachedProperties  (u32 StyleIndex, StyleState_Type State, ui_style_registry *Registry);
 
 // UISetTextColor:
 //  Override a style at runtine.
@@ -108,4 +105,3 @@ internal void UISetTextColor  (ui_node Node, ui_color Color, ui_subtree *Subtree
 // [Helpers]
 
 internal b32 IsVisibleColor  (ui_color Color);
-internal b32 PropertyIsSet   (ui_cached_style *Style, StyleEffect_Type Effect, StyleProperty_Type Property);

@@ -44,7 +44,6 @@ typedef struct ui_layout_box
     f32 FinalY;
     f32 FinalWidth;
     f32 FinalHeight;
-
     // Layout Info
     ui_unit        Width;
     ui_unit        Height;
@@ -320,7 +319,7 @@ ReserveLayoutChildren(ui_node Node, u32 Amount, ui_subtree *Subtree)
 
     for(u32 Idx = 0; Idx < Amount; ++Idx)
     {
-        AllocateUINode(0, 0, Subtree);
+        AllocateUINode(0, Subtree);
     }
 
     if(NeedPush)
@@ -330,7 +329,7 @@ ReserveLayoutChildren(ui_node Node, u32 Amount, ui_subtree *Subtree)
 }
 
 internal ui_node
-AllocateUINode(style_property Properties[StyleProperty_Count], bit_field Flags, ui_subtree *Subtree)
+AllocateUINode(bit_field Flags, ui_subtree *Subtree)
 {
     Assert(Subtree);
 
@@ -436,7 +435,7 @@ EnsureNodeStyle(ui_layout_node *Node, ui_subtree *Subtree)
         ui_pipeline *Pipeline = GetCurrentPipeline();
         Assert(Pipeline);
 
-        style_property *Properties = GetBaseStyle(Style->CachedStyleIndex, Pipeline->Registry);
+        style_property *Properties = GetCachedProperties(Style->CachedStyleIndex, StyleState_Basic, Pipeline->Registry);
         Assert(Properties);
 
         vec2_unit  Size    = UIGetSize(Properties);
@@ -457,7 +456,7 @@ EnsureNodeStyle(ui_layout_node *Node, ui_subtree *Subtree)
 // NOTE: So this must generate events. Click, Hover, Drag, Resize, ...
 
 internal b32 
-Unknown(vec2_f32 MousePosition, ui_layout_node *Root, ui_pipeline *Pipeline)
+FindHitNode(vec2_f32 MousePosition, ui_layout_node *Root, ui_subtree *Subtree)
 {
     ui_layout_box *Box = &Root->Value;
 
@@ -474,7 +473,7 @@ Unknown(vec2_f32 MousePosition, ui_layout_node *Root, ui_pipeline *Pipeline)
     {
         IterateLinkedListBackward(Root, ui_layout_node *, Child)
         {
-            b32 Result = Unknown(MousePosition, Child, Pipeline);
+            b32 Result = FindHitNode(MousePosition, Child, Subtree);
             if(Result)
             {
                 return Result;
@@ -485,9 +484,6 @@ Unknown(vec2_f32 MousePosition, ui_layout_node *Root, ui_pipeline *Pipeline)
         vec2_f32 MouseDelta   = OSGetMouseDelta();
         b32      MouseMoved   = (MouseDelta.X != 0 || MouseDelta.Y != 0);
         b32      MouseClicked = OSIsMouseClicked(OSMouseButton_Left);
-
-        // The order of importance goes like: Resize->Drag->Click->Hover->Scroll
-        // Uhm, how do we treat the node capture then?
 
         if(HasFlag(Root->Flags, UILayoutNode_IsResizable) && MouseMoved && MouseClicked)
         {
@@ -677,8 +673,8 @@ PreOrderPlace(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
                 ui_resource_state State = FindUIResourceByKey(Key, 0);
                 ui_glyph_run     *Run   = (ui_glyph_run *)State.Resource;
 
-                Assert(Run                           && "Node is marked as having text but no glyph run is provided");
-                Assert(State.Type == UIResource_Text && "Queried resource is not the type we expect");
+                Assert(Run);
+                Assert(State.Type == UIResource_Text);
 
                 u32 FilledLine = 0.f;
                 f32 LineWidth  = 0.f;
@@ -931,8 +927,8 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
                         ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
                         ui_glyph_run     *Run   = (ui_glyph_run *)State.Resource;
 
-                        Assert(Run                           && "Node is marked as having text but no glyph run is provided");
-                        Assert(State.Type == UIResource_Text && "Queried resource is not the type we expect");
+                        Assert(Run);
+                        Assert(State.Type == UIResource_Text);
 
                         RootParams.Texture     = Run->Atlas;
                         RootParams.TextureSize = Run->AtlasSize;
@@ -956,23 +952,27 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
 
             // Draw Flags
             {
-                if (HasFlag(Frame.Node->Flags, UILayoutNode_DrawBackground))
+                ui_color BackgroundColor = UIGetColor(Style->Properties[StyleState_Basic]);
+                if(IsVisibleColor(BackgroundColor))
                 {
                     ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
                     Rect->RectBounds  = MakeRectFromNode(Frame.Node, Frame.AccScroll);
-                    Rect->Color       = UIGetColor(Style->Properties);
-                    Rect->CornerRadii = UIGetCornerRadius(Style->Properties);
-                    Rect->Softness    = UIGetSoftness(Style->Properties);
+                    Rect->Color       = BackgroundColor;
+                    Rect->CornerRadii = UIGetCornerRadius(Style->Properties[StyleState_Basic]);
+                    Rect->Softness    = UIGetSoftness(Style->Properties[StyleState_Basic]);
                 }
 
-                if (HasFlag(Frame.Node->Flags, UILayoutNode_DrawBorders))
+
+                ui_color BorderColor = UIGetBorderColor(Style->Properties[StyleState_Basic]);
+                f32      BorderWidth = UIGetBorderWidth(Style->Properties[StyleState_Basic]);
+                if(IsVisibleColor(BorderColor) && BorderWidth > 0.f)
                 {
                     ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
                     Rect->RectBounds  = MakeRectFromNode(Frame.Node, Frame.AccScroll);
-                    Rect->Color       = UIGetBorderColor(Style->Properties);
-                    Rect->CornerRadii = UIGetCornerRadius(Style->Properties);
-                    Rect->BorderWidth = UIGetBorderWidth(Style->Properties);
-                    Rect->Softness    = UIGetSoftness(Style->Properties);
+                    Rect->Color       = BorderColor;
+                    Rect->CornerRadii = UIGetCornerRadius(Style->Properties[StyleState_Basic]);
+                    Rect->BorderWidth = BorderWidth;
+                    Rect->Softness    = UIGetSoftness(Style->Properties[StyleState_Basic]);
                 }
 
                 if(HasFlag(Frame.Node->Flags, UILayoutNode_DrawText))
@@ -982,10 +982,10 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
                     ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
                     ui_glyph_run     *Run   = (ui_glyph_run *)State.Resource;
 
-                    Assert(Run                           && "Node is marked as having text but no glyph run is provided");
-                    Assert(State.Type == UIResource_Text && "Queried resource is not the type we expect");
+                    Assert(Run);
+                    Assert(State.Type == UIResource_Text);
 
-                    ui_color TextColor = UIGetTextColor(Style->Properties);
+                    ui_color TextColor = UIGetTextColor(Style->Properties[StyleState_Basic]);
                     for(u32 Idx = 0; Idx < Run->GlyphCount; ++Idx)
                     {
                         ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
@@ -1010,7 +1010,7 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
 
                 if(HasFlag(Frame.Node->Flags, UILayoutNode_HasClip))
                 {
-                    ChildClip = InsetRectF32(MakeRectFromNode(Frame.Node, Vec2F32(0.f, 0.f)), UIGetBorderWidth(Style->Properties));
+                    ChildClip = InsetRectF32(MakeRectFromNode(Frame.Node, Vec2F32(0.f, 0.f)), UIGetBorderWidth(Style->Properties[StyleState_Basic]));
 
                     rect_f32 EmptyClip     = RectF32Zero();
                     b32      ParentHasClip = (MemoryCompare(&Frame.Clip, &EmptyClip, sizeof(rect_f32)) != 0);
@@ -1047,6 +1047,8 @@ HitTestLayout(ui_subtree *Subtree, memory_arena *Arena)
 
     ui_layout_node *Root = GetLayoutNode(0, Tree);
     Assert(Root);
+
+    FindHitNode(OSGetMousePosition(), Root, Subtree);
 }
 
 internal void

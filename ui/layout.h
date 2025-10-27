@@ -13,12 +13,9 @@ typedef struct ui_scroll_context
     ScrollAxis_Type Axis;              // Which Axis the scroll is applied to
 } ui_scroll_context;
 
-// TODO: Cleanup this API
+// TODO: Cleanup this API, when I remove this I need to move the type into the internal file.
 
 internal void     BindScrollContext        (ui_node Node, ScrollAxis_Type Axis, ui_layout_tree *Tree, memory_arena *Arena);
-internal void     ApplyScrollToContext     (f32 ScrollDelta, ui_scroll_context *Context);
-internal void     PruneScrollContextNodes  (ui_layout_node *Node);
-internal vec2_f32 GetScrollTranslation     (ui_layout_node *Node);
 
 // ui_layout_node:
 // ui_layout_tree:

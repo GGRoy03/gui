@@ -366,6 +366,110 @@ UIEnd()
 }
 
 // -----------------------------------------------------------
+// UI Scrolling Internal Implementation
+
+internal rect_f32
+GetScrollWindowBound(vec2_f32 TopLeft, ui_scroll_context *Context)
+{
+    f32 MinX   = TopLeft.X;
+    f32 MinY   = TopLeft.Y; 
+    f32 Width  = Context->ContentWindowSize.X;
+    f32 Height = Context->ContentWindowSize.Y;
+    if (Context->Axis == ScrollAxis_X)
+    {
+        MinX -= Context->ScrollOffset;
+    }
+    else if (Context->Axis == ScrollAxis_Y)
+    {
+        MinY -= Context->ScrollOffset;
+    }
+
+    rect_f32 Result = RectF32(MinX, MinY, Width, Height);
+    return Result;
+}
+
+internal void
+ScrollNode(f32 ScrollDelta, ui_layout_node *Node)
+{
+    // NOTE: I think this should be some sort of resource?
+
+    ui_scroll_context *Context = Node->Value.ScrollContext;
+    Assert(Context);
+
+    f32 ScrolledPixels = ScrollDelta * Context->PixelPerLine;
+
+    f32 ScrollLimit = 0.f;
+    if (Context->Axis == ScrollAxis_X)
+    {
+        ScrollLimit = -(Context->ContentSize.X - Context->ContentWindowSize.X);
+    } else
+    if (Context->Axis == ScrollAxis_Y)
+    {
+        ScrollLimit = -(Context->ContentSize.Y - Context->ContentWindowSize.Y);
+    }
+
+    Assert(ScrollLimit <= 0.f);
+
+    Context->ScrollOffset += ScrolledPixels;
+    Context->ScrollOffset  = ClampTop(ClampBot(ScrollLimit, Context->ScrollOffset), 0);
+}
+
+internal vec2_f32
+GetScrollNodeTranslation(ui_layout_node *Node)
+{
+    ui_scroll_context *Context = Node->Value.ScrollContext;
+    Assert(Context);
+
+    vec2_f32 Result = Vec2F32(0.f, 0.f);
+
+    if (Context->Axis == ScrollAxis_X)
+    {
+        Result = Vec2F32(Context->ScrollOffset, 0.f);
+    } else
+    if (Context->Axis == ScrollAxis_Y)
+    {
+        Result = Vec2F32(0.f, Context->ScrollOffset);
+    }
+
+    return Result;
+}
+
+internal void
+UpdateScrollNode(ui_layout_node *Node)
+{
+    ui_scroll_context *Context = Node->Value.ScrollContext;
+    Assert(Context);
+
+    rect_f32 WindowBounds = GetScrollWindowBound(Vec2F32(Node->Value.FinalX, Node->Value.FinalY), Context);
+
+    IterateLinkedList(Node, ui_layout_node *, Child)
+    {
+        if(Child->Value.Display != UIDisplay_None)
+        {
+            if (Child->Value.FinalWidth > 0.0f || Child->Value.FinalHeight > 0.0f) 
+            {
+                f32 ChildMinX   = Child->Value.FinalX;
+                f32 ChildMinY   = Child->Value.FinalY;
+                f32 ChildWidth  = Child->Value.FinalWidth;
+                f32 ChildHeight = Child->Value.FinalHeight;
+
+                rect_f32 ChildRect = RectF32(ChildMinX, ChildMinY, ChildWidth, ChildHeight);
+
+                if (RectsIntersect(WindowBounds, ChildRect))
+                {
+                    ClearFlag(Child->Flags, UILayoutNode_DoNotDraw);
+                }
+                else
+                {
+                    SetFlag(Child->Flags, UILayoutNode_DoNotDraw);
+                }
+            }
+        }
+    }
+
+}
+
+// -----------------------------------------------------------
 // UI Event Internal Implementation
 
 typedef enum UIEvent_Type
@@ -374,6 +478,7 @@ typedef enum UIEvent_Type
     UIEvent_Click  = 1 << 1,
     UIEvent_Resize = 1 << 2,
     UIEvent_Drag   = 1 << 3,
+    UIEvent_Scroll = 1 << 4,
 } UIEvent_Type;
 
 typedef struct ui_hover_event
@@ -403,8 +508,7 @@ typedef struct ui_drag_event
 
 typedef struct ui_scroll_event
 {
-    ui_layout_tree *Tree;
-    ui_node         Node;
+    ui_layout_node *Node;
     f32             Delta;
 } ui_scroll_event;
 
@@ -459,6 +563,13 @@ RecordUIHoverEvent(ui_layout_node *Node, ui_subtree *Subtree)
 }
 
 internal void
+RecordUIScrollEvent(ui_layout_node *Node, f32 Delta, ui_subtree *Subtree)
+{
+    ui_event Event = {.Type = UIEvent_Scroll, .Scroll.Node = Node, .Scroll.Delta = Delta};
+    RecordUIEvent(Event, Subtree);
+}
+
+internal void
 ProcessEventList(ui_event_list *Events)
 {
     Assert(Events);
@@ -487,6 +598,16 @@ ProcessEventList(ui_event_list *Events)
 
         case UIEvent_Drag:
         {
+        } break;
+
+        case UIEvent_Scroll:
+        {
+            ui_scroll_event Scroll = Event->Scroll;
+            Assert(Scroll.Node);
+            Assert(Scroll.Delta);
+
+            ScrollNode(Scroll.Delta, Scroll.Node);
+            UpdateScrollNode(Scroll.Node);
         } break;
 
         }
@@ -678,13 +799,14 @@ FindHitNode(vec2_f32 MousePosition, ui_layout_node *Root, ui_subtree *Subtree)
         {
         }
 
-        // NOTE: What should be the conditions here?
+        // NOTE: What should be the conditions here? Probably depends on the capture?
         {
             RecordUIHoverEvent(Root, Subtree);
         }
 
         if(HasFlag(Root->Flags, UILayoutNode_IsScrollable) && ScrollDelta != 0.f)
         {
+            RecordUIScrollEvent(Root, ScrollDelta, Subtree);
         }
     }
 
@@ -1175,8 +1297,7 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
             {
                 if (HasFlag(Frame.Node->Flags, UILayoutNode_IsScrollable))
                 {
-                    PruneScrollContextNodes(Frame.Node);
-                    vec2_f32 NodeScroll = GetScrollTranslation(Frame.Node);
+                    vec2_f32 NodeScroll = GetScrollNodeTranslation(Frame.Node);
 
                     ChildAccScroll.X += NodeScroll.X;
                     ChildAccScroll.Y += NodeScroll.Y;
@@ -1547,116 +1668,6 @@ FindNodeById(byte_string Id, ui_node_id_table *Table)
     else
     {
         ConsoleWriteMessage(warn_message("Invalid Arguments Provided. See ui/layout.h for information."));
-    }
-
-    return Result;
-}
-
-// [Scrolling]
-
-internal void
-ApplyScrollToContext(f32 ScrollDeltaInLines, ui_scroll_context *Scroll)
-{
-    f32 ScrolledPixels = ScrollDeltaInLines * Scroll->PixelPerLine;
-
-    f32 ScrollLimit = 0.f;
-    if (Scroll->Axis == ScrollAxis_X)
-    {
-        ScrollLimit = -(Scroll->ContentSize.X - Scroll->ContentWindowSize.X);
-    } else
-    if (Scroll->Axis == ScrollAxis_Y)
-    {
-        ScrollLimit = -(Scroll->ContentSize.Y - Scroll->ContentWindowSize.Y);
-    }
-
-    Assert(ScrollLimit <= 0.f);
-
-    Scroll->ScrollOffset += ScrolledPixels;
-
-    if(Scroll->ScrollOffset < ScrollLimit)
-    {
-        Scroll->ScrollOffset = ScrollLimit;
-    }
-    else if(Scroll->ScrollOffset > 0.f)
-    {
-        Scroll->ScrollOffset = 0.f;
-    }
-}
-
-internal void
-PruneScrollContextNodes(ui_layout_node *Node)
-{
-    ui_scroll_context *Context = Node->Value.ScrollContext;
-    Assert(Context);
-
-    f32 MinX   = Node->Value.FinalX;
-    f32 MinY   = Node->Value.FinalY; 
-    f32 Width  = Context->ContentWindowSize.X;
-    f32 Height = Context->ContentWindowSize.Y;
-    if (Context->Axis == ScrollAxis_X)
-    {
-        MinX -= Context->ScrollOffset;
-    }
-    else if (Context->Axis == ScrollAxis_Y)
-    {
-        MinY -= Context->ScrollOffset;
-    }
-
-    rect_f32 ContentWindowBounds = RectF32(MinX, MinY, Width, Height);
-
-    // WARN: 
-    // This only checks first childrens. So if we have absolute nodes/animations, this will fail.
-    // Only draws things that are fully inside? (This shouldn't be the case right? Since only one of the point's rect must be inside
-    // This could probably be faster with some dirty state logic and greedy pruning, this fully iterates the list every frame
-    // which is okay for now.
-
-    // TODO: Simplify this code, after we have added the display code.
-
-    IterateLinkedList(Node, ui_layout_node *, Child)
-    {
-        rect_f32 ChildRect;
-        if (Child->Value.FinalWidth > 0.0f || Child->Value.FinalHeight > 0.0f) 
-        {
-            f32 ChildMinX   = Child->Value.FinalX;
-            f32 ChildMinY   = Child->Value.FinalY;
-            f32 ChildWidth  = Child->Value.FinalWidth;
-            f32 ChildHeight = Child->Value.FinalHeight;
-
-            ChildRect = RectF32(ChildMinX, ChildMinY, ChildWidth, ChildHeight);
-        } else
-        {
-            f32 PointX = Child->Value.FinalX;
-            f32 PointY = Child->Value.FinalY;
-
-            ChildRect = RectF32(PointX, PointY, 1.f, 1.f);
-        }
-
-        if (RectsIntersect(ContentWindowBounds, ChildRect))
-        {
-            ClearFlag(Child->Flags, UILayoutNode_DoNotDraw);
-        }
-        else
-        {
-            SetFlag(Child->Flags, UILayoutNode_DoNotDraw);
-        }
-    }
-}
-
-internal vec2_f32
-GetScrollTranslation(ui_layout_node *Node)
-{
-    vec2_f32 Result = Vec2F32(0.f, 0.f);
-
-    ui_scroll_context *Context = Node->Value.ScrollContext;
-    Assert(Context);
-
-    if (Context->Axis == ScrollAxis_X)
-    {
-        Result = Vec2F32(Context->ScrollOffset, 0.f);
-    } else
-    if (Context->Axis == ScrollAxis_Y)
-    {
-        Result = Vec2F32(0.f, Context->ScrollOffset);
     }
 
     return Result;

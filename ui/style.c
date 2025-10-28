@@ -78,6 +78,13 @@ UIGetFont(style_property Properties[StyleProperty_Count])
     return Result;
 }
 
+internal UIDisplay_Type
+UIGetDisplay(style_property Properties[StyleProperty_Count])
+{
+    UIDisplay_Type Result = Properties[StyleProperty_Display].Enum;
+    return Result;
+}
+
 // --------------------------------------------------------------------------------------------------
 // Style Manipulation Internal API
 
@@ -111,6 +118,16 @@ GetCachedStyle(u32 Index, ui_style_registry *Registry)
 // Style Manipulation Public API
 
 internal void
+UISetDisplay(ui_node Node, UIDisplay_Type Display, ui_subtree *Subtree)
+{
+    Assert(Node.CanUse);
+    Assert(Subtree);
+
+    style_property Property = {.Type = StyleProperty_Display, .Enum = Display};
+    SetStyleProperty(Node, Property, StyleState_Basic, Subtree);
+}
+
+internal void
 UISetTextColor(ui_node Node, ui_color Color, ui_subtree *Subtree)
 {
     Assert(Node.CanUse);
@@ -118,6 +135,15 @@ UISetTextColor(ui_node Node, ui_color Color, ui_subtree *Subtree)
 
     style_property Property = {.Type = StyleProperty_TextColor, .Color = Color};
     SetStyleProperty(Node, Property, StyleState_Basic, Subtree);
+}
+
+internal u32
+ResolveCachedIndex(u32 Index)
+{
+    Assert(Index);
+
+    u32 Result = Index - 1;
+    return Result;
 }
 
 //
@@ -138,8 +164,13 @@ GetNodeStyle(u32 Index, ui_subtree *Subtree)
 internal style_property *
 GetCachedProperties(u32 StyleIndex, StyleState_Type State, ui_style_registry *Registry)
 {
+    Assert(StyleIndex);
+    Assert(StyleIndex <= Registry->StylesCount);
+
     style_property  *Result = 0;
-    ui_cached_style *Cached = GetCachedStyle(StyleIndex, Registry);
+
+    u32              ResolvedIndex = ResolveCachedIndex(StyleIndex);
+    ui_cached_style *Cached        = GetCachedStyle(ResolvedIndex, Registry);
 
     if(Cached)
     {

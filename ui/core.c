@@ -82,11 +82,25 @@ GetNodeChain(void)
 }
 
 internal ui_node_chain *
-SetTextColorInChain(ui_color Color)
+SetNodeDisplayInChain(UIDisplay_Type Type)
 {
     ui_node_chain *Result = GetNodeChain();
     Assert(Result);
     Assert(Result->Subtree);
+    Assert(Result->Node.CanUse);
+
+    UISetDisplay(Result->Node, Type, Result->Subtree);
+
+    return Result;
+}
+
+internal ui_node_chain *
+SetNodeTextColorInChain(ui_color Color)
+{
+    ui_node_chain *Result = GetNodeChain();
+    Assert(Result);
+    Assert(Result->Subtree);
+    Assert(Result->Node.CanUse);
 
     UISetTextColor(Result->Node, Color, Result->Subtree);
 
@@ -94,7 +108,7 @@ SetTextColorInChain(ui_color Color)
 }
 
 internal ui_node_chain *
-SetStyleInChain(u32 StyleIndex)
+SetNodeStyleInChain(u32 StyleIndex)
 {
     ui_node_chain *Result = GetNodeChain();
     Assert(Result);
@@ -110,7 +124,7 @@ SetStyleInChain(u32 StyleIndex)
 }
 
 internal ui_node_chain *
-FindChildInChain(u32 Index)
+FindNodeChildInChain(u32 Index)
 {
     ui_node_chain *Result = GetNodeChain();
     Assert(Result);
@@ -124,7 +138,7 @@ FindChildInChain(u32 Index)
 }
 
 internal ui_node_chain *
-ReserveChildrenInChain(u32 Amount)
+ReserveNodeChildrenInChain(u32 Amount)
 {
     ui_node_chain *Result = GetNodeChain();
     Assert(Result);
@@ -182,10 +196,11 @@ UIChain(ui_node Node)
     Result->Node            = Node;
     Result->Subtree         = Subtree;
     Result->Prev            = Current;
-    Result->SetTextColor    = SetTextColorInChain;
-    Result->SetStyle        = SetStyleInChain;
-    Result->FindChild       = FindChildInChain;
-    Result->ReserveChildren = ReserveChildrenInChain;
+    Result->SetDisplay      = SetNodeDisplayInChain;
+    Result->SetTextColor    = SetNodeTextColorInChain;
+    Result->SetStyle        = SetNodeStyleInChain;
+    Result->FindChild       = FindNodeChildInChain;
+    Result->ReserveChildren = ReserveNodeChildrenInChain;
     Result->SetId           = SetNodeIdInChain;
 
     GetCurrentPipeline()->Chain = Result;

@@ -2,9 +2,9 @@
 
 typedef enum ConsoleStyle_Type
 {
-    ConsoleStyle_Window      = 0,
-    ConsoleStyle_MessageView = 1,
-    ConsoleStyle_Message     = 2,
+    ConsoleStyle_Window      = 1,
+    ConsoleStyle_MessageView = 2,
+    ConsoleStyle_Message     = 3,
 } ConsoleStyle_Type;
 
 typedef enum ConsoleConstant_Type

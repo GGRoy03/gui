@@ -164,6 +164,18 @@ InsetRectF32(rect_f32 Rect, f32 Size)
     return Result;
 }
 
+internal rect_f32
+TranslateRectF32(rect_f32 Rect, vec2_f32 Translation)
+{
+    rect_f32 Result;
+    Result.Min.X = Rect.Min.X + Translation.X;
+    Result.Min.Y = Rect.Min.Y + Translation.Y;
+    Result.Max.X = Rect.Max.X + Translation.X;
+    Result.Max.Y = Rect.Max.Y + Translation.Y;
+
+    return Result;
+}
+
 // [Vector OPs]
 
 internal vec2_f32

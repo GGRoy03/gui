@@ -40,11 +40,12 @@ typedef struct ui_parent_stack
 typedef struct ui_layout_box
 {
     // Output
-    f32 FinalX;
-    f32 FinalY;
-    f32 FinalWidth;
-    f32 FinalHeight;
+    rect_f32 OuterBox;   // Box not accounting for border-width and padding
+    rect_f32 InnerBox;   // Box not accounting for padding
+    rect_f32 ContentBox; // Where children are placed.
+
     // Layout Info
+    f32            BorderWidth;
     ui_unit        Width;
     ui_unit        Height;
     ui_spacing     Spacing;
@@ -86,19 +87,68 @@ typedef struct ui_layout_tree
 } ui_layout_tree;
 
 internal vec2_f32
-GetInnerBoxSize(ui_layout_box *Box)
+GetContentBoxSize(ui_layout_box *Box)
 {
-    vec2_f32 Result = Vec2F32(Box->FinalWidth - (Box->Padding.Left + Box->Padding.Right), Box->FinalHeight - (Box->Padding.Top + Box->Padding.Bot));
+    vec2_f32 Result;
+    Result.X = Box->ContentBox.Max.X - Box->ContentBox.Min.X;
+    Result.Y = Box->ContentBox.Max.Y - Box->ContentBox.Min.Y;
+
     return Result;
 }
 
-internal rect_f32
-MakeRectFromNode(ui_layout_node *Node, vec2_f32 Translation)
+internal vec2_f32
+GetContentBoxPosition(ui_layout_box *Box)
 {
-    rect_f32 NodeRect = RectF32(Node->Value.FinalX, Node->Value.FinalY, Node->Value.FinalWidth, Node->Value.FinalHeight);
-    rect_f32 Result   = TranslatedRectF32(NodeRect, Translation);
+    vec2_f32 Result = Vec2F32(Box->ContentBox.Min.X, Box->ContentBox.Min.Y);
+    return Result;
+}
+
+internal vec2_f32
+GetOuterBoxSize(ui_layout_box *Box)
+{
+    vec2_f32 Result;
+    Result.X = Box->OuterBox.Max.X - Box->OuterBox.Min.X;
+    Result.Y = Box->OuterBox.Max.Y - Box->OuterBox.Min.Y;
 
     return Result;
+}
+
+internal vec2_f32
+GetOuterBoxPosition(ui_layout_box *Box)
+{
+    vec2_f32 Result = Vec2F32(Box->OuterBox.Min.X, Box->OuterBox.Min.Y);
+    return Result;
+}
+
+internal vec2_f32
+GetInnerBoxSize(ui_layout_box *Box)
+{
+    vec2_f32 Result;
+    Result.X = Box->InnerBox.Max.X - Box->InnerBox.Min.X;
+    Result.Y = Box->InnerBox.Max.Y - Box->InnerBox.Min.Y;
+
+    return Result;
+}
+
+internal vec2_f32
+GetInnerBoxPosition(ui_layout_box *Box)
+{
+    vec2_f32 Result = Vec2F32(Box->InnerBox.Min.X, Box->InnerBox.Min.Y);
+    return Result;
+}
+
+internal void
+ComputeNodeBoxes(ui_layout_node *Node, f32 Width, f32 Height)
+{
+    ui_layout_box *Box = &Node->Value;
+
+    Box->OuterBox = RectF32(0.f, 0.f, Width, Height);
+    Box->InnerBox = InsetRectF32(Box->OuterBox, Box->BorderWidth);
+
+    Box->ContentBox.Min.X = Box->InnerBox.Min.X + Box->Padding.Left;
+    Box->ContentBox.Min.Y = Box->InnerBox.Min.Y + Box->Padding.Top;
+    Box->ContentBox.Max.X = Box->InnerBox.Max.X - Box->Padding.Right;
+    Box->ContentBox.Max.Y = Box->InnerBox.Max.Y - Box->Padding.Bot;
 }
 
 internal b32 
@@ -201,7 +251,7 @@ PopParentStack(ui_parent_stack *Stack)
 }
 
 internal ui_layout_node *
-CreateAndInsertLayoutNode(ui_subtree *Subtree, bit_field Flags)
+CreateAndInsertLayoutNode(bit_field Flags, ui_subtree *Subtree)
 {
     Assert(Subtree);
 
@@ -237,6 +287,7 @@ CreateAndInsertLayoutNode(ui_subtree *Subtree, bit_field Flags)
 
     return Result;
 }
+
 
 // -------------------------------------------------------------
 // Tree/Node Public API Implementation
@@ -319,7 +370,8 @@ ReserveLayoutChildren(ui_node Node, u32 Amount, ui_subtree *Subtree)
 
     for(u32 Idx = 0; Idx < Amount; ++Idx)
     {
-        AllocateUINode(0, Subtree);
+        ui_layout_node *Node = CreateAndInsertLayoutNode(0, Subtree);
+        Node->Value.Display = UIDisplay_None;
     }
 
     if(NeedPush)
@@ -335,7 +387,7 @@ AllocateUINode(bit_field Flags, ui_subtree *Subtree)
 
     ui_node Result = {.CanUse = 0};
 
-    ui_layout_node *Node = CreateAndInsertLayoutNode(Subtree, Flags);
+    ui_layout_node *Node = CreateAndInsertLayoutNode(Flags, Subtree);
     if (Node)
     {
         Result = (ui_node){ .IndexInTree = Node->Index, .SubtreeId = Subtree->Id, .CanUse = 1 };
@@ -368,6 +420,15 @@ UIEnd()
 // -----------------------------------------------------------
 // UI Scrolling Internal Implementation
 
+internal void
+SetNodeScrollWindowSize(ui_layout_node *Node)
+{
+    ui_scroll_context *Context = Node->Value.ScrollContext;
+    Assert(Context);
+
+    Context->ContentWindowSize = GetContentBoxSize(&Node->Value);
+}
+
 internal rect_f32
 GetScrollWindowBound(vec2_f32 TopLeft, ui_scroll_context *Context)
 {
@@ -375,6 +436,7 @@ GetScrollWindowBound(vec2_f32 TopLeft, ui_scroll_context *Context)
     f32 MinY   = TopLeft.Y; 
     f32 Width  = Context->ContentWindowSize.X;
     f32 Height = Context->ContentWindowSize.Y;
+
     if (Context->Axis == ScrollAxis_X)
     {
         MinX -= Context->ScrollOffset;
@@ -391,8 +453,6 @@ GetScrollWindowBound(vec2_f32 TopLeft, ui_scroll_context *Context)
 internal void
 ScrollNode(f32 ScrollDelta, ui_layout_node *Node)
 {
-    // NOTE: I think this should be some sort of resource?
-
     ui_scroll_context *Context = Node->Value.ScrollContext;
     Assert(Context);
 
@@ -440,22 +500,18 @@ UpdateScrollNode(ui_layout_node *Node)
     ui_scroll_context *Context = Node->Value.ScrollContext;
     Assert(Context);
 
-    rect_f32 WindowBounds = GetScrollWindowBound(Vec2F32(Node->Value.FinalX, Node->Value.FinalY), Context);
+    vec2_f32 ContentPos   = GetContentBoxPosition(&Node->Value);
+    rect_f32 WindowBounds = GetScrollWindowBound(ContentPos, Context);
 
     IterateLinkedList(Node, ui_layout_node *, Child)
     {
         if(Child->Value.Display != UIDisplay_None)
         {
-            if (Child->Value.FinalWidth > 0.0f || Child->Value.FinalHeight > 0.0f) 
+            vec2_f32 ContentSize = GetContentBoxSize(&Node->Value);
+
+            if (ContentSize.X > 0.0f && ContentSize.Y > 0.0f) 
             {
-                f32 ChildMinX   = Child->Value.FinalX;
-                f32 ChildMinY   = Child->Value.FinalY;
-                f32 ChildWidth  = Child->Value.FinalWidth;
-                f32 ChildHeight = Child->Value.FinalHeight;
-
-                rect_f32 ChildRect = RectF32(ChildMinX, ChildMinY, ChildWidth, ChildHeight);
-
-                if (RectsIntersect(WindowBounds, ChildRect))
+                if (RectsIntersect(WindowBounds, Node->Value.ContentBox))
                 {
                     ClearFlag(Child->Flags, UILayoutNode_DoNotDraw);
                 }
@@ -674,10 +730,18 @@ PopDrawStack(draw_stack *Stack)
     return Result;
 }
 
+// WARN: There is an edge case where if we set a value at runtime before this is first called
+// on the node, then the runtime value is lost. I am unsure if we should hard prevent this
+// or assume it as being an implicit behavior? There is one case where we directly touch the
+// node's value... Perhaps we should have a default invisible style as the 0 index?
+// Meaning I wouldn't even need to directly touch the node? Still unsunre.
+
 internal void
 EnsureNodeStyle(ui_layout_node *Node, ui_subtree *Subtree)
 {
     ui_node_style *Style = GetNodeStyle(Node->Index, Subtree);
+
+    if(Style->CachedStyleIndex != InvalidCachedStyleIndex)
     {
         Assert(Style);
 
@@ -693,15 +757,24 @@ EnsureNodeStyle(ui_layout_node *Node, ui_subtree *Subtree)
         MemoryCopy(Style->Properties[StyleState_Basic], Basic, sizeof(style_property) * StyleProperty_Count);
         MemoryCopy(Style->Properties[StyleState_Hover], Hover, sizeof(style_property) * StyleProperty_Count);
 
+        // Set Basic Layout Info
         {
-            vec2_unit  Size    = UIGetSize(Basic);
-            ui_spacing Spacing = UIGetSpacing(Basic);
-            ui_padding Padding = UIGetPadding(Basic);
+            // WARN: What happens if one hover I set the border width to X.
+            // That is not reflected by the layout then...
 
-            Node->Value.Width   = Size.X;
-            Node->Value.Height  = Size.Y;
-            Node->Value.Padding = Padding;
-            Node->Value.Spacing = Spacing;
+            f32            BorderWidth = UIGetBorderWidth(Basic);
+            vec2_unit      Size        = UIGetSize(Basic);
+            ui_spacing     Spacing     = UIGetSpacing(Basic);
+            ui_padding     Padding     = UIGetPadding(Basic);
+            UIDisplay_Type Display     = UIGetDisplay(Basic);
+
+
+            Node->Value.BorderWidth = BorderWidth;
+            Node->Value.Width       = Size.X;
+            Node->Value.Height      = Size.Y;
+            Node->Value.Padding     = Padding;
+            Node->Value.Spacing     = Spacing;
+            Node->Value.Display     = Display;
         }
 
         Style->LayoutInfoIsBound = 1;
@@ -711,13 +784,14 @@ EnsureNodeStyle(ui_layout_node *Node, ui_subtree *Subtree)
 internal b32 
 FindHitNode(vec2_f32 MousePosition, ui_layout_node *Root, ui_subtree *Subtree)
 {
-    ui_layout_box *Box = &Root->Value;
-
     f32 MouseIsOutsideHitbox = 1.f;
     {
+        vec2_f32 OuterSize = GetOuterBoxSize(&Root->Value);
+        vec2_f32 OuterPos  = GetOuterBoxPosition(&Root->Value);
+
         rect_sdf_params Params = {0};
-        Params.HalfSize      = Vec2F32(Box->FinalWidth * 0.5f, Box->FinalHeight * 0.5f);
-        Params.PointPosition = Vec2F32Sub(MousePosition, Vec2F32Add(Vec2F32(Box->FinalX, Box->FinalY), Params.HalfSize));
+        Params.HalfSize      = Vec2F32(OuterSize.X * 0.5f, OuterSize.Y * 0.5f);
+        Params.PointPosition = Vec2F32Sub(MousePosition, Vec2F32Add(OuterPos, Params.HalfSize));
 
         MouseIsOutsideHitbox = RoundedRectSDF(Params);
     }
@@ -745,28 +819,28 @@ FindHitNode(vec2_f32 MousePosition, ui_layout_node *Root, ui_subtree *Subtree)
             // I do not think I care about the cursor. I'll let the user control it.
             // So I do not care about intent, but rather, capture is what I am looking for.
 
+            vec2_f32 InnerSize = GetInnerBoxSize(&Root->Value);
+            vec2_f32 InnerPos  = GetInnerBoxPosition(&Root->Value);
+
             f32 MouseIsOutsideBorder = 1.f;
             {
                 // TODO: I'm pretty sure some of these parameters are wrong...
-                // Should the local position be computed from the full half size?
                 // What should the radius be given that the 4 corners could be different values?
-
-                vec2_f32 BorderVector = Vec2F32(0.f, 0.f);
 
                 rect_sdf_params Params = {0};
                 Params.Radius        = 0.f;
-                Params.HalfSize      = Vec2F32Sub(Vec2F32(Box->FinalWidth * 0.5f, Box->FinalHeight * 0.5f), BorderVector);
-                Params.PointPosition = Vec2F32Sub(MousePosition, Vec2F32Add(Vec2F32(Box->FinalX, Box->FinalY), Params.HalfSize));
+                Params.HalfSize      = Vec2F32(InnerSize.X * 0.5f, InnerSize.Y * 0.5f);
+                Params.PointPosition = Vec2F32Sub(MousePosition, Vec2F32Add(InnerPos, Params.HalfSize));
 
                 MouseIsOutsideBorder = RoundedRectSDF(Params);
             }
 
             if(!MouseIsOutsideBorder)
             {
-                f32 Left   = Box->FinalX;
-                f32 Top    = Box->FinalY;
-                f32 Width  = Box->FinalWidth;
-                f32 Height = Box->FinalHeight;
+                f32 Left   = InnerPos.X;
+                f32 Top    = InnerPos.Y;
+                f32 Width  = InnerSize.X;
+                f32 Height = InnerSize.Y;
 
                 f32 CornerTolerance = 5.f;
                 f32 CornerX         = Left + Width  - CornerTolerance;
@@ -813,36 +887,6 @@ FindHitNode(vec2_f32 MousePosition, ui_layout_node *Root, ui_subtree *Subtree)
     return 0;
 }
 
-// NOTE: These two must be moved. Move to the event system.
-
-internal void
-DragUISubtree(vec2_f32 Delta, ui_layout_node *Node, ui_pipeline *Pipeline)
-{
-    Assert(Delta.X != 0.f || Delta.Y != 0.f);
-
-    // NOTE: Should we allow this mutation? It does work...
-
-    Node->Value.FinalX += Delta.X;
-    Node->Value.FinalY += Delta.Y;
-
-    for (ui_layout_node *Child = Node->First; Child != 0; Child = Child->Next)
-    {
-        DragUISubtree(Delta, Child, Pipeline);
-    }
-}
-
-internal void
-ResizeUISubtree(vec2_f32 Delta, ui_layout_node *Node, ui_pipeline *Pipeline)
-{
-    Assert(Node->Value.Width.Type  != UIUnit_Percent);
-    Assert(Node->Value.Height.Type != UIUnit_Percent);
-
-    // NOTE: Should we allow this mutation? It does work...
-
-    Node->Value.Width.Float32  += Delta.X;
-    Node->Value.Height.Float32 += Delta.Y;
-}
-
 DEFINE_TYPED_QUEUE(Node, node, ui_layout_node *);
 
 internal void
@@ -865,21 +909,22 @@ PreOrderPlace(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
             ui_layout_node *Node = PopNodeQueue(&Queue);
             ui_layout_box  *Box  = &Node->Value;
 
-            f32 CursorX = Box->FinalX + Box->Padding.Left;
-            f32 CursorY = Box->FinalY + Box->Padding.Top;
+            vec2_f32 ContentPos  = GetContentBoxPosition(Box);
+            vec2_f32 ContentSize = GetContentBoxSize(Box);
 
-            f32 MaxCursorX = CursorX + Box->FinalWidth;
-            f32 MaxCursorY = CursorY + Box->FinalHeight;
+            vec2_f32 Cursor    = ContentPos;
+            vec2_f32 MaxCursor = Vec2F32Add(Cursor, ContentSize);
+
             if(HasFlag(Node->Flags, UILayoutNode_IsScrollable))
             {
                 ui_scroll_context *Scroll = Box->ScrollContext;
                 if(Scroll->Axis == ScrollAxis_X)
                 {
-                    MaxCursorX = FLT_MAX;
+                    MaxCursor.X = FLT_MAX;
                 }
                 else
                 {
-                    MaxCursorY = FLT_MAX;
+                    MaxCursor.Y = FLT_MAX;
                 }
             }
 
@@ -887,16 +932,17 @@ PreOrderPlace(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
             {
                 IterateLinkedList(Node, ui_layout_node *, Child)
                 {
-                    f32 Width = Child->Value.FinalWidth + Box->Spacing.Horizontal;
-                    if(CursorX + Width > MaxCursorX)
+                    Child->Value.OuterBox   = TranslateRectF32(Child->Value.OuterBox, Cursor);
+                    Child->Value.InnerBox   = TranslateRectF32(Child->Value.InnerBox, Cursor);
+                    Child->Value.ContentBox = TranslateRectF32(Child->Value.ContentBox, Cursor);
+
+                    vec2_f32 ChildSize = GetOuterBoxSize(&Child->Value);
+
+                    Cursor.X += ChildSize.X + Box->Spacing.Horizontal;
+                    if(Cursor.X > MaxCursor.X)
                     {
                         break;
                     }
-
-                    Child->Value.FinalX = CursorX;
-                    Child->Value.FinalY = CursorY;
-
-                    CursorX += Width;
 
                     PushNodeQueue(&Queue, Child);
                 }
@@ -906,16 +952,17 @@ PreOrderPlace(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
             {
                 IterateLinkedList(Node, ui_layout_node *, Child)
                 {
-                    Child->Value.FinalX = CursorX;
-                    Child->Value.FinalY = CursorY;
+                    Child->Value.OuterBox   = TranslateRectF32(Child->Value.OuterBox, Cursor);
+                    Child->Value.InnerBox   = TranslateRectF32(Child->Value.InnerBox, Cursor);
+                    Child->Value.ContentBox = TranslateRectF32(Child->Value.ContentBox, Cursor);
 
-                    f32 Height = Child->Value.FinalHeight + Box->Spacing.Vertical;
-                    if(CursorY + Height > MaxCursorY)
+                    vec2_f32 ChildSize = GetOuterBoxSize(&Child->Value);
+
+                    Cursor.Y += ChildSize.Y + Box->Spacing.Vertical;
+                    if(Cursor.Y >= MaxCursor.Y)
                     {
                         break;
                     }
-
-                    CursorY += Height;
 
                     PushNodeQueue(&Queue, Child);
                 }
@@ -932,8 +979,8 @@ PreOrderPlace(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
 
                 u32 FilledLine = 0.f;
                 f32 LineWidth  = 0.f;
-                f32 LineStartX = CursorX;
-                f32 LineStartY = CursorY;
+                f32 LineStartX = Cursor.X;
+                f32 LineStartY = Cursor.Y;
 
                 for(u32 Idx = 0; Idx < Run->GlyphCount; ++Idx)
                 {
@@ -944,7 +991,7 @@ PreOrderPlace(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
 
                     AlignGlyph(GlyphPosition, Glyph);
 
-                    if(LineWidth + GlyphWidth > Box->FinalWidth)
+                    if(LineWidth + GlyphWidth > ContentSize.X)
                     {
                         if(LineWidth > 0.f)
                         {
@@ -979,6 +1026,12 @@ PreOrderMeasure(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
 
     if(Queue.Data)
     {
+        EnsureNodeStyle(Root, Subtree);
+        Assert(Root->Value.Width.Type  == UIUnit_Float32);
+        Assert(Root->Value.Height.Type == UIUnit_Float32);
+
+        ComputeNodeBoxes(Root, Root->Value.Width.Float32, Root->Value.Height.Float32);
+
         PushNodeQueue(&Queue, Root);
 
         while (!IsNodeQueueEmpty(&Queue))
@@ -986,38 +1039,12 @@ PreOrderMeasure(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
             ui_layout_node *Node = PopNodeQueue(&Queue);
             Assert(Node);
 
-            ui_node_style *Style = GetNodeStyle(Node->Index, Subtree);
-            Assert(Style);
+            ui_layout_box *Box     = &Node->Value;
+            vec2_f32       AvSpace = GetContentBoxSize(Box);
 
-            if(!Node->Parent)
+            if(HasFlag(Node->Flags, UILayoutNode_IsScrollable))
             {
-                EnsureNodeStyle(Node, Subtree);
-
-                Assert(Node->Value.Width.Type  == UIUnit_Float32);
-                Assert(Node->Value.Height.Type == UIUnit_Float32);
-                Node->Value.FinalWidth  = Node->Value.Width.Float32;
-                Node->Value.FinalHeight = Node->Value.Height.Float32;
-            }
-
-            ui_layout_box *Box = &Node->Value;
-
-            f32 AvWidth  = Box->FinalWidth  - (Box->Padding.Left + Box->Padding.Right);
-            f32 AvHeight = Box->FinalHeight - (Box->Padding.Top  + Box->Padding.Bot);
-
-            if (HasFlag(Node->Flags, UILayoutNode_IsScrollable))
-            {
-                Assert(Box->ScrollContext);
-                ui_scroll_context *Scroll = Box->ScrollContext;
-                if (Scroll->Axis == ScrollAxis_X)
-                {
-                    AvWidth = FLT_MAX;
-                }
-                else if (Scroll->Axis == ScrollAxis_Y)
-                {
-                    AvHeight = FLT_MAX;
-                }
-
-                Scroll->ContentWindowSize = GetInnerBoxSize(Box);
+                SetNodeScrollWindowSize(Node);
             }
 
             IterateLinkedList(Node, ui_layout_node *, Child)
@@ -1025,8 +1052,17 @@ PreOrderMeasure(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
                 EnsureNodeStyle(Child, Subtree);
 
                 Box = &Child->Value;
-                Box->FinalWidth  = ConvertUnitToFloat(Box->Width , AvWidth );
-                Box->FinalHeight = ConvertUnitToFloat(Box->Height, AvHeight);
+
+                if(Box->Display != UIDisplay_None)
+                {
+                    f32 Width  = ConvertUnitToFloat(Box->Width , AvSpace.X);
+                    f32 Height = ConvertUnitToFloat(Box->Height, AvSpace.Y);
+                    ComputeNodeBoxes(Child, Width, Height);
+                }
+                else
+                {
+                    // NOTE: Unsure what to do then?
+                }
 
                 PushNodeQueue(&Queue, Child);
             }
@@ -1061,7 +1097,7 @@ PostOrderMeasure(ui_layout_node *Root, ui_subtree *Subtree)
             if(Parent)
             {
                 // TODO: Unsure how we want to handle height?
-                InnerAvWidth = GetInnerBoxSize(&Parent->Value).X;
+                InnerAvWidth = GetInnerBoxSize(&Parent->Value).X; // NOTE: What is that? Seems wrong.
             }
         }
 
@@ -1093,16 +1129,10 @@ PostOrderMeasure(ui_layout_node *Root, ui_subtree *Subtree)
 
         if(Box->Width.Type == UIUnit_Auto)
         {
-            if(LineWrapCount == 0)
-            {
-                Box->FinalWidth = LineWidth;
-            }
-            else
-            {
-                Box->FinalWidth = InnerAvWidth;
-            }
+            f32 Width  = (LineWrapCount == 0) ? LineWidth : InnerAvWidth;
+            f32 Height = (LineWrapCount + 1) * Run->LineHeight;
 
-            Box->FinalHeight = (LineWrapCount + 1) * Run->LineHeight;
+            ComputeNodeBoxes(Root, Width, Height);
         }
     }
 
@@ -1118,28 +1148,49 @@ PostOrderMeasure(ui_layout_node *Root, ui_subtree *Subtree)
         f32 MaxWidth    = 0.f;
         f32 MaxHeight   = 0.f;
 
+        u32 VisibleCount = 0;
+
         IterateLinkedList(Root, ui_layout_node *, Child)
         {
-            TotalWidth  += Child->Value.FinalWidth;
-            TotalHeight += Child->Value.FinalHeight;
-
-            if (Child->Value.FinalWidth > MaxWidth)
+            if(Child->Value.Display != UIDisplay_None)
             {
-                MaxWidth = Child->Value.FinalWidth;
-            }
+                vec2_f32 ChildSize = GetOuterBoxSize(&Child->Value);
+                TotalWidth  += ChildSize.X;
+                TotalHeight += ChildSize.Y;
 
-            if (Child->Value.FinalHeight > MaxHeight)
-            {
-                MaxHeight = Child->Value.FinalHeight;
+                if (ChildSize.X > MaxWidth)
+                {
+                    MaxWidth = ChildSize.X;
+                }
+
+                if (ChildSize.Y > MaxHeight)
+                {
+                    MaxHeight = ChildSize.Y;
+                }
+
+                ++VisibleCount;
             }
         }
 
+        ui_node_style *Style   = GetNodeStyle(Root->Index, Subtree);
+        ui_spacing     Spacing = UIGetSpacing(Style->Properties[StyleState_Basic]);
+
         if (Scroll->Axis == ScrollAxis_X)
         {
+            if(VisibleCount)
+            {
+                TotalWidth += (VisibleCount - 1) * Spacing.Horizontal;
+            }
+
             Scroll->ContentSize = Vec2F32(TotalWidth, MaxHeight);
         } else
         if (Scroll->Axis == ScrollAxis_Y)
         {
+            if(VisibleCount)
+            {
+                TotalHeight += (VisibleCount - 1) * Spacing.Vertical;
+            }
+
             Scroll->ContentSize = Vec2F32(MaxWidth, TotalHeight);
         }
     }
@@ -1249,11 +1300,13 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
 
             // Draw Flags
             {
+                rect_f32 FinalRect = TranslateRectF32(Frame.Node->Value.OuterBox, Frame.AccScroll);
+
                 ui_color BackgroundColor = UIGetColor(Style);
                 if(IsVisibleColor(BackgroundColor))
                 {
                     ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
-                    Rect->RectBounds  = MakeRectFromNode(Frame.Node, Frame.AccScroll);
+                    Rect->RectBounds  = FinalRect; 
                     Rect->Color       = BackgroundColor;
                     Rect->CornerRadii = UIGetCornerRadius(Style);
                     Rect->Softness    = UIGetSoftness(Style);
@@ -1264,7 +1317,7 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
                 if(IsVisibleColor(BorderColor) && BorderWidth > 0.f)
                 {
                     ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
-                    Rect->RectBounds  = MakeRectFromNode(Frame.Node, Frame.AccScroll);
+                    Rect->RectBounds  = FinalRect;
                     Rect->Color       = BorderColor;
                     Rect->CornerRadii = UIGetCornerRadius(Style);
                     Rect->BorderWidth = BorderWidth;
@@ -1305,7 +1358,7 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
 
                 if(HasFlag(Frame.Node->Flags, UILayoutNode_HasClip))
                 {
-                    ChildClip = InsetRectF32(MakeRectFromNode(Frame.Node, Vec2F32(0.f, 0.f)), UIGetBorderWidth(Style));
+                    ChildClip = Frame.Node->Value.ContentBox;
 
                     rect_f32 EmptyClip     = RectF32Zero();
                     b32      ParentHasClip = (MemoryCompare(&Frame.Clip, &EmptyClip, sizeof(rect_f32)) != 0);
@@ -1319,7 +1372,7 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
 
             IterateLinkedListBackward(Frame.Node, ui_layout_node *, Child)
             {
-                if (!(HasFlag(Child->Flags, UILayoutNode_DoNotDraw)))
+                if (!(HasFlag(Child->Flags, UILayoutNode_DoNotDraw)) && Child->Value.Display != UIDisplay_None)
                 {
                     PushDrawStack((draw_stack_frame){.Node = Child, .AccScroll = ChildAccScroll, .Clip = ChildClip}, &Stack);
                 }

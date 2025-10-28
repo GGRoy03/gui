@@ -65,9 +65,9 @@ typedef struct matrix_4x4
 //   LocalPosition: Must be relative to the rectangle's origin, typically do: (Point-RectOrigin) to get the local point.
 //   RectHalfSize:  must be half the rect's size on both axis. If this value is not exact, values may be wrong.
 //   Radius:        Give a radius if you care about rounded edges, passing 0 is valid.
-//   returns  0 IF The given point is directly on one of the rectangle's edge.
-//   returns <0 IF The given point is inside the rect.
-//   returns >0 IF The given point is outside the rect.
+//   returns   0 IF The given point is directly on one of the rectangle's edge.
+//   returns < 0 IF The given point is inside the rect.
+//   returns > 0 IF The given point is outside the rect.
 //
 // RectsIntersect:
 //   returns 1 if the rects instersect in any way, else return 0.
@@ -98,6 +98,7 @@ internal b32      IsPointInRect     (rect_f32 Target, vec2_f32 Point);
 internal f32      RoundedRectSDF    (rect_sdf_params Params);
 internal b32      RectsIntersect    (rect_f32 A, rect_f32 B);
 internal rect_f32 InsetRectF32      (rect_f32 Rect, f32 Size);
+internal rect_f32 TranslateRectF32  (rect_f32 Rect, vec2_f32 Translation);
 
 // --------------------------------------------------------
 

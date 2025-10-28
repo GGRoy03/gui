@@ -13,8 +13,9 @@ typedef enum StyleProperty_Type
     StyleProperty_BorderWidth  = 8,
     StyleProperty_CornerRadius = 9,
     StyleProperty_TextColor    = 10,
+    StyleProperty_Display      = 11,
 
-    StyleProperty_Count        = 11,
+    StyleProperty_Count        = 12,
     StyleProperty_None         = 666,
 } StyleProperty_Type;
 
@@ -29,6 +30,8 @@ typedef enum StyleState_Type
 
 // [CORE TYPES]
 
+#define InvalidCachedStyleIndex 0
+
 typedef struct style_property
 {
     b32 IsSet;
@@ -36,6 +39,7 @@ typedef struct style_property
     StyleProperty_Type Type;
     union
     {
+        u32              Enum;
         f32              Float32;
         vec2_unit        Vec2;
         ui_spacing       Spacing;
@@ -77,7 +81,9 @@ typedef struct ui_node_style
 // UIGetSpacing:
 // UIGetCornerRadius:
 // UIGetFont:
+// UIGetDisplay:
 //   Small helpers to make code less verbose when querying properties.
+//   Ensure that it is a valid array of length StyleProperty_Count. No bounds checking are done.
 
 internal f32               UIGetBorderWidth   (style_property Properties[StyleProperty_Count]);
 internal f32               UIGetSoftness      (style_property Properties[StyleProperty_Count]);
@@ -90,6 +96,7 @@ internal ui_padding        UIGetPadding       (style_property Properties[StylePr
 internal ui_spacing        UIGetSpacing       (style_property Properties[StyleProperty_Count]);
 internal ui_corner_radius  UIGetCornerRadius  (style_property Properties[StyleProperty_Count]);
 internal ui_font         * UIGetFont          (style_property Properties[StyleProperty_Count]);
+internal UIDisplay_Type    UIGetDisplay       (style_property Properties[StyleProperty_Count]);
 
 // GetHoverStyle:
 //
@@ -100,7 +107,8 @@ internal style_property * GetCachedProperties  (u32 StyleIndex, StyleState_Type 
 // UISetTextColor:
 //  Override a style at runtine.
 
-internal void UISetTextColor  (ui_node Node, ui_color Color, ui_subtree *Subtree);
+internal void UISetTextColor  (ui_node Node, ui_color       Color  , ui_subtree *Subtree);
+internal void UISetDisplay    (ui_node Node, UIDisplay_Type Display, ui_subtree *Subtree);
 
 // [Helpers]
 

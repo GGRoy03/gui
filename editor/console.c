@@ -18,7 +18,7 @@ FormatConsoleOutput(byte_string Message, ConsoleMessage_Severity Severity, memor
 
     if(IsValidByteString(Message))
     {
-        ui_color    TextColor = UIColor(1.f, 1.f, 1.f, 1.f);
+        ui_color    TextColor = UIColor(1.f, 1.f, 1.f, 0.f);
         byte_string Prefix    = ByteString(0, 0);
 
         switch(Severity)
@@ -69,7 +69,8 @@ ConsolePrintMessage(console_output Output, ui_node BufferNode, editor_console_ui
 
         UIChain(BufferNode)->FindChild(ChildIndex)
             ->SetStyle(ConsoleStyle_Message)
-            ->SetTextColor(Output.TextColor);
+            ->SetTextColor(Output.TextColor)
+            ->SetDisplay(UIDisplay_Normal);
     //      ->SetText(FormattedMessage)
     }
 }

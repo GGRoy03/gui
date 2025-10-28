@@ -10,8 +10,8 @@ typedef enum UIUnit_Type
 
 typedef enum UIDisplay_Type
 {
-    UIDisplay_None   = 0,
-    UIDisplay_Normal = 1, // NOTE: Placeholder, so we get something that isn't None.
+    UIDisplay_Normal = 0, // NOTE: Placeholder, so we get something that isn't None.
+    UIDisplay_None   = 1,
 } UIDisplay_Type;
 
 // [FORWARD DECLARATIONS]
@@ -116,8 +116,9 @@ struct ui_node_chain
     ui_node_chain *Prev;
 
     // Style
-    ui_node_chain  * (*SetTextColor)    (ui_color Color);
-    ui_node_chain  * (*SetStyle)        (u32 StyleIndex);
+    ui_node_chain * (*SetDisplay)       (UIDisplay_Type Display);
+    ui_node_chain * (*SetTextColor)     (ui_color Color);
+    ui_node_chain * (*SetStyle)         (u32 StyleIndex);
 
     // Layout
     ui_node_chain * (*FindChild)        (u32 Index);

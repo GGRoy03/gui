@@ -1232,7 +1232,7 @@ CacheStyle(style *ParsedStyle, ui_style_registry *Registry, style_file_debug_inf
     style_header    *Header      = &ParsedStyle->Header;
     style_block     *Block       = &ParsedStyle->Block;
 
-    CachedStyle->CachedIndex = Registry->StylesCount++;
+    CachedStyle->CachedIndex = ++Registry->StylesCount; // 0 is a reserved spot
 
     // Prunes every badly formatted attribute from the list.
     // Also, outputs the corresponding error messages.

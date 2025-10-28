@@ -107,6 +107,11 @@ SetNodeTextColorInChain(ui_color Color)
     return Result;
 }
 
+// WARN:
+// If user does   : SetStyle->SetTextColor, it works.
+// But it they do : SetTextColor->SetStyle, then it doesn't work.
+// I am really unsure which behavior I want, but it seems to be a problem.
+
 internal ui_node_chain *
 SetNodeStyleInChain(u32 StyleIndex)
 {
@@ -117,8 +122,10 @@ SetNodeStyleInChain(u32 StyleIndex)
     ui_node_style *Style = GetNodeStyle(Result->Node.IndexInTree, Result->Subtree);
     Assert(Style);
 
-    Style->CachedStyleIndex  = StyleIndex;
-    Style->LayoutInfoIsBound = 0;
+    Style->CachedStyleIndex = StyleIndex;
+    Style->IsLastVersion    = 0;
+
+    UpdateNodeIfNeeded(Result->Node.IndexInTree, Result->Subtree);
 
     return Result;
 }
@@ -146,6 +153,36 @@ ReserveNodeChildrenInChain(u32 Amount)
     Assert(Result->Subtree);
 
     ReserveLayoutChildren(Result->Node, Amount, Result->Subtree);
+
+    return Result;
+}
+
+internal ui_node_chain *
+SetNodeTextInChain(byte_string Text)
+{
+    ui_node_chain *Result = GetNodeChain();
+    Assert(Result);
+    Assert(Result->Node.CanUse);
+    Assert(Result->Subtree);
+
+    // WARN:
+    // The reason why we do hashmap query is because the user might be trying
+    // to set the text to something that already exists... Does the user want to
+    // bind it though? Not really clear.
+
+    ui_resource_key   Key   = MakeTextResourceKey(Text);
+    ui_resource_state State = FindResourceByKey(Key, UIState.ResourceTable);
+
+    UpdateNodeIfNeeded(Result->Node.IndexInTree, Result->Subtree);
+
+    ui_node_style *Style = GetNodeStyle(Result->Node.IndexInTree, Result->Subtree);
+    ui_font       *Font  = UIGetFont(Style->Properties[StyleState_Basic]);
+
+    UpdateTextResource(State.Id, Text, Font, UIState.ResourceTable);
+
+    // NOTE: I do not really like this...
+    AddLayoutNodeFlag(Result->Node.IndexInTree, UILayoutNode_DrawText, Result->Subtree);
+    SetNodeResource(Result->Node.IndexInTree, Key, Result->Subtree);
 
     return Result;
 }
@@ -201,6 +238,7 @@ UIChain(ui_node Node)
     Result->SetStyle        = SetNodeStyleInChain;
     Result->FindChild       = FindNodeChildInChain;
     Result->ReserveChildren = ReserveNodeChildrenInChain;
+    Result->SetText         = SetNodeTextInChain;
     Result->SetId           = SetNodeIdInChain;
 
     GetCurrentPipeline()->Chain = Result;
@@ -352,7 +390,7 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
 }
 
 internal ui_resource_key
-MakeUITextResourceKey(byte_string Text)
+MakeTextResourceKey(byte_string Text)
 {
     u64             Hashed = HashByteString(Text);
     ui_resource_key Key    = {.Value = _mm_set_epi64x(0, Hashed)};
@@ -360,7 +398,7 @@ MakeUITextResourceKey(byte_string Text)
 }
 
 internal ui_resource_state
-FindUIResourceByKey(ui_resource_key Key, ui_resource_table *Table)
+FindResourceByKey(ui_resource_key Key, ui_resource_table *Table)
 {
     ui_resource_entry *FoundEntry = 0;
 
@@ -435,13 +473,12 @@ FindUIResourceByKey(ui_resource_key Key, ui_resource_table *Table)
 }
 
 internal void
-UpdateUITextResource(u32 Id, byte_string Text, ui_font *Font, ui_resource_table *Table)
+UpdateTextResource(u32 Id, byte_string Text, ui_font *Font, ui_resource_table *Table)
 {
     ui_resource_entry *Entry = GetResourceEntry(Id, Table);
-    Assert(Entry && "Resource Id is invalid");
+    Assert(Entry);
 
-    // Then we use the Glyph Run API to malloc some memory. At least for now. And we update the entry.
-    // What happens when we update an entry that already has memory? Can just free it for now.
+    // WARN: This uses a simple malloc/free scheme for now.
 
     if(!Entry->ResourceMemory)
     {
@@ -450,6 +487,7 @@ UpdateUITextResource(u32 Id, byte_string Text, ui_font *Font, ui_resource_table 
 
         if(Memory && OSCommitMemory(Memory, Size))
         {
+            Entry->ResourceType   = UIResource_Text;
             Entry->ResourceSize   = Size;
             Entry->ResourceMemory = CreateGlyphRun(Text, Font, Memory);
         }
@@ -460,11 +498,36 @@ UpdateUITextResource(u32 Id, byte_string Text, ui_font *Font, ui_resource_table 
     }
 }
 
-internal ui_resource_key
-GetNodeResource(u32 NodeId, ui_subtree *Subtree)
+internal void
+SetNodeResource(u32 NodeIndex, ui_resource_key Key, ui_subtree *Subtree)
 {
-    ui_resource_key Resource = Subtree->Resources[NodeId];
+    Assert(Subtree);
+    Assert(Subtree->Resources);
+
+    Subtree->Resources[NodeIndex] = Key;
+}
+
+internal ui_resource_key
+GetNodeResource(u32 NodeIndex, ui_subtree *Subtree)
+{
+
+    Assert(Subtree);
+    Assert(Subtree->Resources);
+
+    ui_resource_key Resource = Subtree->Resources[NodeIndex];
     return Resource;
+}
+
+internal ui_glyph_run *
+GetTextResource(ui_resource_key Key, ui_resource_table *Table)
+{
+    ui_resource_state State = FindResourceByKey(Key, Table);
+    Assert(State.Type == UIResource_Text);
+
+    ui_glyph_run *Result = (ui_glyph_run *)State.Resource;
+    Assert(Result);
+
+    return Result;
 }
 
 // -----------------------------------------------------------------------------------

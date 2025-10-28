@@ -19,8 +19,8 @@ UIComponentAll(u32 StyleIndex, bit_field Flags, byte_string Text)
 
     if(HasFlag(Flags, UILayoutNode_DrawText))
     {
-        ui_resource_key   Key   = MakeUITextResourceKey(Text);
-        ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
+        ui_resource_key   Key   = MakeTextResourceKey(Text);
+        ui_resource_state State = FindResourceByKey(Key, UIState.ResourceTable);
         if(State.Type == UIResource_None)
         {
             style_property *BaseProperties = GetCachedProperties(StyleIndex, StyleState_Basic, Pipeline->Registry);
@@ -28,7 +28,7 @@ UIComponentAll(u32 StyleIndex, bit_field Flags, byte_string Text)
 
             Assert(Font);
 
-            UpdateUITextResource(State.Id, Text, Font, UIState.ResourceTable);
+            UpdateTextResource(State.Id, Text, Font, UIState.ResourceTable);
         }
         else
         {

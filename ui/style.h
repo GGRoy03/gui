@@ -65,7 +65,7 @@ typedef struct ui_style_registry
 
 typedef struct ui_node_style
 {
-    b32            LayoutInfoIsBound;
+    b32            IsLastVersion;
     u32            CachedStyleIndex;
     style_property Properties[StyleState_Count][StyleProperty_Count];
 } ui_node_style;

@@ -9,18 +9,26 @@ AlignGlyph(vec2_f32 Position, ui_glyph *Glyph)
     Glyph->Position.Max.Y = roundf(Glyph->Position.Min.Y + Glyph->Size.Y);
 }
 
-internal f32
-ConvertUnitToFloat(ui_unit Unit, f32 AvSpace)
+typedef struct resolved_unit
 {
-    f32 Result = 0;
+    f32 Value;
+    b32 Resolved;
+} resolved_unit;
+
+internal resolved_unit
+TryConvertUnitToFloat(ui_unit Unit, f32 AvSpace)
+{
+    resolved_unit Result = {0};
 
     if(Unit.Type == UIUnit_Float32)
     {
-        Result = Unit.Float32 <= AvSpace ? Unit.Float32 : AvSpace;
+        Result.Value    = Unit.Float32 <= AvSpace ? Unit.Float32 : AvSpace;
+        Result.Resolved = 1;
     } else
     if(Unit.Type == UIUnit_Percent)
     {
-        Result = (Unit.Percent / 100.f) * AvSpace;
+        Result.Value    = (Unit.Percent / 100.f) * AvSpace;
+        Result.Resolved = 1;
     }
 
     return Result;
@@ -380,6 +388,86 @@ ReserveLayoutChildren(ui_node Node, u32 Amount, ui_subtree *Subtree)
     }
 }
 
+internal void
+UpdateNodeIfNeeded(u32 NodeIndex, ui_subtree *Subtree)
+{
+    Assert(Subtree);
+    Assert(Subtree->LayoutTree);
+
+    ui_node_style *Style = GetNodeStyle(NodeIndex, Subtree);
+
+    if(Style->CachedStyleIndex != InvalidCachedStyleIndex && !Style->IsLastVersion)
+    {
+        Assert(Style);
+
+        ui_pipeline *Pipeline = GetCurrentPipeline();
+        Assert(Pipeline);
+
+        style_property *Basic = GetCachedProperties(Style->CachedStyleIndex, StyleState_Basic, Pipeline->Registry);
+        style_property *Hover = GetCachedProperties(Style->CachedStyleIndex, StyleState_Hover, Pipeline->Registry);
+
+        Assert(Basic);
+        Assert(Hover);
+
+        MemoryCopy(Style->Properties[StyleState_Basic], Basic, sizeof(style_property) * StyleProperty_Count);
+        MemoryCopy(Style->Properties[StyleState_Hover], Hover, sizeof(style_property) * StyleProperty_Count);
+
+
+        ui_layout_node *LayoutNode = GetLayoutNode(NodeIndex, Subtree->LayoutTree);
+        Assert(LayoutNode);
+        {
+            f32            BorderWidth = UIGetBorderWidth(Basic);
+            vec2_unit      Size        = UIGetSize(Basic);
+            ui_spacing     Spacing     = UIGetSpacing(Basic);
+            ui_padding     Padding     = UIGetPadding(Basic);
+            UIDisplay_Type Display     = UIGetDisplay(Basic);
+
+            LayoutNode->Value.BorderWidth = BorderWidth;
+            LayoutNode->Value.Width       = Size.X;
+            LayoutNode->Value.Height      = Size.Y;
+            LayoutNode->Value.Padding     = Padding;
+            LayoutNode->Value.Spacing     = Spacing;
+            LayoutNode->Value.Display     = Display;
+        }
+
+        Style->IsLastVersion = 1;
+    }
+}
+
+internal void
+SetLayoutNodeResource(u32 NodeIndex, ui_resource_key Key, ui_subtree *Subtree)
+{
+    Assert(Subtree);
+    Assert(Subtree->LayoutTree);
+
+    ui_layout_node *Node = GetLayoutNode(NodeIndex, Subtree->LayoutTree);
+    Assert(Node);
+}
+
+internal void
+AddLayoutNodeFlag(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
+{
+    Assert(Subtree);
+    Assert(Subtree->LayoutTree);
+
+    ui_layout_node *Node = GetLayoutNode(NodeIndex, Subtree->LayoutTree);
+    Assert(Node);
+
+    SetFlag(Node->Flags, Flags);
+}
+
+internal void
+RemoveLayoutNodeFlag(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
+{
+    Assert(Subtree);
+    Assert(Subtree->LayoutTree);
+
+    ui_layout_node *Node = GetLayoutNode(NodeIndex, Subtree->LayoutTree);
+    Assert(Node);
+
+    ClearFlag(Node->Flags, Flags);
+}
+
 internal ui_node
 AllocateUINode(bit_field Flags, ui_subtree *Subtree)
 {
@@ -730,57 +818,6 @@ PopDrawStack(draw_stack *Stack)
     return Result;
 }
 
-// WARN: There is an edge case where if we set a value at runtime before this is first called
-// on the node, then the runtime value is lost. I am unsure if we should hard prevent this
-// or assume it as being an implicit behavior? There is one case where we directly touch the
-// node's value... Perhaps we should have a default invisible style as the 0 index?
-// Meaning I wouldn't even need to directly touch the node? Still unsunre.
-
-internal void
-EnsureNodeStyle(ui_layout_node *Node, ui_subtree *Subtree)
-{
-    ui_node_style *Style = GetNodeStyle(Node->Index, Subtree);
-
-    if(Style->CachedStyleIndex != InvalidCachedStyleIndex)
-    {
-        Assert(Style);
-
-        ui_pipeline *Pipeline = GetCurrentPipeline();
-        Assert(Pipeline);
-
-        style_property *Basic = GetCachedProperties(Style->CachedStyleIndex, StyleState_Basic, Pipeline->Registry);
-        style_property *Hover = GetCachedProperties(Style->CachedStyleIndex, StyleState_Hover, Pipeline->Registry);
-
-        Assert(Basic);
-        Assert(Hover);
-
-        MemoryCopy(Style->Properties[StyleState_Basic], Basic, sizeof(style_property) * StyleProperty_Count);
-        MemoryCopy(Style->Properties[StyleState_Hover], Hover, sizeof(style_property) * StyleProperty_Count);
-
-        // Set Basic Layout Info
-        {
-            // WARN: What happens if one hover I set the border width to X.
-            // That is not reflected by the layout then...
-
-            f32            BorderWidth = UIGetBorderWidth(Basic);
-            vec2_unit      Size        = UIGetSize(Basic);
-            ui_spacing     Spacing     = UIGetSpacing(Basic);
-            ui_padding     Padding     = UIGetPadding(Basic);
-            UIDisplay_Type Display     = UIGetDisplay(Basic);
-
-
-            Node->Value.BorderWidth = BorderWidth;
-            Node->Value.Width       = Size.X;
-            Node->Value.Height      = Size.Y;
-            Node->Value.Padding     = Padding;
-            Node->Value.Spacing     = Spacing;
-            Node->Value.Display     = Display;
-        }
-
-        Style->LayoutInfoIsBound = 1;
-    }
-}
-
 internal b32 
 FindHitNode(vec2_f32 MousePosition, ui_layout_node *Root, ui_subtree *Subtree)
 {
@@ -970,12 +1007,8 @@ PreOrderPlace(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
 
             if(HasFlag(Node->Flags, UILayoutNode_DrawText))
             {
-                ui_resource_key   Key   = GetNodeResource(Node->Index, Subtree);
-                ui_resource_state State = FindUIResourceByKey(Key, 0);
-                ui_glyph_run     *Run   = (ui_glyph_run *)State.Resource;
-
-                Assert(Run);
-                Assert(State.Type == UIResource_Text);
+                ui_resource_key Key = GetNodeResource(Node->Index, Subtree);
+                ui_glyph_run   *Run = GetTextResource(Key, UIState.ResourceTable);
 
                 u32 FilledLine = 0.f;
                 f32 LineWidth  = 0.f;
@@ -1026,7 +1059,7 @@ PreOrderMeasure(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
 
     if(Queue.Data)
     {
-        EnsureNodeStyle(Root, Subtree);
+        UpdateNodeIfNeeded(Root->Index, Subtree);
         Assert(Root->Value.Width.Type  == UIUnit_Float32);
         Assert(Root->Value.Height.Type == UIUnit_Float32);
 
@@ -1049,19 +1082,19 @@ PreOrderMeasure(ui_layout_node *Root, memory_arena *Arena, ui_subtree *Subtree)
 
             IterateLinkedList(Node, ui_layout_node *, Child)
             {
-                EnsureNodeStyle(Child, Subtree);
+                UpdateNodeIfNeeded(Child->Index, Subtree);
 
                 Box = &Child->Value;
 
                 if(Box->Display != UIDisplay_None)
                 {
-                    f32 Width  = ConvertUnitToFloat(Box->Width , AvSpace.X);
-                    f32 Height = ConvertUnitToFloat(Box->Height, AvSpace.Y);
-                    ComputeNodeBoxes(Child, Width, Height);
-                }
-                else
-                {
-                    // NOTE: Unsure what to do then?
+                    resolved_unit Width  = TryConvertUnitToFloat(Box->Width , AvSpace.X);
+                    resolved_unit Height = TryConvertUnitToFloat(Box->Height, AvSpace.Y);
+
+                    if(Width.Resolved || Height.Resolved)
+                    {
+                        ComputeNodeBoxes(Child, Width.Value, Height.Value);
+                    }
                 }
 
                 PushNodeQueue(&Queue, Child);
@@ -1082,12 +1115,8 @@ PostOrderMeasure(ui_layout_node *Root, ui_subtree *Subtree)
 
     if(HasFlag(Root->Flags, UILayoutNode_DrawText))
     {
-        ui_resource_key   Key   = GetNodeResource(Root->Index, Subtree);
-        ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
-        ui_glyph_run     *Run   = (ui_glyph_run *)State.Resource;
-
-        Assert(Run);
-        Assert(State.Type == UIResource_Text);
+        ui_resource_key Key = GetNodeResource(Root->Index, Subtree);
+        ui_glyph_run   *Run = GetTextResource(Key, UIState.ResourceTable);
 
         // TODO: Handle other units
         f32 InnerAvWidth = 0.f;
@@ -1097,7 +1126,7 @@ PostOrderMeasure(ui_layout_node *Root, ui_subtree *Subtree)
             if(Parent)
             {
                 // TODO: Unsure how we want to handle height?
-                InnerAvWidth = GetInnerBoxSize(&Parent->Value).X; // NOTE: What is that? Seems wrong.
+                InnerAvWidth = GetContentBoxSize(&Parent->Value).X;
             }
         }
 
@@ -1130,7 +1159,7 @@ PostOrderMeasure(ui_layout_node *Root, ui_subtree *Subtree)
         if(Box->Width.Type == UIUnit_Auto)
         {
             f32 Width  = (LineWrapCount == 0) ? LineWidth : InnerAvWidth;
-            f32 Height = (LineWrapCount + 1) * Run->LineHeight;
+            f32 Height = (LineWrapCount  + 1) * Run->LineHeight;
 
             ComputeNodeBoxes(Root, Width, Height);
         }
@@ -1269,12 +1298,8 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
                 {
                     if(HasFlag(Frame.Node->Flags, UILayoutNode_DrawText))
                     {
-                        ui_resource_key   Key   = GetNodeResource(Frame.Node->Index, Subtree);
-                        ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
-                        ui_glyph_run     *Run   = (ui_glyph_run *)State.Resource;
-
-                        Assert(Run);
-                        Assert(State.Type == UIResource_Text);
+                        ui_resource_key Key = GetNodeResource(Frame.Node->Index, Subtree);
+                        ui_glyph_run   *Run = GetTextResource(Key, UIState.ResourceTable);
 
                         RootParams.Texture     = Run->Atlas;
                         RootParams.TextureSize = Run->AtlasSize;
@@ -1298,7 +1323,7 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
 
             style_property *Style = ComputeFinalStyle(Frame.Node, Subtree);
 
-            // Draw Flags
+            // Draws
             {
                 rect_f32 FinalRect = TranslateRectF32(Frame.Node->Value.OuterBox, Frame.AccScroll);
 
@@ -1326,13 +1351,8 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
 
                 if(HasFlag(Frame.Node->Flags, UILayoutNode_DrawText))
                 {
-                    // NOTE: Insane amount of code repetition.
-                    ui_resource_key   Key   = GetNodeResource(Frame.Node->Index, Subtree);
-                    ui_resource_state State = FindUIResourceByKey(Key, UIState.ResourceTable);
-                    ui_glyph_run     *Run   = (ui_glyph_run *)State.Resource;
-
-                    Assert(Run);
-                    Assert(State.Type == UIResource_Text);
+                    ui_resource_key Key = GetNodeResource(Frame.Node->Index, Subtree);
+                    ui_glyph_run   *Run = GetTextResource(Key, UIState.ResourceTable);
 
                     ui_color TextColor = UIGetTextColor(Style);
                     for(u32 Idx = 0; Idx < Run->GlyphCount; ++Idx)

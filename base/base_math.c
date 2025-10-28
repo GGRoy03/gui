@@ -159,8 +159,6 @@ InsetRectF32(rect_f32 Rect, f32 Size)
     Result.Max.X = ClampBot(0.f, Rect.Max.X - Size);
     Result.Max.Y = ClampBot(0.f, Rect.Max.Y - Size);
 
-    Assert(RectsIntersect(Rect, Result));
-
     return Result;
 }
 

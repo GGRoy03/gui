@@ -71,6 +71,10 @@ internal void             UIEnd                    (void);
 internal ui_node FindLayoutChild        (ui_node Node, u32 Index, ui_subtree *Subtree);
 internal void    ReserveLayoutChildren  (ui_node Node, u32 Amount, ui_subtree *Subtree);
 
+internal void UpdateNodeIfNeeded    (u32 NodeIndex, ui_subtree *Subtree);
+internal void AddLayoutNodeFlag     (u32 NodeIndex, bit_field Flags, ui_subtree *Subtree);
+internal void RemoveLayoutNodeFlag  (u32 NodeIndex, bit_field Flags, ui_subtree *Subtree);
+
 // -------------------------------------------------------------------------------------------------------------------
 // ui_hit_test:
 //

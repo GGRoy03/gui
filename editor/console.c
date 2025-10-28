@@ -70,8 +70,7 @@ ConsolePrintMessage(console_output Output, ui_node BufferNode, editor_console_ui
         UIChain(BufferNode)->FindChild(ChildIndex)
             ->SetStyle(ConsoleStyle_Message)
             ->SetTextColor(Output.TextColor)
-            ->SetDisplay(UIDisplay_Normal);
-    //      ->SetText(FormattedMessage)
+            ->SetText(Output.Message);
     }
 }
 

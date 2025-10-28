@@ -124,6 +124,9 @@ struct ui_node_chain
     ui_node_chain * (*FindChild)        (u32 Index);
     ui_node_chain * (*ReserveChildren)  (u32 Count);
 
+    // Resource
+    ui_node_chain * (*SetText)          (byte_string Text);
+
     // Misc
     ui_node_chain * (*SetId)            (byte_string Id);
 };
@@ -135,6 +138,7 @@ internal ui_node_chain * UIChain  (ui_node Node);
 #include <immintrin.h>
 
 typedef struct ui_resource_table ui_resource_table;
+typedef struct ui_glyph_run      ui_glyph_run;
 
 typedef enum UIResource_Type
 {
@@ -170,7 +174,9 @@ typedef struct ui_resource_state
 internal u64                 GetResourceTableFootprint   (ui_resource_table_params Params);
 internal ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_params Params, void *Memory);
 
-internal ui_resource_key GetNodeResource  (u32 NodeId, ui_subtree *Subtree);
+internal ui_resource_key  GetNodeResource   (u32 NodeId, ui_subtree *Subtree);
+internal void             SetNodeResource   (u32 NodeIndex, ui_resource_key Key, ui_subtree *Subtree);
+internal ui_glyph_run   * GetTextResource   (ui_resource_key Key, ui_resource_table *Table);
 
 internal ui_resource_key   MakeTextResourceKey  (byte_string Text);
 internal ui_resource_state FindResourceByKey    (ui_resource_key Key, ui_resource_table *Table);

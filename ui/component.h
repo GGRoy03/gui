@@ -4,6 +4,6 @@
 #define UIBlock(X) DeferLoop(X, UIEnd())
 
 
-internal ui_node_chain * UIWindow_     (u32 Style);
-internal ui_node_chain * UILabel_      (u32 Style, byte_string Text);
-internal ui_node_chain * UIScrollView_ (u32 Style);
+internal ui_node_chain * UIWindow_      (u32 Style);
+internal ui_node_chain * UIScrollView_  (u32 Style);
+internal ui_node_chain * UITextInput    (u8 *TextBuffer, u64 TextBufferSize, u32 Style);

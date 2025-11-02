@@ -128,50 +128,63 @@ UpdateGlyphCacheEntry(glyph_table *Table, glyph_state New)
     }
 }
 
+internal b32
+IsValidGlyphRun(ui_glyph_run *Run)
+{
+    b32 Result = (Run) && (IsValidRenderHandle(Run->Atlas)) && (Run->LineHeight) &&
+                 (Run->Shaped) && (Run->ShapedLimit);
+    return Result;
+}
+
 // -----------------------------------------------------------------------------------
 // Glyph Run Public API Implementation
 
-internal u64
-GetGlyphRunFootprint(byte_string Text)
+internal void
+AlignShapedGlyph(vec2_f32 Position, ui_shaped_glyph *Shaped)
 {
-    u64 GlyphBufferSize = Text.Size * sizeof(ui_glyph);
+    Shaped->Position.Min.X = roundf(Position.X + Shaped->Offset.X);
+    Shaped->Position.Min.Y = roundf(Position.Y + Shaped->Offset.Y);
+    Shaped->Position.Max.X = roundf(Shaped->Position.Min.X + Shaped->Size.X);
+    Shaped->Position.Max.Y = roundf(Shaped->Position.Min.Y + Shaped->Size.Y);
+}
+
+internal u64
+GetGlyphRunFootprint(u64 BufferSize)
+{
+    u64 GlyphBufferSize = BufferSize * sizeof(ui_shaped_glyph);
     u64 Result          = sizeof(ui_glyph_run) + GlyphBufferSize;
     return Result;
 }
 
-// WARN: Known limitations:
-// 1) Only handles 1 byte UTF8 encoding
-
 internal ui_glyph_run *
-CreateGlyphRun(byte_string Text, ui_font *Font, void *Memory)
+BeginGlyphRun(byte_string Text, u64 BufferSize, ui_font *Font, void *Memory)
 {
+    Assert(Text.Size <= BufferSize);
+
     ui_glyph_run *Result   = 0;
     render_handle Renderer = RenderState.Renderer;
+    Assert(IsValidRenderHandle(Renderer));
 
-    if(Memory && IsValidByteString(Text) && IsValidRenderHandle(Renderer))
+    if(Memory)
     {
-        render_handle Renderer = RenderState.Renderer;
+        ui_shaped_glyph *Shaped = (ui_shaped_glyph *)Memory;
 
-        ui_glyph *Glyphs = (ui_glyph *)Memory;
+        Result = (ui_glyph_run *)(Shaped + BufferSize);
+        Result->Shaped      = Shaped;
+        Result->LineHeight  = Font->LineHeight;
+        Result->ShapedCount = 0;
+        Result->ShapedLimit = BufferSize;
+        Result->Atlas       = GetFontAtlas(Font);
+        Result->AtlasSize   = Font->TextureSize;
 
-        Result = (ui_glyph_run *)(Glyphs + Text.Size);
-        Result->Glyphs     = Glyphs;
-        Result->LineHeight = Font->LineHeight;
-        Result->GlyphCount = Text.Size;
-        Result->Atlas      = GetFontAtlas(Font);
-        Result->AtlasSize  = Font->TextureSize;
-
-        for(u32 Idx = 0; Idx < Text.Size; ++Idx)
+        while(Result->ShapedCount < Result->ShapedLimit && Text.String[Result->ShapedCount])
         {
-            // NOTE: What kind of dogshit is this?
-            // Not even sure what this is...
-
-            byte_string UTF8Stream = ByteString(&Text.String[Idx], 1);
+            byte_string UTF8Stream = ByteString(&Text.String[Result->ShapedCount], 1);
 
             glyph_state *State = 0;
             if(IsAsciiString(UTF8Stream))
             {
-                State = &Font->Direct[Text.String[Idx]];
+                State = &Font->Direct[Text.String[Result->ShapedCount]];
             }
             else
             {
@@ -182,10 +195,11 @@ CreateGlyphRun(byte_string Text, ui_font *Font, void *Memory)
             if(!State->IsRasterized)
             {
                 os_glyph_info Info = OSGetGlyphInfo(UTF8Stream, Font->Size, &Font->OSContext);
-                f32           Padding     = 2.f;
-                f32           HalfPadding = 1.f;
 
-                stbrp_rect STBRect = { 0 };
+                f32 Padding     = 2.f;
+                f32 HalfPadding = 1.f;
+
+                stbrp_rect STBRect = {0};
                 STBRect.w = (u16)(Info.Size.X + Padding);
                 STBRect.h = (u16)(Info.Size.Y + Padding);
                 stbrp_pack_rects(&Font->AtlasContext, &STBRect, 1);
@@ -199,10 +213,7 @@ CreateGlyphRun(byte_string Text, ui_font *Font, void *Memory)
                     PaddedRect.Max.Y = (f32)(STBRect.y + Info.Size.Y + HalfPadding);
 
                     State->IsRasterized = OSRasterizeGlyph(UTF8Stream, PaddedRect, &Font->OSContext);
-                    State->Source.Min.X = PaddedRect.Min.X;
-                    State->Source.Min.Y = PaddedRect.Min.Y;
-                    State->Source.Max.X = PaddedRect.Max.X;
-                    State->Source.Max.Y = PaddedRect.Max.Y;
+                    State->Source       = PaddedRect;
                     State->Offset       = Info.Offset;
                     State->AdvanceX     = Info.AdvanceX;
                     State->Size         = Info.Size;
@@ -215,10 +226,12 @@ CreateGlyphRun(byte_string Text, ui_font *Font, void *Memory)
                 }
             }
 
-            Result->Glyphs[Idx].Source   = State->Source;
-            Result->Glyphs[Idx].Offset   = State->Offset;
-            Result->Glyphs[Idx].AdvanceX = State->AdvanceX;
-            Result->Glyphs[Idx].Size     = State->Size;
+            Result->Shaped[Result->ShapedCount].Source   = State->Source;
+            Result->Shaped[Result->ShapedCount].Offset   = State->Offset;
+            Result->Shaped[Result->ShapedCount].AdvanceX = State->AdvanceX;
+            Result->Shaped[Result->ShapedCount].Size     = State->Size;
+
+            ++Result->ShapedCount;
         }
     }
     else

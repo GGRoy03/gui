@@ -142,6 +142,17 @@ ReserveNodeChildrenInChain(u32 Amount)
 }
 
 internal ui_node_chain *
+PopParentNodeInChain(void)
+{
+    ui_node_chain *Result = GetNodeChain();
+    Assert(Result);
+
+    UIEnd();
+
+    return Result;
+}
+
+internal ui_node_chain *
 SetNodeTextInChain(byte_string Text)
 {
     ui_node_chain *Result = GetNodeChain();
@@ -149,24 +160,56 @@ SetNodeTextInChain(byte_string Text)
     Assert(Result->Node.CanUse);
     Assert(Result->Subtree);
 
-    // WARN:
-    // The reason why we do hashmap query is because the user might be trying
-    // to set the text to something that already exists... Does the user want to
-    // bind it though? Not really clear.
+    ui_node            Node    = Result->Node;
+    ui_subtree        *Subtree = Result->Subtree;
+    ui_resource_table *Table   = UIState.ResourceTable;
 
-    ui_resource_key   Key   = MakeTextResourceKey(Text);
-    ui_resource_state State = FindResourceByKey(Key, UIState.ResourceTable);
+    // BUG:
+    // One problem is that this key is not strong enough and might collide
+    // with other text keys. What even happens if two keys collide?
+
+    // WARN: 
+    // This code is still a bit of a mess, especially if we have mutliple
+    // ways to create text. We should unify somehow. There's no way I am doing
+    // manual allocations. Really bad!
+
+    // NOTE:
+    // And I guess we assume that we are adding text to a label here?
+    // Which is also probably a mistake.
+
+    ui_resource_key   Key   = MakeResourceKey(Node.IndexInTree, Subtree);
+    ui_resource_state State = FindResourceByKey(Key, Table);
+
+    if(!State.Resource)
+    {
+        // NOTE:
+        // Here, I don't really know. We probably just allocate some
+        // glyph run and set it on the node. Rather, on the resource.
+
+        u64   Size     = GetGlyphRunFootprint(Text.Size);
+        void *Memory   = OSReserveMemory(Size);
+        b32   Commited = OSCommitMemory(Memory, Size);
+        Assert(Memory && Commited);
+
+        ui_node_style *Style = GetNodeStyle(Node.IndexInTree, Subtree);
+        ui_font       *Font  = UIGetFont(Style->Properties[StyleState_Basic]);
+        ui_glyph_run  *Run   = BeginGlyphRun(Text, Text.Size, Font, Memory);
+        Assert(Run);
+
+        // NOTE:
+        // This forces a text resource for now.
+        UpdateResourceTable(State.Id, Key, Run, UIResource_Text, Table);
+        SetLayoutNodeFlags(Node.IndexInTree, UILayoutNode_HasText, Subtree);
+    }
+    else
+    {
+        // NOTE:
+        // This is not an error, but let's not implement it for now.
+
+        Assert(!"Not Implemented");
+    }
 
     UpdateNodeIfNeeded(Result->Node.IndexInTree, Result->Subtree);
-
-    ui_node_style *Style = GetNodeStyle(Result->Node.IndexInTree, Result->Subtree);
-    ui_font       *Font  = UIGetFont(Style->Properties[StyleState_Basic]);
-
-    UpdateTextResource(State.Id, Text, Font, UIState.ResourceTable);
-
-    // NOTE: I do not really like this...
-    AddLayoutNodeFlag(Result->Node.IndexInTree, UILayoutNode_DrawText, Result->Subtree);
-    SetNodeResource(Result->Node.IndexInTree, Key, Result->Subtree);
 
     return Result;
 }
@@ -222,6 +265,7 @@ UIChain(ui_node Node)
     Result->SetStyle        = SetNodeStyleInChain;
     Result->FindChild       = FindNodeChildInChain;
     Result->ReserveChildren = ReserveNodeChildrenInChain;
+    Result->Stop            = PopParentNodeInChain;
     Result->SetText         = SetNodeTextInChain;
     Result->SetId           = SetNodeIdInChain;
 
@@ -242,8 +286,7 @@ typedef struct ui_resource_entry
     u32 PrevLRU;
 
     UIResource_Type ResourceType;
-    u64             ResourceSize;
-    void           *ResourceMemory;
+    void           *Memory;
 } ui_resource_entry;
 
 typedef struct ui_resource_table
@@ -364,9 +407,8 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
                 Entry->NextWithSameHashSlot = 0;
             }
 
-            Entry->ResourceType   = UIResource_None;
-            Entry->ResourceSize   = 0;
-            Entry->ResourceMemory = 0;
+            Entry->ResourceType = UIResource_None;
+            Entry->Memory       = 0;
         }
     }
 
@@ -374,10 +416,12 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
 }
 
 internal ui_resource_key
-MakeTextResourceKey(byte_string Text)
+MakeResourceKey(u32 NodeIndex, ui_subtree *Subtree)
 {
-    u64             Hashed = HashByteString(Text);
-    ui_resource_key Key    = {.Value = _mm_set_epi64x(0, Hashed)};
+    u64 Low  = (u64)Subtree;
+    u64 High = (u64)NodeIndex;
+
+    ui_resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
     return Key;
 }
 
@@ -449,64 +493,40 @@ FindResourceByKey(ui_resource_key Key, ui_resource_table *Table)
     Sentinel->NextLRU = EntryIndex;
 
     ui_resource_state Result = {0};
-    Result.Id       = EntryIndex;
-    Result.Type     = FoundEntry->ResourceType;
-    Result.Resource = FoundEntry->ResourceMemory;
+    Result.Id           = EntryIndex;
+    Result.ResourceType = FoundEntry->ResourceType;
+    Result.Resource     = FoundEntry->Memory;
 
     return Result;
 }
 
 internal void
-UpdateTextResource(u32 Id, byte_string Text, ui_font *Font, ui_resource_table *Table)
+UpdateResourceTable(u32 Id, ui_resource_key Key, void *Memory, UIResource_Type Type, ui_resource_table *Table)
 {
     ui_resource_entry *Entry = GetResourceEntry(Id, Table);
     Assert(Entry);
 
-    // WARN: This uses a simple malloc/free scheme for now.
-
-    if(!Entry->ResourceMemory)
+    if(Entry->Memory && Entry->Memory != Memory)
     {
-        u64   Size   = GetGlyphRunFootprint(Text);
-        void *Memory = OSReserveMemory(Size);
-
-        if(Memory && OSCommitMemory(Memory, Size))
-        {
-            Entry->ResourceType   = UIResource_Text;
-            Entry->ResourceSize   = Size;
-            Entry->ResourceMemory = CreateGlyphRun(Text, Font, Memory);
-        }
+        OSRelease(Entry->Memory);
     }
-    else
+
+    if(Entry->Memory)
     {
-        Assert(!"Not implemented!");
+        Assert(Type == Entry->ResourceType);
     }
-}
 
-internal void
-SetNodeResource(u32 NodeIndex, ui_resource_key Key, ui_subtree *Subtree)
-{
-    Assert(Subtree);
-    Assert(Subtree->Resources);
-
-    Subtree->Resources[NodeIndex] = Key;
-}
-
-internal ui_resource_key
-GetNodeResource(u32 NodeIndex, ui_subtree *Subtree)
-{
-
-    Assert(Subtree);
-    Assert(Subtree->Resources);
-
-    ui_resource_key Resource = Subtree->Resources[NodeIndex];
-    return Resource;
+    Entry->Key          = Key;
+    Entry->Memory       = Memory;
+    Entry->ResourceType = Type;
 }
 
 internal ui_glyph_run *
-GetTextResource(ui_resource_key Key, ui_resource_table *Table)
+GetLabelText(u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table)
 {
+    ui_resource_key   Key   = MakeResourceKey(NodeIndex, Subtree);
     ui_resource_state State = FindResourceByKey(Key, Table);
-    Assert(State.Type == UIResource_Text);
+    Assert(State.ResourceType == UIResource_Text);
 
     ui_glyph_run *Result = (ui_glyph_run *)State.Resource;
     Assert(Result);
@@ -575,8 +595,7 @@ UIBeginSubtree(ui_subtree_params Params)
             SubtreeNode->Value.NodeCount      = Params.NodeCount;
             SubtreeNode->Value.FrameData      = Arena;
             SubtreeNode->Value.LayoutTree     = LayoutTree;
-            SubtreeNode->Value.ComputedStyles = PushArray(Persist, ui_node_style  , Params.NodeCount);
-            SubtreeNode->Value.Resources      = PushArray(Persist, ui_resource_key, Params.NodeCount);
+            SubtreeNode->Value.ComputedStyles = PushArray(Persist, ui_node_style, Params.NodeCount);
             SubtreeNode->Value.Id             = Pipeline->NextSubtreeId++;
 
             Pipeline->CurrentSubtree = &SubtreeNode->Value;

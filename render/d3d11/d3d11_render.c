@@ -324,7 +324,6 @@ SubmitRenderCommands(render_handle HRenderer, vec2_i32 Resolution, render_pass_l
         return;
     }
 
-
     ID3D11DeviceContext    *DeviceContext = Renderer->DeviceContext;
     ID3D11RenderTargetView *RenderView    = Renderer->RenderView; 
     IDXGISwapChain1        *SwapChain     = Renderer->SwapChain;

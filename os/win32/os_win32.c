@@ -57,6 +57,11 @@ OSWin32WindowProc(HWND Handle, UINT Message, WPARAM WParam, LPARAM LParam)
         {
             ProcessInputMessage(&Inputs->KeyboardButtons[VKCode], IsDown);
         }
+
+        if(IsDown)
+        {
+            Inputs->KeyPerFrame.Keys[Inputs->KeyPerFrame.Count++] = VKCode;
+        }
     } break;
 
     case WM_LBUTTONDOWN:
@@ -163,8 +168,6 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
     Useless(CmdLine);
     Useless(Instance);
 
-    HWND HWindow = OSWin32InitializeWindow(Vec2I32(1920, 1080), ShowCmd);
-
     // OS State (Always query system info first since arena depends on it)
     {
         SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &OSWin32State.Inputs.WheelScrollLine, 0);
@@ -177,6 +180,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
             ArenaParams.CommitSize        = Kilobyte(64);
         }
 
+        OSWin32State.HWindow    = OSWin32InitializeWindow(Vec2I32(1920,1080), ShowCmd);
         OSWin32State.SystemInfo = OSWin32QuerySystemInfo();
         OSWin32State.Arena      = AllocateArena(ArenaParams);
 
@@ -231,7 +235,10 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
 
     // Render State
     {
-        RenderState.Renderer = InitializeRenderer(HWindow, OSWin32GetClientSize(HWindow), GameState.StaticData);
+        HWND     HWindow    = OSWin32State.HWindow;
+        vec2_i32 ClientSize = OSWin32GetClientSize(HWindow);
+
+        RenderState.Renderer = InitializeRenderer(HWindow, ClientSize, GameState.StaticData);
     }
 
     b32 IsRunning = 1;
@@ -254,7 +261,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
 
         vec2_i32 ClientSize = Vec2I32(0, 0);
         {
-            ClientSize = OSWin32GetClientSize(HWindow);
+            ClientSize = OSWin32GetClientSize(OSWin32State.HWindow);
 
             UIState.WindowSize = ClientSize;
         }
@@ -439,5 +446,13 @@ internal os_inputs *
 OSGetInputs(void)
 {
     os_inputs *Result = &OSWin32State.Inputs;
+    return Result;
+}
+
+internal os_key_frame_buffer *
+OSGetPressedKeys()
+{
+    os_inputs           *Inputs = &OSWin32State.Inputs;
+    os_key_frame_buffer *Result = &Inputs->KeyPerFrame;
     return Result;
 }

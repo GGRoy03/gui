@@ -67,7 +67,8 @@ ConsolePrintMessage(console_output Output, ui_node BufferNode, editor_console_ui
     {
         u32 ChildIndex = Console->MessageHead++;
 
-        UIChain(BufferNode)->FindChild(ChildIndex)
+        UIChain(BufferNode)
+            ->FindChild(ChildIndex)
             ->SetStyle(ConsoleStyle_Message)
             ->SetTextColor(Output.TextColor)
             ->SetText(Output.Message);
@@ -104,7 +105,10 @@ ConsoleUI(editor_console_ui *Console)
                 {
                     UIScrollView(ConsoleStyle_MessageView)
                         ->SetId(ui_id("Console_Buffer"))
-                        ->ReserveChildren(Console->MessageLimit);
+                        ->ReserveChildren(Console->MessageLimit)
+                        ->Stop();
+
+                    UITextInput(Console->PromptBuffer, Console->PromptBufferSize, ConsoleStyle_Prompt);
                 }
             }
         }

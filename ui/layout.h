@@ -39,27 +39,26 @@ typedef struct ui_layout_tree  ui_layout_tree;
 
 typedef enum UILayoutNode_Flag
 {
-    // Draws
-    UILayoutNode_DrawText        = 1 << 0,
+    // Drawing
     UILayoutNode_DoNotDraw       = 1 << 1,
-
-    // Batching
     UILayoutNode_HasClip         = 1 << 2,
 
     // State
-    UILayoutNode_IsHoverable     = 1 << 3,
-    UILayoutNode_IsClickable     = 1 << 4,
-    UILayoutNode_IsDraggable     = 1 << 5,
-    UILayoutNode_IsResizable     = 1 << 6,
-    UILayoutNode_IsScrollable    = 1 << 7,
+    UILayoutNode_IsDraggable     = 1 << 4,
+    UILayoutNode_IsResizable     = 1 << 5,
+    UILayoutNode_IsScrollable    = 1 << 6,
 
-    // Layout Info
+    // Layout Info (Should not exist most likely)
     UILayoutNode_PlaceChildrenX  = 1 << 8,
     UILayoutNode_PlaceChildrenY  = 1 << 9,
     UILayoutNode_IsParent        = 1 << 10,
 
-    // Frame State
+    // Frame State (Do not like this)
     UILayoutNode_IsHovered       = 1 << 11,
+
+    // Resources
+    UILayoutNode_HasText      = 1 << 12,
+    UILayoutNode_HasTextInput = 1 << 13,
 } UILayoutNode_Flag;
 
 internal u64              GetLayoutTreeFootprint   (u64 NodeCount);
@@ -71,8 +70,8 @@ internal ui_node FindLayoutChild        (ui_node Node, u32 Index, ui_subtree *Su
 internal void    ReserveLayoutChildren  (ui_node Node, u32 Amount, ui_subtree *Subtree);
 
 internal void UpdateNodeIfNeeded    (u32 NodeIndex, ui_subtree *Subtree);
-internal void AddLayoutNodeFlag     (u32 NodeIndex, bit_field Flags, ui_subtree *Subtree);
-internal void RemoveLayoutNodeFlag  (u32 NodeIndex, bit_field Flags, ui_subtree *Subtree);
+internal void SetLayoutNodeFlags    (u32 NodeIndex, bit_field Flags, ui_subtree *Subtree);
+internal void ClearLayoutNodeFlags  (u32 NodeIndex, bit_field Flags, ui_subtree *Subtree);
 
 // -------------------------------------------------------------------------------------------------------------------
 // ui_hit_test:
@@ -84,11 +83,6 @@ internal void RemoveLayoutNodeFlag  (u32 NodeIndex, bit_field Flags, ui_subtree 
 internal void HitTestLayout  (ui_subtree *Subtree, memory_arena *Arena);
 internal void ComputeLayout  (ui_subtree *Subtree, memory_arena *Arena);
 internal void DrawLayout     (ui_subtree *Subtree, memory_arena *Arena);
-
-// [Tree Mutations]
-
-internal void DragUISubtree    (vec2_f32 Delta, ui_layout_node *LayoutRoot, ui_pipeline *Pipeline);
-internal void ResizeUISubtree  (vec2_f32 Delta, ui_layout_node *LayoutNode, ui_pipeline *Pipeline);
 
 // -------------------------------------------------------------------------------------------------------------------
 // NodeIdTable_Size:

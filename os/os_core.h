@@ -6,12 +6,15 @@
 #define OS_MouseButtonCount 5
 #define OS_MAX_PATH 256
 
+#define MaxKeyPressPerFrame 512
+
 typedef enum OSConstant_Type
 {
 
-    OSConstant_MouseButtonCount    = 5,
-    OSConstant_KeyboardButtonCount = 256,
-    OSConstant_MaxPath             = 256,
+    OSConstant_MouseButtonCount       = 5,
+    OSConstant_KeyboardButtonCount    = 256,
+    OSConstant_MaxPath                = 256,
+    OSConstant_KeyboardButtonPerFrame = 512,
 } OSConstant_Type;
 
 typedef enum OSMouseButton_Type
@@ -60,6 +63,12 @@ typedef struct os_button_state
     u32 HalfTransitionCount;
 } os_button_state;
 
+typedef struct os_key_frame_buffer
+{
+    u32 Keys[MaxKeyPressPerFrame];
+    u32 Count;
+} os_key_frame_buffer;
+
 typedef struct os_inputs
 {
     b32             IsActiveFrame;
@@ -67,6 +76,9 @@ typedef struct os_inputs
     vec2_f32        MousePosition;
     vec2_f32        MouseDelta;
     os_button_state MouseButtons[OS_MouseButtonCount];
+
+    // Keyboard
+    os_key_frame_buffer KeyPerFrame;
 
     // Mouse
     f32 ScrollDeltaInLines;
@@ -97,6 +109,8 @@ internal b32       OSIsMouseClicked     (OSMouseButton_Type Button);
 internal b32       OSIsMouseHeld        (OSMouseButton_Type Button);
 internal b32       OSIsMouseReleased    (OSMouseButton_Type Button);
 internal void      OSClearInputs        (os_inputs *Inputs);
+
+internal os_key_frame_buffer * OSGetPressedKeys(void);
 
 // [Files]
 

@@ -23,4 +23,5 @@
 #include "os/os_inc.c"
 
 // NOTE: Some of the code depends on OS functions, but the OS depends on all of
-// the other code, so we inverse the h and c file ordering.
+// the other code, so we inverse the h and c file ordering. Does the OS depend on
+// all of the other code, I am confused?

@@ -81,23 +81,23 @@ struct ui_font
     glyph_state  Direct[0x7F]; // Handles ASCII
 };
 
-typedef struct ui_glyph
+typedef struct ui_shaped_glyph
 {
     rect_f32 Position;
     rect_f32 Source;
     vec2_f32 Offset;
-    vec2_i32 Size;       // NOTE: Do I really need to keep this?
+    vec2_i32 Size;
     f32      AdvanceX;
-} ui_glyph;
+} ui_shaped_glyph;
 
 typedef struct ui_glyph_run
 {
-    render_handle Atlas;
-    vec2_f32      AtlasSize;
-    f32           LineHeight;
-    rect_f32      BoundsLastFrame;
-    ui_glyph     *Glyphs;
-    u32           GlyphCount;
+    render_handle    Atlas;
+    vec2_f32         AtlasSize;
+    f32              LineHeight; // NOTE: Weird..
+    ui_shaped_glyph *Shaped;
+    u32              ShapedCount;
+    u32              ShapedLimit;
 } ui_glyph_run;
 
 // [Fonts]
@@ -105,11 +105,8 @@ typedef struct ui_glyph_run
 internal ui_font * UILoadFont   (byte_string Name, f32 Size);
 internal ui_font * UIQueryFont  (byte_string Name, f32 Size);
 
-// [Glyphs]
-
 // ----------------------------------------------------------------------------------
-//
 
-internal u64            GetGlyphRunFootprint  (byte_string Text);
-internal ui_glyph_run * CreateGlyphRun        (byte_string Text, ui_font *Font, void *Memory);
-internal void           UpdateGlyphCacheEntry (glyph_table *Table, glyph_state New);
+internal u64            GetGlyphRunFootprint  (u64 BufferSize);
+internal ui_glyph_run * BeginGlyphRun         (byte_string Text, u64 BufferSize, ui_font *Font, void *Memory);
+internal void           AlignShapedGlyph      (vec2_f32 Position, ui_shaped_glyph *Glyph);

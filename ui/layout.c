@@ -1,14 +1,5 @@
 // [Helpers]
 
-internal void
-AlignGlyph(vec2_f32 Position, ui_glyph *Glyph)
-{
-    Glyph->Position.Min.X = roundf(Position.X + Glyph->Offset.X);
-    Glyph->Position.Min.Y = roundf(Position.Y + Glyph->Offset.Y);
-    Glyph->Position.Max.X = roundf(Glyph->Position.Min.X + Glyph->Size.X);
-    Glyph->Position.Max.Y = roundf(Glyph->Position.Min.Y + Glyph->Size.Y);
-}
-
 typedef struct resolved_unit
 {
     f32 Value;
@@ -50,6 +41,8 @@ typedef struct ui_flex_box
     UIFlexDirection_Type  Direction;
     UIJustifyContent_Type Justify;
     UIAlignItems_Type     Align;
+
+    f32 ChildrenSize; // On the main axis.
 } ui_flex_box;
 
 typedef struct ui_flex_item
@@ -487,7 +480,7 @@ SetLayoutNodeResource(u32 NodeIndex, ui_resource_key Key, ui_subtree *Subtree)
 }
 
 internal void
-AddLayoutNodeFlag(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
+SetLayoutNodeFlags(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
 {
     Assert(Subtree);
     Assert(Subtree->LayoutTree);
@@ -499,7 +492,7 @@ AddLayoutNodeFlag(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
 }
 
 internal void
-RemoveLayoutNodeFlag(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
+ClearLayoutNodeFlags(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
 {
     Assert(Subtree);
     Assert(Subtree->LayoutTree);
@@ -646,11 +639,12 @@ internal void PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree);
 
 typedef enum UIEvent_Type
 {
-    UIEvent_Hover  = 1 << 0,
-    UIEvent_Click  = 1 << 1,
-    UIEvent_Resize = 1 << 2,
-    UIEvent_Drag   = 1 << 3,
-    UIEvent_Scroll = 1 << 4,
+    UIEvent_Hover      = 1 << 0,
+    UIEvent_Click      = 1 << 1,
+    UIEvent_Resize     = 1 << 2,
+    UIEvent_Drag       = 1 << 3,
+    UIEvent_Scroll     = 1 << 4,
+    UIEvent_KeyPressed = 1 << 5,
 } UIEvent_Type;
 
 typedef struct ui_hover_event
@@ -660,8 +654,8 @@ typedef struct ui_hover_event
 
 typedef struct ui_click_event
 {
-    ui_layout_tree *Tree;
-    ui_node         Node;
+    ui_layout_node *Node;
+    ui_subtree     *Subtree;
 } ui_click_event;
 
 typedef struct ui_resize_event
@@ -684,16 +678,24 @@ typedef struct ui_scroll_event
     f32             Delta;
 } ui_scroll_event;
 
+typedef struct ui_key_pressed_event
+{
+    u32             KeyboardKey;
+    ui_layout_node *Node;
+    ui_subtree     *Subtree;
+} ui_key_pressed_event;
+
 typedef struct ui_event
 {
     UIEvent_Type Type;
     union
     {
-        ui_hover_event  Hover;
-        ui_click_event  Click;
-        ui_resize_event Resize;
-        ui_drag_event   Drag;
-        ui_scroll_event Scroll;
+        ui_hover_event       Hover;
+        ui_click_event       Click;
+        ui_resize_event      Resize;
+        ui_drag_event        Drag;
+        ui_scroll_event      Scroll;
+        ui_key_pressed_event KeyPressed;
     };
 } ui_event;
 
@@ -735,6 +737,13 @@ RecordUIHoverEvent(ui_layout_node *Node, ui_subtree *Subtree)
 }
 
 internal void
+RecordUIClickEvent(ui_layout_node *Node, ui_subtree *Subtree)
+{
+    ui_event Event = {.Type = UIEvent_Click, .Click.Node = Node, .Click.Subtree = Subtree};
+    RecordUIEvent(Event, Subtree);
+}
+
+internal void
 RecordUIScrollEvent(ui_layout_node *Node, f32 Delta, ui_subtree *Subtree)
 {
     ui_event Event = {.Type = UIEvent_Scroll, .Scroll.Node = Node, .Scroll.Delta = Delta};
@@ -751,7 +760,20 @@ RecordUIResizeEvent(ui_layout_node *Node, vec2_f32 Delta, ui_subtree *Subtree)
 internal void
 RecordUIDragEvent(ui_layout_node *Node, vec2_f32 Delta, ui_subtree *Subtree)
 {
-    ui_event Event = {.Type = UIEvent_Drag, .Resize.Node = Node, .Resize.Delta = Delta, .Resize.Subtree = Subtree};
+    ui_event Event = {.Type = UIEvent_Drag, .Drag.Node = Node, .Drag.Delta = Delta, .Drag.Subtree = Subtree};
+    RecordUIEvent(Event, Subtree);
+}
+
+internal void
+RecordUIKeyPressedEvent(u32 KeyboardKey, ui_layout_node *Node, ui_subtree *Subtree)
+{
+    ui_event Event =
+    {
+        .Type                   = UIEvent_KeyPressed,
+        .KeyPressed.KeyboardKey = KeyboardKey,
+        .KeyPressed.Node        = Node,
+        .KeyPressed.Subtree     = Subtree,
+    };
     RecordUIEvent(Event, Subtree);
 }
 
@@ -776,6 +798,14 @@ ProcessEventList(ui_event_list *Events)
 
         case UIEvent_Click:
         {
+            ui_click_event Click = Event->Click;
+            Assert(Click.Node);
+            Assert(Click.Subtree);
+
+            if(HasFlag(Click.Node->Flags, UILayoutNode_HasTextInput))
+            {
+                Click.Subtree->CapturedNode = Click.Node;
+            }
         } break;
 
         case UIEvent_Resize:
@@ -822,6 +852,21 @@ ProcessEventList(ui_event_list *Events)
 
             ScrollNode(Scroll.Delta, Scroll.Node);
             UpdateScrollNode(Scroll.Node);
+        } break;
+
+        case UIEvent_KeyPressed:
+        {
+            ui_key_pressed_event KeyPressed = Event->KeyPressed;
+
+            // ui_resource_table *Table   = UIState.ResourceTable;
+            ui_layout_node    *Node    = KeyPressed.Node;
+            // ui_subtree        *Subtree = KeyPressed.Subtree;
+
+            if(KeyPressed.Node && HasFlag(Node->Flags, UILayoutNode_HasTextInput))
+            {
+                // TODO:
+                // Figure this out.
+            }
         } break;
 
         }
@@ -920,7 +965,6 @@ FindHitNode(vec2_f32 MousePosition, ui_layout_node *Root, ui_subtree *Subtree)
 {
     f32 MouseIsOutsideHitbox = 1.f;
     {
-
         vec2_f32 OuterSize = GetOuterBoxSize(&Root->Value);
         vec2_f32 OuterPos  = GetOuterBoxPosition(&Root->Value);
 
@@ -1011,8 +1055,10 @@ FindHitNode(vec2_f32 MousePosition, ui_layout_node *Root, ui_subtree *Subtree)
 
         // Static Events
         {
-            if (HasFlag(Root->Flags, UILayoutNode_IsClickable) && MouseClicked)
+            if (MouseClicked)
             {
+                RecordUIClickEvent(Root, Subtree);
+                return 1;
             }
 
             if (Subtree->CapturedNode == 0)
@@ -1043,6 +1089,9 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
     ui_layout_tree *Tree = Subtree->LayoutTree;
     Assert(Tree);
+
+    ui_resource_table *Table = UIState.ResourceTable;
+    Assert(Table);
 
     node_queue Queue = BeginNodeQueue((typed_queue_params){.QueueSize = Tree->NodeCount}, Subtree->FrameData);
     if (Queue.Data)
@@ -1081,30 +1130,36 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                 } else
                 if(Box->FlexBox.Direction == UIFlexDirection_Column)
                 {
+                    f32 FreeSpace = ContentSize.Y - Box->FlexBox.ChildrenSize;
+                    Assert(FreeSpace >= 0.f);
+
+                    f32 FlexCursorY = Cursor.Y;
+
+                    switch(Box->FlexBox.Justify)
+                    {
+
+                    case UIJustifyContent_Start:
+                    case UIJustifyContent_End:
+                    case UIJustifyContent_SpaceBetween:
+                    case UIJustifyContent_SpaceAround:
+                    case UIJustifyContent_SpaceEvenly:
+                    {
+                        Assert(!"Not Implemented");
+                    } break;
+
+                    case UIJustifyContent_Center:
+                    {
+                        FlexCursorY += (FreeSpace * 0.5f);
+                    } break;
+
+                    }
+
                     IterateLinkedList(Node, ui_layout_node *, Child)
                     {
                         ui_layout_box *CBox      = &Child->Value;
                         vec2_f32       ChildSize = GetOuterBoxSize(CBox);
 
-                        UIJustifyContent_Type Justify = Box->FlexBox.Justify;
-                        switch(Justify)
-                        {
-
-                        case UIJustifyContent_Start:
-                        case UIJustifyContent_End:
-                        case UIJustifyContent_SpaceBetween:
-                        case UIJustifyContent_SpaceAround:
-                        case UIJustifyContent_SpaceEvenly:
-                        {
-                            Assert(!"Not Implemented");
-                        } break;
-
-                        case UIJustifyContent_Center:
-                        {
-                            CBox->VisualOffset.Y = FlexJustifyCenter(ChildSize.Y, ContentSize.Y) + Cursor.Y;
-                        } break;
-
-                        }
+                        f32 FlexCursorX = Cursor.X;
 
                         UIAlignItems_Type Align = GetChildFlexAlignment(Box, CBox);
                         switch(Align)
@@ -1119,17 +1174,18 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
                         case UIAlignItems_Center:
                         {
-                            CBox->VisualOffset.X = FlexJustifyCenter(ChildSize.X, ContentSize.X) + Cursor.X;
+                            FlexCursorX += (ContentSize.X - ChildSize.X) * 0.5f;
                         } break;
 
                         case UIAlignItems_Stretch:
                         {
-                            CBox->VisualOffset.X = Cursor.X;
                         } break;
 
                         }
 
-                        // BUG: Need to increment Cursor. By what? Uh. Depends on direction probably?
+                        CBox->VisualOffset = Vec2F32(FlexCursorX, FlexCursorY);
+
+                        FlexCursorY += ChildSize.Y;
 
                         PushNodeQueue(&Queue, Child);
                     }
@@ -1170,24 +1226,23 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                 }
             }
 
-            if(HasFlag(Node->Flags, UILayoutNode_DrawText))
+            if(HasFlag(Node->Flags, UILayoutNode_HasText))
             {
-                ui_resource_key Key = GetNodeResource(Node->Index, Subtree);
-                ui_glyph_run   *Run = GetTextResource(Key, UIState.ResourceTable);
+                ui_glyph_run *Run = GetLabelText(Node->Index, Subtree, Table);
 
                 u32 FilledLine = 0.f;
                 f32 LineWidth  = 0.f;
                 f32 LineStartX = 0.f;
                 f32 LineStartY = 0.f;
 
-                for(u32 Idx = 0; Idx < Run->GlyphCount; ++Idx)
+                for(u32 Idx = 0; Idx < Run->ShapedCount; ++Idx)
                 {
-                    ui_glyph *Glyph = &Run->Glyphs[Idx];
+                    ui_shaped_glyph *Shaped = &Run->Shaped[Idx];
 
-                    f32      GlyphWidth    = Glyph->AdvanceX;
+                    f32      GlyphWidth    = Shaped->AdvanceX;
                     vec2_f32 GlyphPosition = Vec2F32(LineStartX + LineWidth, LineStartY + (FilledLine * Run->LineHeight));
 
-                    AlignGlyph(GlyphPosition, Glyph);
+                    AlignShapedGlyph(GlyphPosition, Shaped);
 
                     if(LineWidth + GlyphWidth > ContentSize.X)
                     {
@@ -1198,7 +1253,7 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                         LineWidth = GlyphWidth;
 
                         GlyphPosition = Vec2F32(LineStartX, LineStartY + (FilledLine * Run->LineHeight));
-                        AlignGlyph(GlyphPosition, Glyph);
+                        AlignShapedGlyph(GlyphPosition, Shaped);
                     }
                     else
                     {
@@ -1206,6 +1261,7 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                     }
                 }
             }
+
         }
     }
 }
@@ -1275,10 +1331,9 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
     ui_layout_box *Box = &Root->Value;
 
-    if(HasFlag(Root->Flags, UILayoutNode_DrawText))
+    if(HasFlag(Root->Flags, UILayoutNode_HasText))
     {
-        ui_resource_key Key = GetNodeResource(Root->Index, Subtree);
-        ui_glyph_run   *Run = GetTextResource(Key, UIState.ResourceTable);
+        ui_glyph_run *Run = GetLabelText(Root->Index, Subtree, UIState.ResourceTable);
 
         // TODO: Handle other units
         f32 InnerAvWidth = 0.f;
@@ -1294,12 +1349,12 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
         f32 LineWidth = 0.f;
         u32 LineWrapCount = 0;
-        if(Run->GlyphCount)
+        if(Run->ShapedCount)
         {
-            for(u32 Idx = 0; Idx < Run->GlyphCount; ++Idx)
+            for(u32 Idx = 0; Idx < Run->ShapedCount; ++Idx)
             {
-                ui_glyph *Glyph      = &Run->Glyphs[Idx];
-                f32       GlyphWidth = Glyph->AdvanceX;
+                ui_shaped_glyph *Shaped     = &Run->Shaped [Idx];
+                f32              GlyphWidth = Shaped->AdvanceX;
 
                 if(LineWidth + GlyphWidth > InnerAvWidth)
                 {
@@ -1329,6 +1384,8 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
     if(Box->Display == UIDisplay_Flex)
     {
+        Box->FlexBox.ChildrenSize = 0;
+
         UIFlexDirection_Type MainAxis  = Box->FlexBox.Direction;
         UIFlexDirection_Type CrossAxis = MainAxis == UIFlexDirection_Row ? UIFlexDirection_Column : UIFlexDirection_Row;
 
@@ -1380,6 +1437,7 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
             if(FreeSpace < 0)
             {
                 // TODO: Handle Shrink
+                Assert(!"Not Implemented");
             }
 
             // WARN: We assume no-wrap here.
@@ -1394,6 +1452,8 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                     f32 FinalWidth  = 0.f;
                     f32 FinalHeight = 0.f;
 
+                    // BUG: Summing up the main axis size doesn't account for spacing.
+
                     UIAlignItems_Type Align = GetChildFlexAlignment(Box, CBox);
                     if(Align == UIAlignItems_Stretch)
                     {
@@ -1401,11 +1461,15 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                         {
                             FinalWidth  = CrossSize;
                             FinalHeight = MainAxisSize[ChildIdx];
+
+                            Box->FlexBox.ChildrenSize += FinalHeight;
                         } else
                         if(CrossAxis == UIFlexDirection_Column)
                         {
                             FinalWidth  = MainAxisSize[ChildIdx];
                             FinalHeight = CrossSize;
+
+                            Box->FlexBox.ChildrenSize += FinalWidth;
                         }
                     }
                     else
@@ -1414,11 +1478,15 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                         {
                             FinalWidth  = GetOuterBoxSize(CBox).X;
                             FinalHeight = MainAxisSize[ChildIdx];
+
+                            Box->FlexBox.ChildrenSize += FinalHeight;
                         } else
                         if(CrossAxis == UIFlexDirection_Column)
                         {
                             FinalWidth  = MainAxisSize[ChildIdx];
                             FinalHeight = GetOuterBoxSize(CBox).Y;
+
+                            Box->FlexBox.ChildrenSize += FinalWidth;
                         }
                     }
 
@@ -1549,41 +1617,44 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
             rect_f32         ChildClip      = Frame.Clip;
             vec2_f32         ChildAccScroll = Frame.AccScroll;
 
+            ui_layout_node    *Node  = Frame.Node;
+            ui_resource_table *Table = UIState.ResourceTable;
+
             render_batch_list *BatchList = 0;
             {
                 rect_group_params RootParams = {0};
                 RootParams.Transform = Mat3x3Identity();
                 RootParams.Clip      = Frame.Clip;
 
-                render_pass_params_ui *UIParams = &Pass->Params.UI.Params;
-                rect_group_node       *Node     = UIParams->Last;
+                render_pass_params_ui *UIParams  = &Pass->Params.UI.Params;
+                rect_group_node       *GroupNode = UIParams->Last;
 
                 b32 CanMerge = 0;
-                if(Node)
+                if(GroupNode)
                 {
-                    if(HasFlag(Frame.Node->Flags, UILayoutNode_DrawText))
+                    if(HasFlag(Node->Flags, UILayoutNode_HasText))
                     {
-                        ui_resource_key Key = GetNodeResource(Frame.Node->Index, Subtree);
-                        ui_glyph_run   *Run = GetTextResource(Key, UIState.ResourceTable);
+                        ui_glyph_run *Run = GetLabelText(Node->Index, Subtree, Table);
+                        Assert(Run);
 
                         RootParams.Texture     = Run->Atlas;
                         RootParams.TextureSize = Run->AtlasSize;
                     }
 
-                    CanMerge = CanMergeRectGroupParams(&Node->Params, &RootParams);
+                    CanMerge = CanMergeRectGroupParams(&GroupNode->Params, &RootParams);
                 }
 
                 if(!CanMerge)
                 {
-                    Node = PushStruct(Arena, rect_group_node);
-                    Node->BatchList.BytesPerInstance = sizeof(ui_rect);
+                    GroupNode = PushStruct(Arena, rect_group_node);
+                    GroupNode->BatchList.BytesPerInstance = sizeof(ui_rect);
 
-                    AppendToLinkedList(UIParams, Node, UIParams->Count);
+                    AppendToLinkedList(UIParams, GroupNode, UIParams->Count);
                 }
 
                 // BUG: Wrong in some cases.
-                Node->Params = RootParams;
-                BatchList    = &Node->BatchList;
+                GroupNode->Params = RootParams;
+                BatchList         = &GroupNode->BatchList;
             }
 
             style_property *Style = ComputeFinalStyle(Frame.Node, Subtree);
@@ -1615,18 +1686,18 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
                     Rect->Softness    = UIGetSoftness(Style);
                 }
 
-                if(HasFlag(Frame.Node->Flags, UILayoutNode_DrawText))
+                if(HasFlag(Node->Flags, UILayoutNode_HasText))
                 {
-                    ui_resource_key Key = GetNodeResource(Frame.Node->Index, Subtree);
-                    ui_glyph_run   *Run = GetTextResource(Key, UIState.ResourceTable);
+                    ui_glyph_run *Run = GetLabelText(Node->Index, Subtree, Table);
+                    Assert(Run);
 
                     ui_color TextColor = UIGetTextColor(Style);
-                    for(u32 Idx = 0; Idx < Run->GlyphCount; ++Idx)
+                    for(u32 Idx = 0; Idx < Run->ShapedCount; ++Idx)
                     {
                         ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
                         Rect->SampleTexture = 1.f;
-                        Rect->TextureSource = Run->Glyphs[Idx].Source;
-                        Rect->RectBounds    = TranslatedRectF32(Run->Glyphs[Idx].Position, NodeOrigin);
+                        Rect->TextureSource = Run->Shaped[Idx].Source;
+                        Rect->RectBounds    = TranslatedRectF32(Run->Shaped[Idx].Position, NodeOrigin);
                         Rect->Color         = TextColor;
                     }
                 }
@@ -1670,6 +1741,9 @@ DrawSubtree(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_are
 // ------------------------------------------------------------------------------------------------------
 // Layout Pass Public API implementation
 
+// NOTE:
+// Should move all of the event generation code here and rename this.
+
 internal void
 HitTestLayout(ui_subtree *Subtree, memory_arena *Arena)
 {
@@ -1683,10 +1757,15 @@ HitTestLayout(ui_subtree *Subtree, memory_arena *Arena)
     Assert(Root);
 
     b32 MouseReleased = OSIsMouseReleased(OSMouseButton_Left);
-    if(MouseReleased)
+    if(MouseReleased && Subtree->CapturedNode)
     {
-        Subtree->CapturedNode = 0;
-        Subtree->Intent       = UIIntent_None;
+        ui_layout_node *Captured = Subtree->CapturedNode;
+
+        if(!HasFlag(Captured->Flags, UILayoutNode_HasTextInput))
+        {
+            Subtree->CapturedNode = 0;
+            Subtree->Intent       = UIIntent_None;
+        }
     }
 
     vec2_f32 MousePosition = OSGetMousePosition();
@@ -1728,6 +1807,12 @@ HitTestLayout(ui_subtree *Subtree, memory_arena *Arena)
             {
                 RecordUIDragEvent(Node, MouseDelta, Subtree);
             }
+        }
+
+        os_key_frame_buffer *KeyBuffer = OSGetPressedKeys();
+        for(u32 Idx = 0; Idx < KeyBuffer->Count; ++Idx)
+        {
+            RecordUIKeyPressedEvent(KeyBuffer->Keys[Idx], Subtree->CapturedNode, Subtree);
         }
     }
 

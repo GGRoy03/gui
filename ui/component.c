@@ -15,27 +15,7 @@ UIComponentAll(u32 StyleIndex, bit_field Flags, byte_string Text)
     ui_node_style *Style = GetNodeStyle(Node.IndexInTree, Subtree);
     Style->CachedStyleIndex = StyleIndex;
 
-    // WARN: Still a work in progress. Bit of a mess..
-
-    if(HasFlag(Flags, UILayoutNode_DrawText))
-    {
-        ui_resource_key   Key   = MakeTextResourceKey(Text);
-        ui_resource_state State = FindResourceByKey(Key, UIState.ResourceTable);
-        if(State.Type == UIResource_None)
-        {
-            style_property *BaseProperties = GetCachedProperties(StyleIndex, StyleState_Basic, Pipeline->Registry);
-            ui_font        *Font           = UIGetFont(BaseProperties);
-
-            Assert(Font);
-
-            UpdateTextResource(State.Id, Text, Font, UIState.ResourceTable);
-        }
-        else
-        {
-            Assert(!"Not Implemented");
-        }
-    }
-
+    // NOTE: This needs to go!
     if(HasFlag(Flags, UILayoutNode_IsScrollable))
     {
         BindScrollContext(Node, ScrollAxis_Y, Subtree->LayoutTree, Pipeline->StaticArena);
@@ -85,14 +65,20 @@ UIScrollView(u32 StyleIndex)
     return Chain;
 }
 
+// NOTE:
+// We for sure ask the user for a text buffer.
+// But how do we manage our memory?
+// We need some array of shaped glyphs.
+// And the access to the user buffer.
+
 internal ui_node_chain *
-UILabel(u32 StyleIndex, byte_string Text)
+UITextInput(u8 *TextBuffer, u64 TextBufferSize, u32 StyleIndex)
 {
     bit_field Flags = 0;
     {
-        SetFlag(Flags, UILayoutNode_DrawText);
+        SetFlag(Flags, UILayoutNode_HasTextInput);
     }
 
-    ui_node_chain *Chain = UIComponentAll(StyleIndex, Flags, Text);
+    ui_node_chain *Chain = UIComponent(StyleIndex, Flags);
     return Chain;
 }

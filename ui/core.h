@@ -165,6 +165,7 @@ struct ui_node_chain
     // Layout
     ui_node_chain * (*FindChild)        (u32 Index);
     ui_node_chain * (*ReserveChildren)  (u32 Count);
+    ui_node_chain * (*Stop)             (void);
 
     // Resource
     ui_node_chain * (*SetText)          (byte_string Text);
@@ -184,8 +185,9 @@ typedef struct ui_glyph_run      ui_glyph_run;
 
 typedef enum UIResource_Type
 {
-    UIResource_None = 0,
-    UIResource_Text = 1,
+    UIResource_None      = 0,
+    UIResource_Text      = 1,
+    UIResource_TextInput = 2,
 } UIResource_Type;
 
 typedef struct ui_resource_key
@@ -207,23 +209,26 @@ typedef struct ui_resource_table_params
 
 typedef struct ui_resource_state
 {
-    u32 Id;
-
-    UIResource_Type Type;
-    void            *Resource;
+    u32             Id;
+    UIResource_Type ResourceType;
+    void           *Resource;
 } ui_resource_state;
 
 internal u64                 GetResourceTableFootprint   (ui_resource_table_params Params);
 internal ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_params Params, void *Memory);
 
-internal ui_resource_key  GetNodeResource   (u32 NodeId, ui_subtree *Subtree);
-internal void             SetNodeResource   (u32 NodeIndex, ui_resource_key Key, ui_subtree *Subtree);
-internal ui_glyph_run   * GetTextResource   (ui_resource_key Key, ui_resource_table *Table);
+// Keys:
+//   Opaque handles to resources. Use a resource table to retrieve the associated data
 
-internal ui_resource_key   MakeTextResourceKey  (byte_string Text);
-internal ui_resource_state FindResourceByKey    (ui_resource_key Key, ui_resource_table *Table);
+internal b32             IsValidResourceKey  (ui_resource_key Key);
+internal ui_resource_key MakeResourceKey     (u32 NodeIndex, ui_subtree *Subtree);
 
-internal void              UpdateTextResource   (u32 Id, byte_string Text, ui_font *Font, ui_resource_table *Table);
+// Resources:
+
+internal ui_resource_state FindResourceByKey     (ui_resource_key Key, ui_resource_table *Table);
+internal void              UpdateResourceTable   (u32 Id, ui_resource_key Key, void *Memory, UIResource_Type Type, ui_resource_table *Table);
+
+internal ui_glyph_run    * GetLabelText          (u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table);
 
 // ------------------------------------------------------------------------------------
 
@@ -298,14 +303,12 @@ typedef struct ui_subtree_params
 typedef struct ui_subtree
 {
     // Persistent
-    u64              Id;
     ui_layout_tree  *LayoutTree;
     ui_node_style   *ComputedStyles;
-    ui_resource_key *Resources;
 
     // Semi-Transient
-    ui_layout_node  *CapturedNode;
-    UIIntent_Type    Intent;
+    ui_layout_node *CapturedNode;
+    UIIntent_Type   Intent;
 
     // Transient
     memory_arena  *FrameData;
@@ -313,6 +316,7 @@ typedef struct ui_subtree
 
     // Info
     u64 NodeCount;
+    u64 Id;
 
     // State
     ui_node LastNode;

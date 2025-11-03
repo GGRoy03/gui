@@ -509,11 +509,10 @@ QueryTextResource(u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table)
 {
     ui_resource_key   Key   = MakeResourceKey(UIResource_Text, NodeIndex, Subtree);
     ui_resource_state State = FindResourceByKey(Key, Table);
-    Assert(State.ResourceType == UIResource_Text);
+
+    Assert(State.Resource && State.ResourceType == UIResource_Text);
 
     ui_text *Result = (ui_text *)State.Resource;
-    Assert(Result);
-
     return Result;
 }
 

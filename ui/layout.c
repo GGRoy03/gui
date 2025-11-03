@@ -880,6 +880,8 @@ GenerateUIEvents(vec2_f32 MousePosition, ui_layout_node *Root, memory_arena *Are
                 }
 
                 RecordUIClickEvent(Root, Result, Arena);
+
+                return 1;
             }
 
             f32 ScrollDelta = OSGetScrollDelta();
@@ -1029,6 +1031,7 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
 
             // NOTE:
             // Maybe do not check here? Just check as we are processing the inputs for the UI. Yeah this needs the biggest cleanup.
+            // I believe this check is now useless.
 
             if(Node && HasFlag(Node->Flags, UILayoutNode_HasTextInput))
             {
@@ -1060,11 +1063,22 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
 
                     Text = PlaceUITextInMemory(DefaultText, Input->Size, Font, Memory);
                     Assert(Text);
+
+                    UpdateResourceTable(TextState.Id, TextKey, Text, UIResource_Text, Table);
                 }
 
                 ui_node_style *Style = GetNodeStyle(Node->Index, Subtree);
                 ui_font       *Font  = UIGetFont(Style->Properties[StyleState_Basic]);
                 AppendToUIText(TextInput.UTF8Text, Font, Text);
+
+                if(Text->ShapedCount > 0)
+                {
+                    SetFlag(Node->Flags, UILayoutNode_HasText);
+                }
+                else
+                {
+                    ClearFlag(Node->Flags, UILayoutNode_HasText);
+                }
             }
         } break;
 
@@ -1825,6 +1839,9 @@ DrawAtRoot(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_aren
 // ------------------------------------------------------------------------------------------------------
 // Layout Pass Public API implementation
 
+// NOTE:
+// Core?
+
 internal void
 UpdateSubtreeState(ui_subtree *Subtree)
 {
@@ -1874,6 +1891,9 @@ DrawSubtree(ui_subtree *Subtree)
 }
 
 // [Binds]
+
+// TODO:
+// Make this a reosurce.
 
 internal void
 BindScrollContext(ui_node Node, ScrollAxis_Type Axis, ui_layout_tree *Tree, memory_arena *Arena)

@@ -90,7 +90,7 @@ typedef struct ui_shaped_glyph
     f32      AdvanceX;
 } ui_shaped_glyph;
 
-typedef struct ui_glyph_run
+typedef struct ui_text
 {
     render_handle    Atlas;
     vec2_f32         AtlasSize;
@@ -98,15 +98,21 @@ typedef struct ui_glyph_run
     ui_shaped_glyph *Shaped;
     u32              ShapedCount;
     u32              ShapedLimit;
-} ui_glyph_run;
+} ui_text;
+
+typedef struct ui_text_input
+{
+    u8 *UserData;
+    u64 Size;
+} ui_text_input;
+
+internal u64       GetUITextFootprint   (u64 TextSize);
+internal ui_text * PlaceUITextInMemory  (byte_string Text, u64 BufferSize, ui_font *Font, void *Memory);
+
+internal void      AlignShapedGlyph     (vec2_f32 Position, ui_shaped_glyph *Glyph);
+internal void      AppendToUIText       (byte_string UTF8, ui_font *Font, ui_text *Text);
 
 // [Fonts]
 
 internal ui_font * UILoadFont   (byte_string Name, f32 Size);
 internal ui_font * UIQueryFont  (byte_string Name, f32 Size);
-
-// ----------------------------------------------------------------------------------
-
-internal u64            GetGlyphRunFootprint  (u64 BufferSize);
-internal ui_glyph_run * BeginGlyphRun         (byte_string Text, u64 BufferSize, ui_font *Font, void *Memory);
-internal void           AlignShapedGlyph      (vec2_f32 Position, ui_shaped_glyph *Glyph);

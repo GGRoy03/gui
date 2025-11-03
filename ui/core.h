@@ -165,7 +165,6 @@ struct ui_node_chain
     // Layout
     ui_node_chain * (*FindChild)        (u32 Index);
     ui_node_chain * (*ReserveChildren)  (u32 Count);
-    ui_node_chain * (*Stop)             (void);
 
     // Resource
     ui_node_chain * (*SetText)          (byte_string Text);
@@ -181,7 +180,7 @@ internal ui_node_chain * UIChain  (ui_node Node);
 #include <immintrin.h>
 
 typedef struct ui_resource_table ui_resource_table;
-typedef struct ui_glyph_run      ui_glyph_run;
+typedef struct ui_text ui_text;
 
 typedef enum UIResource_Type
 {
@@ -220,15 +219,21 @@ internal ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_para
 // Keys:
 //   Opaque handles to resources. Use a resource table to retrieve the associated data
 
-internal b32             IsValidResourceKey  (ui_resource_key Key);
-internal ui_resource_key MakeResourceKey     (u32 NodeIndex, ui_subtree *Subtree);
+internal ui_resource_key MakeResourceKey  (UIResource_Type Type, u32 NodeIndex, ui_subtree *Subtree);
 
 // Resources:
+//   Use FindResourceByKey to retrieve some resource with a key created from MakeResourceKey.
+//   If the resource doesn't exist yet, the returned state will contain: .ResourceType = UIResource_None AND .Resource = NULL.
+//   You may update the table using UpdateResourceTable by passing the relevant updated data. The id is retrieved in State.Id.
 
 internal ui_resource_state FindResourceByKey     (ui_resource_key Key, ui_resource_table *Table);
 internal void              UpdateResourceTable   (u32 Id, ui_resource_key Key, void *Memory, UIResource_Type Type, ui_resource_table *Table);
 
-internal ui_glyph_run    * GetLabelText          (u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table);
+// Queries:
+//   Queries both compute a key and retrieve the corresponding resource type.
+//   When querying a resource it is excpected that the resource already exists, if it is not, an assertion is triggered.
+
+internal ui_text * QueryTextResource  (u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table);
 
 // ------------------------------------------------------------------------------------
 
@@ -283,16 +288,28 @@ internal b32              IsNormalizedColor  (ui_color Color);
 
 // ------------------
 
-typedef struct ui_event_list ui_event_list;
+typedef struct ui_event_node ui_event_node;
+typedef struct ui_layout_node ui_layout_node;
 
 typedef enum UIIntent_Type
 {
-    UIIntent_None     = 0,
-    UIIntent_Drag     = 1,
-    UIIntent_ResizeX  = 2,
-    UIIntent_ResizeY  = 3,
-    UIIntent_ResizeXY = 4,
+    UIIntent_None      = 0,
+    UIIntent_Drag      = 1,
+    UIIntent_ResizeX   = 2,
+    UIIntent_ResizeY   = 3,
+    UIIntent_ResizeXY  = 4,
+    UIIntent_InputText = 5,
 } UIIntent_Type;
+
+typedef struct ui_event_list
+{
+    ui_event_node *First;
+    ui_event_node *Last;
+    u32            Count;
+
+    ui_layout_node *Focused;
+    UIIntent_Type   Intent;
+} ui_event_list;
 
 typedef struct ui_subtree_params
 {
@@ -303,16 +320,15 @@ typedef struct ui_subtree_params
 typedef struct ui_subtree
 {
     // Persistent
+    memory_arena    *Persistent;
     ui_layout_tree  *LayoutTree;
     ui_node_style   *ComputedStyles;
 
     // Semi-Transient
-    ui_layout_node *CapturedNode;
-    UIIntent_Type   Intent;
+    ui_event_list Events;
 
     // Transient
-    memory_arena  *FrameData;
-    ui_event_list *Events;
+    memory_arena  *Transient;
 
     // Info
     u64 NodeCount;

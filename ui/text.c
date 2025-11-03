@@ -129,10 +129,64 @@ UpdateGlyphCacheEntry(glyph_table *Table, glyph_state New)
 }
 
 internal b32
-IsValidGlyphRun(ui_glyph_run *Run)
+IsValidUIText(ui_text *Text)
 {
-    b32 Result = (Run) && (IsValidRenderHandle(Run->Atlas)) && (Run->LineHeight) &&
-                 (Run->Shaped) && (Run->ShapedLimit);
+    b32 Result = (Text) && (IsValidRenderHandle(Text->Atlas)) && (Text->LineHeight) &&
+                 (Text->Shaped) && (Text->ShapedLimit);
+    return Result;
+}
+
+internal ui_shaped_glyph
+PrepareGlyph(byte_string UTF8, ui_font *Font)
+{
+    render_handle Renderer = RenderState.Renderer;
+    Assert(IsValidRenderHandle(Renderer));
+
+    glyph_state *State = IsAsciiString(UTF8) ? &Font->Direct[UTF8.String[0]] : 0;
+    Assert(State);
+
+    if(!State->IsRasterized)
+    {
+        os_glyph_info Info = OSGetGlyphInfo(UTF8, Font->Size, &Font->OSContext);
+
+        f32 Padding     = 2.f;
+        f32 HalfPadding = 1.f;
+
+        stbrp_rect STBRect = {0};
+        STBRect.w = (u16)(Info.Size.X + Padding);
+        STBRect.h = (u16)(Info.Size.Y + Padding);
+        stbrp_pack_rects(&Font->AtlasContext, &STBRect, 1);
+
+        if (STBRect.was_packed)
+        {
+            rect_f32 PaddedRect;
+            PaddedRect.Min.X = (f32)STBRect.x + HalfPadding;
+            PaddedRect.Min.Y = (f32)STBRect.y + HalfPadding;
+            PaddedRect.Max.X = (f32)(STBRect.x + Info.Size.X + HalfPadding);
+            PaddedRect.Max.Y = (f32)(STBRect.y + Info.Size.Y + HalfPadding);
+
+            State->IsRasterized = OSRasterizeGlyph(UTF8, PaddedRect, &Font->OSContext);
+            State->Source       = PaddedRect;
+            State->Offset       = Info.Offset;
+            State->AdvanceX     = Info.AdvanceX;
+            State->Size         = Info.Size;
+
+            TransferGlyph(PaddedRect, Renderer, &Font->GPUContext);
+        }
+        else
+        {
+            ConsoleWriteMessage(warn_message("Could not pack glyph inside the texture in CreateGlyphRun"));
+        }
+    }
+
+    ui_shaped_glyph Result =
+    {
+        .Source   = State->Source,
+        .Offset   = State->Offset,
+        .AdvanceX = State->AdvanceX,
+        .Size     = State->Size,
+    };
+
     return Result;
 }
 
@@ -149,27 +203,34 @@ AlignShapedGlyph(vec2_f32 Position, ui_shaped_glyph *Shaped)
 }
 
 internal u64
-GetGlyphRunFootprint(u64 BufferSize)
+GetUITextFootprint(u64 TextSize)
 {
-    u64 GlyphBufferSize = BufferSize * sizeof(ui_shaped_glyph);
-    u64 Result          = sizeof(ui_glyph_run) + GlyphBufferSize;
+    u64 GlyphBufferSize = TextSize * sizeof(ui_shaped_glyph);
+    u64 Result          = sizeof(ui_text) + GlyphBufferSize;
     return Result;
 }
 
-internal ui_glyph_run *
-BeginGlyphRun(byte_string Text, u64 BufferSize, ui_font *Font, void *Memory)
+internal void
+AppendToUIText(byte_string UTF8, ui_font *Font, ui_text *Text)
+{
+    if(Text->ShapedCount < Text->ShapedLimit)
+    {
+        Text->Shaped[Text->ShapedCount++] = PrepareGlyph(UTF8, Font);
+    }
+}
+
+internal ui_text *
+PlaceUITextInMemory(byte_string Text, u64 BufferSize, ui_font *Font, void *Memory)
 {
     Assert(Text.Size <= BufferSize);
 
-    ui_glyph_run *Result   = 0;
-    render_handle Renderer = RenderState.Renderer;
-    Assert(IsValidRenderHandle(Renderer));
+    ui_text *Result   = 0;
 
     if(Memory)
     {
         ui_shaped_glyph *Shaped = (ui_shaped_glyph *)Memory;
 
-        Result = (ui_glyph_run *)(Shaped + BufferSize);
+        Result = (ui_text *)(Shaped + BufferSize);
         Result->Shaped      = Shaped;
         Result->LineHeight  = Font->LineHeight;
         Result->ShapedCount = 0;
@@ -179,59 +240,11 @@ BeginGlyphRun(byte_string Text, u64 BufferSize, ui_font *Font, void *Memory)
 
         while(Result->ShapedCount < Result->ShapedLimit && Text.String[Result->ShapedCount])
         {
-            byte_string UTF8Stream = ByteString(&Text.String[Result->ShapedCount], 1);
+            // WARN:
+            // This decoding looks garbage. And it is.
+            byte_string UTF8 = ByteString(&Text.String[Result->ShapedCount], 1);
 
-            glyph_state *State = 0;
-            if(IsAsciiString(UTF8Stream))
-            {
-                State = &Font->Direct[Text.String[Result->ShapedCount]];
-            }
-            else
-            {
-                // TODO: Call the cache..
-                return Result;
-            }
-
-            if(!State->IsRasterized)
-            {
-                os_glyph_info Info = OSGetGlyphInfo(UTF8Stream, Font->Size, &Font->OSContext);
-
-                f32 Padding     = 2.f;
-                f32 HalfPadding = 1.f;
-
-                stbrp_rect STBRect = {0};
-                STBRect.w = (u16)(Info.Size.X + Padding);
-                STBRect.h = (u16)(Info.Size.Y + Padding);
-                stbrp_pack_rects(&Font->AtlasContext, &STBRect, 1);
-
-                if (STBRect.was_packed)
-                {
-                    rect_f32 PaddedRect;
-                    PaddedRect.Min.X = (f32)STBRect.x + HalfPadding;
-                    PaddedRect.Min.Y = (f32)STBRect.y + HalfPadding;
-                    PaddedRect.Max.X = (f32)(STBRect.x + Info.Size.X + HalfPadding);
-                    PaddedRect.Max.Y = (f32)(STBRect.y + Info.Size.Y + HalfPadding);
-
-                    State->IsRasterized = OSRasterizeGlyph(UTF8Stream, PaddedRect, &Font->OSContext);
-                    State->Source       = PaddedRect;
-                    State->Offset       = Info.Offset;
-                    State->AdvanceX     = Info.AdvanceX;
-                    State->Size         = Info.Size;
-
-                    TransferGlyph(PaddedRect, Renderer, &Font->GPUContext);
-                }
-                else
-                {
-                    ConsoleWriteMessage(warn_message("Could not pack glyph inside the texture in CreateGlyphRun"));
-                }
-            }
-
-            Result->Shaped[Result->ShapedCount].Source   = State->Source;
-            Result->Shaped[Result->ShapedCount].Offset   = State->Offset;
-            Result->Shaped[Result->ShapedCount].AdvanceX = State->AdvanceX;
-            Result->Shaped[Result->ShapedCount].Size     = State->Size;
-
-            ++Result->ShapedCount;
+            Result->Shaped[Result->ShapedCount++] = PrepareGlyph(UTF8, Font);
         }
     }
     else

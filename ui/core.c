@@ -142,17 +142,6 @@ ReserveNodeChildrenInChain(u32 Amount)
 }
 
 internal ui_node_chain *
-PopParentNodeInChain(void)
-{
-    ui_node_chain *Result = GetNodeChain();
-    Assert(Result);
-
-    UIEnd();
-
-    return Result;
-}
-
-internal ui_node_chain *
 SetNodeTextInChain(byte_string Text)
 {
     ui_node_chain *Result = GetNodeChain();
@@ -177,28 +166,23 @@ SetNodeTextInChain(byte_string Text)
     // And I guess we assume that we are adding text to a label here?
     // Which is also probably a mistake.
 
-    ui_resource_key   Key   = MakeResourceKey(Node.IndexInTree, Subtree);
+    ui_resource_key   Key   = MakeResourceKey(UIResource_Text, Node.IndexInTree, Subtree);
     ui_resource_state State = FindResourceByKey(Key, Table);
 
     if(!State.Resource)
     {
-        // NOTE:
-        // Here, I don't really know. We probably just allocate some
-        // glyph run and set it on the node. Rather, on the resource.
-
-        u64   Size     = GetGlyphRunFootprint(Text.Size);
+        u64   Size     = GetUITextFootprint(Text.Size);
         void *Memory   = OSReserveMemory(Size);
         b32   Commited = OSCommitMemory(Memory, Size);
         Assert(Memory && Commited);
 
         ui_node_style *Style = GetNodeStyle(Node.IndexInTree, Subtree);
         ui_font       *Font  = UIGetFont(Style->Properties[StyleState_Basic]);
-        ui_glyph_run  *Run   = BeginGlyphRun(Text, Text.Size, Font, Memory);
-        Assert(Run);
 
-        // NOTE:
-        // This forces a text resource for now.
-        UpdateResourceTable(State.Id, Key, Run, UIResource_Text, Table);
+        ui_text *UIText = PlaceUITextInMemory(Text, Text.Size, Font, Memory);
+        Assert(UIText);
+
+        UpdateResourceTable(State.Id, Key, UIText, UIResource_Text, Table);
         SetLayoutNodeFlags(Node.IndexInTree, UILayoutNode_HasText, Subtree);
     }
     else
@@ -254,7 +238,7 @@ UIChain(ui_node Node)
 
     Assert(Subtree);
 
-    Result = PushStruct(Subtree->FrameData, ui_node_chain);
+    Result = PushStruct(Subtree->Transient, ui_node_chain);
     Assert(Result);
 
     Result->Node            = Node;
@@ -265,7 +249,6 @@ UIChain(ui_node Node)
     Result->SetStyle        = SetNodeStyleInChain;
     Result->FindChild       = FindNodeChildInChain;
     Result->ReserveChildren = ReserveNodeChildrenInChain;
-    Result->Stop            = PopParentNodeInChain;
     Result->SetText         = SetNodeTextInChain;
     Result->SetId           = SetNodeIdInChain;
 
@@ -416,10 +399,10 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
 }
 
 internal ui_resource_key
-MakeResourceKey(u32 NodeIndex, ui_subtree *Subtree)
+MakeResourceKey(UIResource_Type Type, u32 NodeIndex, ui_subtree *Subtree)
 {
     u64 Low  = (u64)Subtree;
-    u64 High = (u64)NodeIndex;
+    u64 High = ((u64)Type << 32) | NodeIndex;
 
     ui_resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
     return Key;
@@ -521,14 +504,14 @@ UpdateResourceTable(u32 Id, ui_resource_key Key, void *Memory, UIResource_Type T
     Entry->ResourceType = Type;
 }
 
-internal ui_glyph_run *
-GetLabelText(u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table)
+internal ui_text *
+QueryTextResource(u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table)
 {
-    ui_resource_key   Key   = MakeResourceKey(NodeIndex, Subtree);
+    ui_resource_key   Key   = MakeResourceKey(UIResource_Text, NodeIndex, Subtree);
     ui_resource_state State = FindResourceByKey(Key, Table);
     Assert(State.ResourceType == UIResource_Text);
 
-    ui_glyph_run *Result = (ui_glyph_run *)State.Resource;
+    ui_text *Result = (ui_text *)State.Resource;
     Assert(Result);
 
     return Result;
@@ -545,60 +528,90 @@ GetCurrentPipeline()
 }
 
 // ----------------------------------------------------------------------------------
+// Pipeline Internal Implementation
+
+internal u64
+GetSubtreeStaticFootprint(u64 NodeCount)
+{
+    u64 TreeSize  = GetLayoutTreeFootprint(NodeCount);
+    u64 StyleSize = NodeCount * sizeof(ui_node_style);
+    u64 Result    = sizeof(ui_subtree) + TreeSize + StyleSize;
+
+    return Result;
+}
+
+// ----------------------------------------------------------------------------------
 // Pipeline Public API Implementation
+
+// NOTE:
+// Is this even used?
 
 internal b32
 IsValidSubtree(ui_subtree *Subtree)
 {
-    b32 Result = (Subtree) && (Subtree->FrameData) && (Subtree->LayoutTree);
+    b32 Result = (Subtree) && (Subtree->Persistent) && (Subtree->Transient) && (Subtree->LayoutTree);
     return Result;
 }
 
 internal void
 UIBeginSubtree(ui_subtree_params Params)
 {
-    ui_pipeline *Pipeline = GetCurrentPipeline();
-    Assert(Pipeline);
-
-    memory_arena *Persist = Pipeline->StaticArena;
-    Assert(Persist);
-
     if(Params.CreateNew)
     {
         Assert(Params.NodeCount && "Cannot create a subtree with 0 nodes.");
 
-        ui_subtree_node *SubtreeNode = PushStruct(Persist, ui_subtree_node);
-        if(SubtreeNode)
+        memory_arena *Persistent = 0;
         {
-            ui_subtree_list *SubtreeList = &Pipeline->Subtrees;
-            AppendToLinkedList(SubtreeList, SubtreeNode, SubtreeList->Count);
+            u64 Footprint = GetSubtreeStaticFootprint(Params.NodeCount);
 
-            ui_layout_tree *LayoutTree = 0;
+            memory_arena_params Params = {0};
+            Params.AllocatedFromFile = __FILE__;
+            Params.AllocatedFromLine = __LINE__;
+            Params.ReserveSize       = Footprint;
+            Params.CommitSize        = Footprint;
+
+            Persistent = AllocateArena(Params);
+        }
+
+        memory_arena *Transient = 0;
+        {
+            memory_arena_params Params = {0};
+            Params.AllocatedFromFile = __FILE__;
+            Params.AllocatedFromLine = __LINE__;
+            Params.ReserveSize       = Kilobyte(64);
+            Params.CommitSize        = Kilobyte(8);
+
+            Transient = AllocateArena(Params);
+        }
+
+        if(Persistent && Transient)
+        {
+            ui_subtree_node *SubtreeNode = PushStruct(Persistent, ui_subtree_node);
+            ui_subtree      *Subtree     = &SubtreeNode->Value;
+
+            Subtree->Persistent = Persistent;
+            Subtree->Transient  = Transient;
+            Subtree->NodeCount  = Params.NodeCount;
+
+            Subtree->ComputedStyles = PushArray(Subtree->Persistent, ui_node_style, Params.NodeCount);
+
+            ui_layout_tree *Tree = 0;
             {
                 u64   Footprint = GetLayoutTreeFootprint(Params.NodeCount);
-                void *Memory    = PushArray(Persist, u8, Footprint);
+                void *Memory    = PushArray(Subtree->Persistent, u8, Footprint);
 
-                LayoutTree = PlaceLayoutTreeInMemory(Params.NodeCount, Memory);
+                Tree = PlaceLayoutTreeInMemory(Params.NodeCount, Memory);
             }
+            Subtree->LayoutTree = Tree;
 
-            memory_arena *Arena = 0;
-            {
-                memory_arena_params Params = {0};
-                Params.AllocatedFromFile = __FILE__;
-                Params.AllocatedFromLine = __LINE__;
-                Params.ReserveSize       = Megabyte(1);
-                Params.CommitSize        = Kilobyte(16);
+            // NOTE:
+            // What the fuck is this?
 
-                Arena = AllocateArena(Params);
-            }
-
-            SubtreeNode->Value.NodeCount      = Params.NodeCount;
-            SubtreeNode->Value.FrameData      = Arena;
-            SubtreeNode->Value.LayoutTree     = LayoutTree;
-            SubtreeNode->Value.ComputedStyles = PushArray(Persist, ui_node_style, Params.NodeCount);
-            SubtreeNode->Value.Id             = Pipeline->NextSubtreeId++;
-
-            Pipeline->CurrentSubtree = &SubtreeNode->Value;
+            ui_pipeline *Pipeline = GetCurrentPipeline();
+            Assert(Pipeline);
+            ui_subtree_list *SubtreeList = &Pipeline->Subtrees;
+            AppendToLinkedList(SubtreeList, SubtreeNode, SubtreeList->Count);
+            Pipeline->CurrentSubtree = Subtree;
         }
     }
     else
@@ -665,6 +678,9 @@ UICreatePipeline(ui_pipeline_params Params)
     return Result;
 }
 
+// NOTE:
+// Perhaps we do not need this?
+
 internal void
 UIBeginAllSubtrees(ui_pipeline *Pipeline)
 {
@@ -675,9 +691,7 @@ UIBeginAllSubtrees(ui_pipeline *Pipeline)
     {
         ui_subtree *Subtree = &Node->Value;
 
-        ClearArena(Subtree->FrameData);
-
-        Subtree->Events = 0;
+        ClearArena(Subtree->Transient);
     }
 
     UIState.CurrentPipeline = Pipeline;
@@ -693,9 +707,9 @@ UIExecuteAllSubtrees(ui_pipeline *Pipeline)
     {
         ui_subtree *Subtree = &Node->Value;
 
-        ComputeLayout(Subtree, Subtree->FrameData);
-        HitTestLayout(Subtree, Subtree->FrameData);
-        DrawLayout   (Subtree, Subtree->FrameData);
+        ComputeSubtreeLayout(Subtree);
+        UpdateSubtreeState(Subtree);
+        DrawSubtree(Subtree);
     }
 }
 

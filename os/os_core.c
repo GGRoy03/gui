@@ -83,7 +83,8 @@ OSClearInputs(os_inputs *Inputs)
         Inputs->MouseButtons[Idx].HalfTransitionCount = 0;
     }
 
-    Inputs->KeyPerFrame.Count = 0;
+    Inputs->ButtonBuffer.Count = 0;
+    Inputs->TextBuffer.Count   = 0;
 }
 
 // [Agnostic File API]

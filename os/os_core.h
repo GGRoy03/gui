@@ -6,7 +6,7 @@
 #define OS_MouseButtonCount 5
 #define OS_MAX_PATH 256
 
-#define MaxKeyPressPerFrame 512
+#define MaxUTF8BufferSizePerFrame 2048
 
 typedef enum OSConstant_Type
 {
@@ -63,11 +63,31 @@ typedef struct os_button_state
     u32 HalfTransitionCount;
 } os_button_state;
 
-typedef struct os_key_frame_buffer
+typedef struct os_button_action
 {
-    u32 Keys[MaxKeyPressPerFrame];
-    u32 Count;
-} os_key_frame_buffer;
+    b32 IsPressed;
+    u32 Keycode;
+} os_button_action;
+
+typedef struct os_button_action_buffer
+{
+    os_button_action Actions[256];
+    u32              Count;
+    u32              Size;
+} os_button_action_buffer;
+
+typedef struct os_text_action
+{
+    u8 UTF8[4];
+    u8 Size;
+} os_text_action;
+
+typedef struct os_text_action_buffer
+{
+    os_text_action Actions[256];
+    u32            Count;
+    u32            Size;
+} os_text_action_buffer;
 
 typedef struct os_inputs
 {
@@ -78,7 +98,8 @@ typedef struct os_inputs
     os_button_state MouseButtons[OS_MouseButtonCount];
 
     // Keyboard
-    os_key_frame_buffer KeyPerFrame;
+    os_button_action_buffer ButtonBuffer;
+    os_text_action_buffer   TextBuffer;
 
     // Mouse
     f32 ScrollDeltaInLines;
@@ -110,7 +131,8 @@ internal b32       OSIsMouseHeld        (OSMouseButton_Type Button);
 internal b32       OSIsMouseReleased    (OSMouseButton_Type Button);
 internal void      OSClearInputs        (os_inputs *Inputs);
 
-internal os_key_frame_buffer * OSGetPressedKeys(void);
+internal os_button_action_buffer * OSGetButtonActionBuffer  (void);
+internal os_text_action_buffer   * OSGetTextActionBuffer    (void);
 
 // [Files]
 

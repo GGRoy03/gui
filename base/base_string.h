@@ -66,6 +66,7 @@ internal u32            EncodeWideString  (u16 *WideString, u32 CodePoint);
 // [Conversion]
 
 external wide_string ByteStringToWideString(memory_arena *Arena, byte_string Input);
+internal byte_string WideStringToByteString(wide_string Input, memory_arena *Arena);
 
 // [Hashes]
 

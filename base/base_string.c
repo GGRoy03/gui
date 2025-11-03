@@ -300,6 +300,64 @@ DecodeByteString(u8 *ByteString, u64 Maximum)
     return Result;
 }
 
+internal unicode_decode
+DecodeWideString(u16 *String, u64 Max)
+{
+    unicode_decode Result = {1, _UI32_MAX};
+
+    Result.Codepoint = String[0];
+    Result.Increment = 1;
+
+    if(Max > 1 && 0xD800 <= String[0] && String[0] < 0xDC00 && 0xDC00 <= String[1] && String[1] < 0xE000)
+    {
+        Result.Codepoint = ((String[0] - 0xD800) << 10) | ((String[1] - 0xDC00) + 0x10000);
+        Result.Increment = 2;
+  }
+
+  return Result;
+}
+
+// Encoding Byte Strings
+
+internal u32
+EncodeByteString(u8 *String, u32 CodePoint)
+{
+    u32 Increment = 0;
+    if(CodePoint <= 0x7F)
+    {
+        String[0] = (u8)CodePoint;
+        Increment = 1;
+    }
+    else if(CodePoint <= 0x7FF)
+    {
+        String[0] = (Bitmask2 << 6) | ((CodePoint >> 6) & Bitmask5);
+        String[1] = Bit8 | (CodePoint & Bitmask6);
+        Increment = 2;
+    }
+    else if(CodePoint <= 0xFFFF)
+    {
+        String[0] = (Bitmask3 << 5) | ((CodePoint >> 12) & Bitmask4);
+        String[1] = Bit8 | ((CodePoint >> 6) & Bitmask6);
+        String[2] = Bit8 | ( CodePoint       & Bitmask6);
+        Increment = 3;
+    }
+    else if(CodePoint <= 0x10FFFF)
+    {
+        String[0] = (Bitmask4 << 4) | ((CodePoint >> 18) & Bitmask3);
+        String[1] = Bit8 | ((CodePoint >> 12) & Bitmask6);
+        String[2] = Bit8 | ((CodePoint >>  6) & Bitmask6);
+        String[3] = Bit8 | ( CodePoint        & Bitmask6);
+        Increment = 4;
+    }
+    else
+    {
+        String[0] = '?';
+        Increment = 1;
+    }
+
+    return Increment;
+}
+
 // Encoding Wide Strings
 // May be encoded as a single code unit (16 bits) or two (32 bits surrogate pair)
 // Code Point == U32_MAX -> Invalid
@@ -357,11 +415,43 @@ ByteStringToWideString(memory_arena *Arena, byte_string Input)
             Size   += EncodeWideString(String + Size, Consume.Codepoint);
         }
 
-        u64 OverflowAllocation = (Capacity - Size) * 2;
-        PopArena(Arena, OverflowAllocation);
+        u64 Overflow = (Capacity - Size) * 2;
+        PopArena(Arena, Overflow);
 
         String[Size] = 0;
         Result       = WideString(String, Size);
+    }
+
+    return Result;
+}
+
+internal byte_string
+WideStringToByteString(wide_string Input, memory_arena *Arena)
+{
+    byte_string Result = ByteString(0, 0);
+
+    if(Input.Size)
+    {
+        u64 Size     = 0;
+        u64 Capacity = Input.Size * 3;
+        u8 *String   = PushArray(Arena, u8, Capacity + 1);
+
+        u16 *Start = Input.String;
+        u16 *End   = Start + Input.Size;
+
+        unicode_decode Consume = {0};
+        for(; Start < End; Start += Consume.Increment)
+        {
+            Consume = DecodeWideString(Start, End - Start);
+            Size   += EncodeByteString(String + Size, Consume.Codepoint);
+        }
+
+        String[Size] = '\0';
+
+        u64 Overflow = (Capacity - Size);
+        PopArena(Arena, Overflow);
+
+        Result = ByteString(String, Size);
     }
 
     return Result;

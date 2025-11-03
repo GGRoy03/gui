@@ -58,10 +58,36 @@ OSWin32WindowProc(HWND Handle, UINT Message, WPARAM WParam, LPARAM LParam)
             ProcessInputMessage(&Inputs->KeyboardButtons[VKCode], IsDown);
         }
 
-        if(IsDown)
+        os_button_action Action =
         {
-            Inputs->KeyPerFrame.Keys[Inputs->KeyPerFrame.Count++] = VKCode;
+            .IsPressed = ((!WasDown) && IsDown),
+            .Keycode   = VKCode,
+        };
+
+        if(Inputs->ButtonBuffer.Count < Inputs->ButtonBuffer.Size)
+        {
+            Inputs->ButtonBuffer.Actions[Inputs->ButtonBuffer.Count++] = Action;
         }
+    } break;
+
+    case WM_CHAR:
+    {
+        WCHAR       WideChar = (WCHAR)WParam;
+        wide_string String   = WideString(&WideChar, 1);
+
+        memory_region Local = EnterMemoryRegion(OSWin32State.Arena);
+
+        byte_string UTF8 = WideStringToByteString(String, Local.Arena);
+        if(IsValidByteString(UTF8))
+        {
+            os_text_action Action = {0};
+            Action.Size = UTF8.Size;
+            MemoryCopy(Action.UTF8, UTF8.String, UTF8.Size);
+
+            Inputs->TextBuffer.Actions[Inputs->TextBuffer.Count++] = Action;
+        }
+
+        LeaveMemoryRegion(Local);
     } break;
 
     case WM_LBUTTONDOWN:
@@ -449,10 +475,18 @@ OSGetInputs(void)
     return Result;
 }
 
-internal os_key_frame_buffer *
-OSGetPressedKeys()
+internal os_button_action_buffer *
+OSGetButtonActionBuffer(void)
 {
-    os_inputs           *Inputs = &OSWin32State.Inputs;
-    os_key_frame_buffer *Result = &Inputs->KeyPerFrame;
+    os_inputs               *Inputs = &OSWin32State.Inputs;
+    os_button_action_buffer *Result = &Inputs->ButtonBuffer;
+    return Result;
+}
+
+internal os_text_action_buffer *
+OSGetTextActionBuffer(void)
+{
+    os_inputs             *Inputs = &OSWin32State.Inputs;
+    os_text_action_buffer *Result = &Inputs->TextBuffer;
     return Result;
 }

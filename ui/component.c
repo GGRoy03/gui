@@ -65,12 +65,6 @@ UIScrollView(u32 StyleIndex)
     return Chain;
 }
 
-// NOTE:
-// We for sure ask the user for a text buffer.
-// But how do we manage our memory?
-// We need some array of shaped glyphs.
-// And the access to the user buffer.
-
 internal ui_node_chain *
 UITextInput(u8 *TextBuffer, u64 TextBufferSize, u32 StyleIndex)
 {
@@ -80,5 +74,33 @@ UITextInput(u8 *TextBuffer, u64 TextBufferSize, u32 StyleIndex)
     }
 
     ui_node_chain *Chain = UIComponent(StyleIndex, Flags);
+
+    // NOTE:
+    // These resource allocations are killing me.
+
+    ui_resource_key   Key   = MakeResourceKey(UIResource_TextInput, Chain->Node.IndexInTree, Chain->Subtree);
+    ui_resource_state State = FindResourceByKey(Key, UIState.ResourceTable);
+
+    if(!State.Resource)
+    {
+        u64   Size     = sizeof(ui_text_input);
+        void *Memory   = OSReserveMemory(Size);
+        b32   Commited = OSCommitMemory(Memory, Size);
+        Assert(Memory && Commited);
+
+        ui_text_input *TextInput = (ui_text_input *)Memory;
+        TextInput->UserData = TextBuffer;
+        TextInput->Size     = TextBufferSize;
+
+        UpdateResourceTable(State.Id, Key, TextInput, UIResource_TextInput, UIState.ResourceTable);
+        SetLayoutNodeFlags(Chain->Node.IndexInTree, UILayoutNode_HasTextInput, Chain->Subtree);
+    }
+    else
+    {
+        // NOTE:
+        // This case should not really be possible?
+        // Not really sure.
+    }
+
     return Chain;
 }

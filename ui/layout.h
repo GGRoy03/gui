@@ -80,9 +80,9 @@ internal void ClearLayoutNodeFlags  (u32 NodeIndex, bit_field Flags, ui_subtree 
 //
 // ComputeLayout:
 
-internal void HitTestLayout  (ui_subtree *Subtree, memory_arena *Arena);
-internal void ComputeLayout  (ui_subtree *Subtree, memory_arena *Arena);
-internal void DrawLayout     (ui_subtree *Subtree, memory_arena *Arena);
+internal void ComputeSubtreeLayout  (ui_subtree *Subtree);
+internal void UpdateSubtreeState    (ui_subtree *Subtree);
+internal void DrawSubtree           (ui_subtree *Subtree);
 
 // -------------------------------------------------------------------------------------------------------------------
 // NodeIdTable_Size:

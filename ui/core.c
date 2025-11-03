@@ -708,7 +708,7 @@ UIExecuteAllSubtrees(ui_pipeline *Pipeline)
 
         ComputeSubtreeLayout(Subtree);
         UpdateSubtreeState(Subtree);
-        DrawSubtree(Subtree);
+        PaintSubtree(Subtree);
     }
 }
 

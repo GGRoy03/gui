@@ -479,6 +479,9 @@ SetLayoutNodeResource(u32 NodeIndex, ui_resource_key Key, ui_subtree *Subtree)
     Assert(Node);
 }
 
+// NOTE:
+// We surely do not want to expose this...
+
 internal void
 SetLayoutNodeFlags(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
 {
@@ -519,11 +522,8 @@ AllocateUINode(bit_field Flags, ui_subtree *Subtree)
     return Result;
 }
 
-internal void
-BindTextResource(ui_node Node, ui_subtree *Subtree, ui_resource_key Key)
-{
-    Assert(Subtree);
-}
+// NOTE:
+// Still hate this.
 
 internal void
 UIEnd()
@@ -608,11 +608,11 @@ UpdateScrollNode(f32 ScrolledLines, ui_layout_node *Node)
             {
                 if (RectsIntersect(WindowBounds, Node->Value.ContentBox))
                 {
-                    ClearFlag(Child->Flags, UILayoutNode_DoNotDraw);
+                    ClearFlag(Child->Flags, UILayoutNode_DoNotPaint);
                 }
                 else
                 {
-                    SetFlag(Child->Flags, UILayoutNode_DoNotDraw);
+                    SetFlag(Child->Flags, UILayoutNode_DoNotPaint);
                 }
             }
         }
@@ -1116,64 +1116,6 @@ FlexJustifyCenter(f32 ChildSize, f32 ContentSize)
 // -----------------------------------------------------------
 // Layout Pass Internal Helpers/Types
 
-typedef struct draw_stack_frame
-{
-    ui_layout_node *Node;
-    vec2_f32        AccScroll;
-    rect_f32        Clip;
-} draw_stack_frame;
-
-typedef struct draw_stack
-{
-    u64 NextWrite;
-    u64 Size;
-
-    draw_stack_frame *Frames;
-} draw_stack;
-
-internal draw_stack
-BeginDrawStack(u64 Size, memory_arena *Arena)
-{
-    draw_stack Result = {0};
-    Result.Frames = PushArray(Arena, draw_stack_frame, Size);
-    Result.Size   = Size;
-
-    return Result;
-}
-
-internal b32
-IsValidDrawStack(draw_stack *Stack)
-{
-    b32 Result = (Stack) && (Stack->Frames) && (Stack->Size);
-    return Result;
-}
-
-internal b32
-IsDrawStackEmpty(draw_stack *Stack)
-{
-    b32 Result = Stack->NextWrite == 0;
-    return Result;
-}
-
-internal void
-PushDrawStack(draw_stack_frame Value, draw_stack *Stack)
-{
-    if(Stack->NextWrite < Stack->Size)
-    {
-        Stack->Frames[Stack->NextWrite++] = Value;
-    }
-}
-
-internal draw_stack_frame
-PopDrawStack(draw_stack *Stack)
-{
-    Assert(Stack->NextWrite != 0);
-
-    draw_stack_frame Result = Stack->Frames[--Stack->NextWrite];
-    return Result;
-}
-
-
 DEFINE_TYPED_QUEUE(Node, node, ui_layout_node *);
 
 // Places a layout subtree beginning at root from the subtree.
@@ -1656,8 +1598,147 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
     }
 }
 
+// ----------------------------------------------------------------------------------
+// Painting Internal Implementation.
+
+// NOTE:
+// May get its own file at some point.
+
+typedef struct paint_stack_frame
+{
+    ui_layout_node *Node;
+    vec2_f32        AccScroll;
+    rect_f32        Clip;
+} paint_stack_frame;
+
+typedef struct paint_stack
+{
+    u64 NextWrite;
+    u64 Size;
+
+    paint_stack_frame *Frames;
+} paint_stack;
+
+internal paint_stack
+BeginPaintStack(u64 Size, memory_arena *Arena)
+{
+    paint_stack Result = {0};
+    Result.Frames = PushArray(Arena, paint_stack_frame, Size);
+    Result.Size   = Size;
+
+    return Result;
+}
+
+internal b32
+IsValidPaintStack(paint_stack *Stack)
+{
+    b32 Result = (Stack) && (Stack->Frames) && (Stack->Size);
+    return Result;
+}
+
+internal b32
+IsPaintStackEmpty(paint_stack *Stack)
+{
+    b32 Result = Stack->NextWrite == 0;
+    return Result;
+}
+
+internal void
+PushPaintStack(paint_stack_frame Value, paint_stack *Stack)
+{
+    if(Stack->NextWrite < Stack->Size)
+    {
+        Stack->Frames[Stack->NextWrite++] = Value;
+    }
+}
+
+internal paint_stack_frame
+PopPaintStack(paint_stack *Stack)
+{
+    Assert(Stack->NextWrite != 0);
+
+    paint_stack_frame Result = Stack->Frames[--Stack->NextWrite];
+    return Result;
+}
+
+internal render_batch_list *
+GetPaintBatchList(ui_layout_node *LayoutNode, ui_subtree *Subtree, rect_f32 Clip)
+{
+    Assert(LayoutNode);
+    Assert(Subtree);
+    Assert(Subtree->Transient);
+
+    render_pass           *Pass     = GetRenderPass(Subtree->Transient, RenderPass_UI);
+    render_pass_params_ui *UIParams = &Pass->Params.UI.Params;
+    rect_group_node       *Node     = UIParams->Last;
+
+    rect_group_params Params = {0};
+    {
+        Params.Transform = Mat3x3Identity();
+        Params.Clip      = Clip;
+
+        if(HasFlag(LayoutNode->Flags, UILayoutNode_HasText))
+        {
+            ui_resource_table *Table = UIState.ResourceTable;
+
+            ui_text *Text = QueryTextResource(LayoutNode->Index, Subtree, Table);
+            Assert(Text);
+
+            Params.Texture     = Text->Atlas;
+            Params.TextureSize = Text->AtlasSize;
+        }
+    }
+
+    b32 CanMergeNodes = (Node && CanMergeRectGroupParams(&Node->Params, &Params));
+    if(CanMergeNodes)
+    {
+        Params.Texture     = IsValidRenderHandle(Node->Params.Texture) ? Node->Params.Texture     : Params.Texture;
+        Params.TextureSize = IsValidRenderHandle(Node->Params.Texture) ? Node->Params.TextureSize : Params.TextureSize;
+    }
+
+    if(!Node || !CanMergeNodes)
+    {
+        Node = PushStruct(Subtree->Transient, rect_group_node);
+        Node->BatchList.BytesPerInstance = sizeof(ui_rect);
+
+        AppendToLinkedList(UIParams, Node, UIParams->Count);
+    }
+
+    Assert(Node);
+
+    Node->Params = Params;
+
+    render_batch_list *Result = &Node->BatchList;
+    return Result;
+}
+
+internal void
+PaintUIRect_(rect_f32 Rect, ui_color Color, ui_corner_radius CornerRadii, f32 BorderWidth, f32 Softness, rect_f32 Source, b32 Sample, render_batch_list *BatchList, memory_arena *Arena)
+{
+    ui_rect *UIRect = PushDataInBatchList(Arena, BatchList);
+    UIRect->RectBounds    = Rect;
+    UIRect->TextureSource = Source;
+    UIRect->Color         = Color;
+    UIRect->CornerRadii   = CornerRadii;
+    UIRect->BorderWidth   = BorderWidth;
+    UIRect->Softness      = Softness;
+    UIRect->SampleTexture = Sample;
+}
+
+internal void
+PaintUIRect(rect_f32 Rect, ui_color Color, ui_corner_radius CornerRadii, f32 BorderWidth, f32 Softness, render_batch_list *BatchList, memory_arena *Arena)
+{
+    PaintUIRect_(Rect, Color, CornerRadii, BorderWidth, Softness, RectF32Zero(), 0, BatchList, Arena);
+}
+
+internal void
+PaintUIGlyph(rect_f32 Rect, ui_color Color, rect_f32 Sample, render_batch_list *BatchList, memory_arena *Arena)
+{
+    PaintUIRect_(Rect, Color, (ui_corner_radius){0}, 0, 0, Sample, 1, BatchList, Arena);
+}
+
 internal style_property *
-ComputeFinalStyle(ui_layout_node *Node, ui_subtree *Subtree)
+GetPaintProperties(ui_layout_node *Node, ui_subtree *Subtree)
 {
     style_property *Result = 0;
 
@@ -1674,7 +1755,7 @@ ComputeFinalStyle(ui_layout_node *Node, ui_subtree *Subtree)
 
     if(State == StyleState_Basic)
     {
-        Result = NodeStyle->Properties[State]; // Get base properties.
+        Result = NodeStyle->Properties[State];
     }
     else
     {
@@ -1682,7 +1763,6 @@ ComputeFinalStyle(ui_layout_node *Node, ui_subtree *Subtree)
 
         if(Result)
         {
-
             MemoryCopy(Result, NodeStyle->Properties[StyleState_Basic], sizeof(NodeStyle->Properties[StyleState_Basic]));
 
             ForEachEnum(StyleProperty_Type, StyleProperty_Count, Prop)
@@ -1700,103 +1780,59 @@ ComputeFinalStyle(ui_layout_node *Node, ui_subtree *Subtree)
 }
 
 internal void
-DrawAtRoot(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_arena *Arena)
+PaintTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
 {
-    render_pass *Pass  = GetRenderPass(Arena, RenderPass_UI);
-    draw_stack   Stack = BeginDrawStack(NodeLimit, Arena);
+    memory_arena *Arena = Subtree->Transient;
+    paint_stack   Stack = BeginPaintStack(Subtree->NodeCount, Arena);
 
-    if(Pass && IsValidDrawStack(&Stack))
+    if(IsValidPaintStack(&Stack))
     {
-        PushDrawStack((draw_stack_frame){.Node = Root, .AccScroll = Vec2F32(0.f ,0.f), .Clip = RectF32(0, 0, 0, 0)}, &Stack);
+        PushPaintStack((paint_stack_frame){.Node = Root, .AccScroll = Vec2F32(0.f ,0.f), .Clip = RectF32(0, 0, 0, 0)}, &Stack);
 
-        while(!IsDrawStackEmpty(&Stack))
+        while(!IsPaintStackEmpty(&Stack))
         {
-            draw_stack_frame Frame          = PopDrawStack(&Stack);
-            rect_f32         ChildClip      = Frame.Clip;
-            vec2_f32         ChildAccScroll = Frame.AccScroll;
+            paint_stack_frame Frame = PopPaintStack(&Stack);
 
-            ui_layout_node    *Node  = Frame.Node;
-            ui_resource_table *Table = UIState.ResourceTable;
+            rect_f32        ClipRect  = Frame.Clip;
+            vec2_f32        AccScroll = Frame.AccScroll;
+            ui_layout_node *Node      = Frame.Node;
 
-            render_batch_list *BatchList = 0;
+            vec2_f32 NodeOrigin = Vec2F32Add(Node->Value.VisualOffset, AccScroll);
+            rect_f32 FinalRect  = TranslateRectF32(Node->Value.OuterBox, NodeOrigin);
+
+            // Painting
             {
-                rect_group_params RootParams = {0};
-                RootParams.Transform = Mat3x3Identity();
-                RootParams.Clip      = Frame.Clip;
+                render_batch_list *BatchList = GetPaintBatchList(Node, Subtree, ClipRect);
+                style_property    *Style     = GetPaintProperties(Node, Subtree);
 
-                render_pass_params_ui *UIParams  = &Pass->Params.UI.Params;
-                rect_group_node       *GroupNode = UIParams->Last;
+                ui_corner_radius CornerRadii = UIGetCornerRadius(Style);
+                f32              Softness    = UIGetSoftness(Style);
 
-                b32 CanMerge = 0;
-                if(GroupNode)
-                {
-                    if(HasFlag(Node->Flags, UILayoutNode_HasText))
-                    {
-                        ui_text *Text = QueryTextResource(Node->Index, Subtree, Table);
-                        Assert(Text);
-
-                        RootParams.Texture     = Text->Atlas;
-                        RootParams.TextureSize = Text->AtlasSize;
-                    }
-
-                    CanMerge = CanMergeRectGroupParams(&GroupNode->Params, &RootParams);
-                }
-
-                if(!CanMerge)
-                {
-                    GroupNode = PushStruct(Arena, rect_group_node);
-                    GroupNode->BatchList.BytesPerInstance = sizeof(ui_rect);
-
-                    AppendToLinkedList(UIParams, GroupNode, UIParams->Count);
-                }
-
-                // BUG: Wrong in some cases.
-                GroupNode->Params = RootParams;
-                BatchList         = &GroupNode->BatchList;
-            }
-
-            style_property *Style = ComputeFinalStyle(Frame.Node, Subtree);
-
-            vec2_f32 NodeOrigin = Vec2F32Add(Frame.Node->Value.VisualOffset, Frame.AccScroll);
-            rect_f32 FinalRect  = TranslateRectF32(Frame.Node->Value.OuterBox, NodeOrigin);
-
-            // Draws
-            {
                 ui_color BackgroundColor = UIGetColor(Style);
                 if(IsVisibleColor(BackgroundColor))
                 {
-                    ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
-                    Rect->RectBounds  = FinalRect; 
-                    Rect->Color       = BackgroundColor;
-                    Rect->CornerRadii = UIGetCornerRadius(Style);
-                    Rect->Softness    = UIGetSoftness(Style);
+                    PaintUIRect(FinalRect, BackgroundColor, CornerRadii, 0, Softness, BatchList, Arena);
                 }
 
                 ui_color BorderColor = UIGetBorderColor(Style);
                 f32      BorderWidth = UIGetBorderWidth(Style);
                 if(IsVisibleColor(BorderColor) && BorderWidth > 0.f)
                 {
-                    ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
-                    Rect->RectBounds  = FinalRect;
-                    Rect->Color       = BorderColor;
-                    Rect->CornerRadii = UIGetCornerRadius(Style);
-                    Rect->BorderWidth = BorderWidth;
-                    Rect->Softness    = UIGetSoftness(Style);
+                    PaintUIRect(FinalRect, BorderColor, CornerRadii, BorderWidth, Softness, BatchList, Arena);
                 }
 
                 if(HasFlag(Node->Flags, UILayoutNode_HasText))
                 {
-                    ui_text *Text = QueryTextResource(Node->Index, Subtree, Table);
+                    ui_text *Text = QueryTextResource(Node->Index, Subtree, UIState.ResourceTable);
                     Assert(Text);
 
                     ui_color TextColor = UIGetTextColor(Style);
                     for(u32 Idx = 0; Idx < Text->ShapedCount; ++Idx)
                     {
-                        ui_rect *Rect = PushDataInBatchList(Arena, BatchList);
-                        Rect->SampleTexture = 1.f;
-                        Rect->TextureSource = Text->Shaped[Idx].Source;
-                        Rect->RectBounds    = TranslatedRectF32(Text->Shaped[Idx].Position, NodeOrigin);
-                        Rect->Color         = TextColor;
+                        rect_f32 GlyphRect = TranslatedRectF32(Text->Shaped[Idx].Position, NodeOrigin);
+                        rect_f32 Source    = Text->Shaped[Idx].Source;
+
+                        PaintUIGlyph(GlyphRect, TextColor, Source, BatchList, Arena);
                     }
                 }
             }
@@ -1807,32 +1843,37 @@ DrawAtRoot(ui_layout_node *Root, u64 NodeLimit, ui_subtree *Subtree, memory_aren
                 {
                     vec2_f32 NodeScroll = GetScrollNodeTranslation(Frame.Node);
 
-                    ChildAccScroll.X += NodeScroll.X;
-                    ChildAccScroll.Y += NodeScroll.Y;
+                    AccScroll.X += NodeScroll.X;
+                    AccScroll.Y += NodeScroll.Y;
                 }
+
+                // NOTE:
+                // This code is confusing as hell.
 
                 if(HasFlag(Frame.Node->Flags, UILayoutNode_HasClip))
                 {
-                    ChildClip = TranslatedRectF32(Frame.Node->Value.ContentBox, NodeOrigin);
-
                     rect_f32 EmptyClip     = RectF32Zero();
-                    b32      ParentHasClip = (MemoryCompare(&Frame.Clip, &EmptyClip, sizeof(rect_f32)) != 0);
+                    b32      ParentHasClip = (MemoryCompare(&ClipRect, &EmptyClip, sizeof(rect_f32)) != 0);
+
+                    ClipRect = TranslatedRectF32(Node->Value.ContentBox, NodeOrigin);
 
                     if(ParentHasClip)
                     {
-                        ChildClip = IntersectRectF32(Frame.Clip, ChildClip);
+
+                        ClipRect = IntersectRectF32(Frame.Clip, ClipRect);
                     }
                 }
             }
 
             IterateLinkedListBackward(Frame.Node, ui_layout_node *, Child)
             {
-                if (!(HasFlag(Child->Flags, UILayoutNode_DoNotDraw)) && Child->Value.Display != UIDisplay_None)
+                if (!(HasFlag(Child->Flags, UILayoutNode_DoNotPaint)) && Child->Value.Display != UIDisplay_None)
                 {
-                    PushDrawStack((draw_stack_frame){.Node = Child, .AccScroll = ChildAccScroll, .Clip = ChildClip}, &Stack);
+                    PushPaintStack((paint_stack_frame){.Node = Child, .AccScroll = AccScroll, .Clip = ClipRect}, &Stack);
                 }
             }
         }
+
     }
 }
 
@@ -1875,7 +1916,7 @@ ComputeSubtreeLayout(ui_subtree *Subtree)
 }
 
 internal void 
-DrawSubtree(ui_subtree *Subtree)
+PaintSubtree(ui_subtree *Subtree)
 {
     Assert(Subtree);
     Assert(Subtree->LayoutTree);
@@ -1886,7 +1927,7 @@ DrawSubtree(ui_subtree *Subtree)
 
     if(Root)
     {
-        DrawAtRoot(Root, Tree->NodeCount, Subtree, Subtree->Transient);
+        PaintTreeFromRoot(Root, Subtree);
     }
 }
 

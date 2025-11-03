@@ -39,8 +39,8 @@ typedef struct ui_layout_tree  ui_layout_tree;
 
 typedef enum UILayoutNode_Flag
 {
-    // Drawing
-    UILayoutNode_DoNotDraw       = 1 << 1,
+    // Painting
+    UILayoutNode_DoNotPaint      = 1 << 1,
     UILayoutNode_HasClip         = 1 << 2,
 
     // State
@@ -82,7 +82,8 @@ internal void ClearLayoutNodeFlags  (u32 NodeIndex, bit_field Flags, ui_subtree 
 
 internal void ComputeSubtreeLayout  (ui_subtree *Subtree);
 internal void UpdateSubtreeState    (ui_subtree *Subtree);
-internal void DrawSubtree           (ui_subtree *Subtree);
+
+internal void PaintSubtree           (ui_subtree *Subtree);
 
 // -------------------------------------------------------------------------------------------------------------------
 // NodeIdTable_Size:

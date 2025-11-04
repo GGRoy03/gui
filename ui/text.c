@@ -223,6 +223,7 @@ internal ui_text *
 PlaceUITextInMemory(byte_string Text, u64 BufferSize, ui_font *Font, void *Memory)
 {
     Assert(Text.Size <= BufferSize);
+    Assert(Font);
 
     ui_text *Result   = 0;
 

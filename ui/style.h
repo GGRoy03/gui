@@ -60,6 +60,7 @@ typedef struct style_property
         ui_color         Color;
         ui_corner_radius CornerRadius;
         void            *Pointer;
+        byte_string      String;
     };
 } style_property;
 

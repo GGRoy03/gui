@@ -231,7 +231,8 @@ internal void              UpdateResourceTable   (u32 Id, ui_resource_key Key, v
 
 // Queries:
 //   Queries both compute a key and retrieve the corresponding resource type.
-//   When querying a resource it is excpected that the resource already exists, if it is not, an assertion is triggered. It also must be of the correct type.
+//   When querying a resource it is excpected that the resource already exists.
+//   If it does not, an assertion is triggered. It also must be of the correct type.
 
 internal ui_text * QueryTextResource  (u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table);
 

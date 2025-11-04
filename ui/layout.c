@@ -894,6 +894,9 @@ AttemptNodeFocus(vec2_f32 MousePosition, ui_layout_node *Root, memory_arena *Are
         return 1;
     }
 
+    // NOTE:
+    // Should this take focus?
+
     f32 ScrollDelta = OSGetScrollDelta();
     if(HasFlag(Root->Flags, UILayoutNode_IsScrollable) && ScrollDelta != 0.f)
     {
@@ -901,6 +904,7 @@ AttemptNodeFocus(vec2_f32 MousePosition, ui_layout_node *Root, memory_arena *Are
     }
 
     RecordUIHoverEvent(Root, Result, Arena);
+
     return 0;
 }
 
@@ -999,27 +1003,21 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
         {
         } break;
 
-        // BUG:
-        // Frame of lag is very bad!
-
         case UIEvent_Resize:
         {
             ui_resize_event Resize = Event->Resize;
 
-            ui_node_style *Style = GetNodeStyle(Resize.Node->Index, Subtree);
-            vec2_unit      Size  = UIGetSize(Style->Properties[StyleState_Basic]);
+            ui_node_style *Style        = GetNodeStyle(Resize.Node->Index, Subtree);
+            vec2_unit      CurrentSize  = UIGetSize(Style->Properties[StyleState_Basic]);
 
-            Assert(Size.X.Type == UIUnit_Float32);
-            Assert(Size.X.Type == UIUnit_Float32);
+            Assert(CurrentSize.X.Type == UIUnit_Float32);
+            Assert(CurrentSize.X.Type == UIUnit_Float32);
 
-            Size.X.Float32 += Resize.Delta.X;
-            Size.Y.Float32 += Resize.Delta.Y;
+            vec2_unit Resized = CurrentSize;
+            Resized.X.Float32 += Resize.Delta.X;
+            Resized.Y.Float32 += Resize.Delta.Y;
 
-            Style->Properties[StyleState_Basic][StyleProperty_Size].Vec2         = Size;
-            Style->Properties[StyleState_Basic][StyleProperty_Size].IsSetRuntime = 1;
-
-            Style->IsLastVersion = 0;
-
+            UISetSize(Resize.Node->Index, Resized, Subtree);
         } break;
 
         case UIEvent_Drag:
@@ -1051,13 +1049,10 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
 
             if(Node && HasFlag(Node->Flags, UILayoutNode_HasTextInput))
             {
-                ui_resource_key   TextInputKey   = MakeResourceKey(UIResource_TextInput, Node->Index, Subtree);
-                ui_resource_state TextInputState = FindResourceByKey(TextInputKey, Table);
-
                 ui_resource_key   TextKey   = MakeResourceKey(UIResource_Text, Node->Index, Subtree);
                 ui_resource_state TextState = FindResourceByKey(TextKey, Table);
 
-                ui_text_input *Input = TextInputState.Resource;
+                ui_text_input *Input = QueryTextInputResource(Node->Index, Subtree, Table);
                 Assert(Input);
                 Assert(Input->UserData.String);
                 Assert(Input->Size);

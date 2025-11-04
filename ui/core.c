@@ -73,7 +73,7 @@ SetNodeDisplayInChain(UIDisplay_Type Type)
     Assert(Result->Subtree);
     Assert(Result->Node.CanUse);
 
-    UISetDisplay(Result->Node, Type, Result->Subtree);
+    UISetDisplay(Result->Node.IndexInTree, Type, Result->Subtree);
 
     return Result;
 }
@@ -86,7 +86,7 @@ SetNodeTextColorInChain(ui_color Color)
     Assert(Result->Subtree);
     Assert(Result->Node.CanUse);
 
-    UISetTextColor(Result->Node, Color, Result->Subtree);
+    UISetTextColor(Result->Node.IndexInTree, Color, Result->Subtree);
 
     return Result;
 }
@@ -513,6 +513,18 @@ QueryTextResource(u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table)
     Assert(State.Resource && State.ResourceType == UIResource_Text);
 
     ui_text *Result = (ui_text *)State.Resource;
+    return Result;
+}
+
+internal ui_text_input *
+QueryTextInputResource(u32 NodeIndex, ui_subtree *Subtree, ui_resource_table *Table)
+{
+    ui_resource_key   Key   = MakeResourceKey(UIResource_TextInput, NodeIndex, Subtree);
+    ui_resource_state State = FindResourceByKey(Key, Table);
+
+    Assert(State.Resource && State.ResourceType == UIResource_TextInput);
+
+    ui_text_input *Result = (ui_text_input *)State.Resource;
     return Result;
 }
 

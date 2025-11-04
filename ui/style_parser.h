@@ -89,21 +89,6 @@ typedef struct style_header
     byte_string StyleName;
 } style_header;
 
-typedef struct style_attribute
-{
-    b32                IsSet;
-    u32                HadError;
-    u32                LineInFile;
-    StyleProperty_Type PropertyType;
-    StyleToken_Type    ParsedAs;
-    union
-    {
-        ui_unit      Unit;
-        byte_string  String;
-        style_vector Vector;
-    };
-} style_attribute;
-
 typedef struct style_variable
 {
     b32          IsValid;
@@ -116,18 +101,6 @@ typedef struct style_effect
 {
     StyleState_Type Type;
 } style_effect;
-
-typedef struct style_block
-{
-    u32             AttributesCount;
-    style_attribute Attributes[StyleState_Count][StyleProperty_Count];
-} style_block;
-
-typedef struct style
-{
-    style_header Header;
-    style_block  Block;
-} style;
 
 // Variables
 // Implemented as a simple linked list hashmap. Per file.
@@ -266,21 +239,11 @@ internal ui_color ToNormalizedColor        (vec4_unit Vec);
 
 internal style_token        * GetStyleToken      (style_token_buffer *Buffer, i64 Index);
 internal style_token        * EmitStyleToken     (style_token_buffer *Buffer, StyleToken_Type Type, u64 AtLine, u64 AtByte);
-internal style_token        * PeekStyleToken     (style_token_buffer *Buffer, i32 Offset, style_file_debug_info *Debug);
 internal void                 EatStyleTokens     (style_token_buffer *Buffer, u32 Count);
 internal ui_unit              ReadUnit           (os_read_file *File, style_file_debug_info *Debug);
 internal byte_string          ReadIdentifier     (os_read_file *File);
 internal style_vector         ReadVector         (os_read_file *File, style_file_debug_info *Debug);
 internal tokenized_style_file TokenizeStyleFile  (os_read_file File, memory_arena *Arena, style_file_debug_info *Debug);
-
-// [Parsing Routines]
-
-internal ui_style_registry * ParseStyleFile         (tokenized_style_file *File, memory_arena *RoutineArena, memory_arena *OutputArena, style_file_debug_info *Debug);
-internal style_header           ParseStyleHeader     (style_token_buffer *Buffer, style_file_debug_info *Debug);
-internal style_effect           ParseStyleEffect     (style_token_buffer *Buffer, style_file_debug_info *Debug);
-internal style_block            ParseStyleBlock      (style_token_buffer *Buffer, style_var_table *VarTable, style_file_debug_info *Debug);
-internal style_attribute        ParseStyleAttribute  (style_token_buffer *Buffer, style_var_table *VarTable, style_file_debug_info *debug);
-internal style_variable         ParseStyleVariable   (style_token_buffer *Buffer, style_file_debug_info *Debug);
 
 // [Variables]
 
@@ -291,12 +254,6 @@ internal u32               PopFreeStyleVarEntry        (style_var_table *Table);
 internal style_var_entry * FindStyleVarEntry           (style_var_hash Hash, style_var_table *Table);
 internal style_var_hash    HashStyleVar                (byte_string Name);
 internal size_t            GetStyleVarTableFootprint   (style_var_table_params Params);
-
-// [Caching]
-
-internal void           ValidateAttributeFormatting  (style_attribute *Attribute, style_file_debug_info *Debug);
-internal style_property ConvertAttributeToProperty   (style_attribute Attribute);
-internal void           CacheStyle                   (style *ParsedStyle, ui_style_registry *Registry, style_file_debug_info *Debug);
 
 // [Error Handling]
 

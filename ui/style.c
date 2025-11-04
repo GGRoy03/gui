@@ -118,13 +118,16 @@ UIGetSelfAlign(style_property Properties[StyleProperty_Count])
 // Style Manipulation Internal API
 
 internal void
-SetStyleProperty(ui_node Node, style_property Value, StyleState_Type State, ui_subtree *Subtree)
+SetStyleProperty(u32 NodeIndex, style_property Value, StyleState_Type State, ui_subtree *Subtree)
 {
-    ui_node_style *NodeStyle = Subtree->ComputedStyles + Node.IndexInTree;
+    ui_node_style *NodeStyle = Subtree->ComputedStyles + NodeIndex;
 
     if(NodeStyle)
     {
-        NodeStyle->Properties[State][Value.Type] = Value;
+        NodeStyle->Properties[State][Value.Type]              = Value;
+        NodeStyle->Properties[State][Value.Type].IsSetRuntime = 1;
+
+        NodeStyle->IsLastVersion = 0;
     }
 }
 
@@ -147,23 +150,30 @@ GetCachedStyle(u32 Index, ui_style_registry *Registry)
 // Style Manipulation Public API
 
 internal void
-UISetDisplay(ui_node Node, UIDisplay_Type Display, ui_subtree *Subtree)
+UISetSize(u32 NodeIndex, vec2_unit Size, ui_subtree *Subtree)
 {
-    Assert(Node.CanUse);
     Assert(Subtree);
 
-    style_property Property = {.Type = StyleProperty_Display, .Enum = Display};
-    SetStyleProperty(Node, Property, StyleState_Basic, Subtree);
+    style_property Property = {.Type = StyleProperty_Size, .Vec2 = Size};
+    SetStyleProperty(NodeIndex, Property, StyleState_Basic, Subtree);
 }
 
 internal void
-UISetTextColor(ui_node Node, ui_color Color, ui_subtree *Subtree)
+UISetDisplay(u32 NodeIndex, UIDisplay_Type Display, ui_subtree *Subtree)
 {
-    Assert(Node.CanUse);
+    Assert(Subtree);
+
+    style_property Property = {.Type = StyleProperty_Display, .Enum = Display};
+    SetStyleProperty(NodeIndex, Property, StyleState_Basic, Subtree);
+}
+
+internal void
+UISetTextColor(u32 NodeIndex, ui_color Color, ui_subtree *Subtree)
+{
     Assert(Subtree);
 
     style_property Property = {.Type = StyleProperty_TextColor, .Color = Color};
-    SetStyleProperty(Node, Property, StyleState_Basic, Subtree);
+    SetStyleProperty(NodeIndex, Property, StyleState_Basic, Subtree);
 }
 
 internal u32

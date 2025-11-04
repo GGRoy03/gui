@@ -1,5 +1,11 @@
 #pragma once
 
+// NOTE:
+// I wonder if we can differentiate between layout and style:
+// Instead of having cached style we have cached_properties (Or whatever)
+// This contains [StyleProperties][LayoutProperties][Other]
+// Unsure yet what this accomplishes.
+
 typedef enum StyleProperty_Type
 {
     StyleProperty_Size         = 0,
@@ -119,8 +125,9 @@ internal style_property * GetCachedProperties  (u32 StyleIndex, StyleState_Type 
 // UISetTextColor:
 //  Override a style at runtine.
 
-internal void UISetTextColor  (ui_node Node, ui_color       Color  , ui_subtree *Subtree);
-internal void UISetDisplay    (ui_node Node, UIDisplay_Type Display, ui_subtree *Subtree);
+internal void UISetSize       (u32 NodeIndex, vec2_unit      Size   , ui_subtree *Subtree);
+internal void UISetTextColor  (u32 NodeIndex, ui_color       Color  , ui_subtree *Subtree);
+internal void UISetDisplay    (u32 NodeIndex, UIDisplay_Type Display, ui_subtree *Subtree);
 
 // [Helpers]
 

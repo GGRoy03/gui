@@ -98,6 +98,9 @@ typedef struct ui_text
     ui_shaped_glyph *Shaped;
     u32              ShapedCount;
     u32              ShapedLimit;
+
+    // Cached Layout Info
+    f32 TotalHeight;
 } ui_text;
 
 typedef struct ui_text_input

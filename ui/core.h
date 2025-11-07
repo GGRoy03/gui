@@ -373,7 +373,6 @@ typedef struct ui_pipeline
     void *VShader;
     void *PShader;
 
-
     // Internal State (DO NOT TOUCH)
     ui_style_registry *Registry;
     ui_node_id_table  *IdTable;

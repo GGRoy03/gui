@@ -15,16 +15,17 @@ typedef enum StyleProperty_Type
     // Text Properties
     StyleProperty_Font         = 9,
     StyleProperty_FontSize     = 10,
-    StyleProperty_TextAlign    = 11,
-    StyleProperty_TextColor    = 12,
+    StyleProperty_XTextAlign   = 11,
+    StyleProperty_YTextAlign   = 12,
+    StyleProperty_TextColor    = 13,
 
     // Flex Properties
-    StyleProperty_FlexDirection  = 13,
-    StyleProperty_JustifyContent = 14,
-    StyleProperty_AlignItems     = 15,
-    StyleProperty_SelfAlign      = 16,
+    StyleProperty_FlexDirection  = 14,
+    StyleProperty_JustifyContent = 15,
+    StyleProperty_AlignItems     = 16,
+    StyleProperty_SelfAlign      = 17,
 
-    StyleProperty_Count        = 17,
+    StyleProperty_Count        = 18,
     StyleProperty_None         = 666,
 } StyleProperty_Type;
 
@@ -81,38 +82,33 @@ typedef struct ui_node_style
     style_property Properties[StyleState_Count][StyleProperty_Count];
 } ui_node_style;
 
-// UIGetBorderWidth:
-// UIGetSoftness:
-// UIGetFontSize:
-// UIGetSize:
-// UIGetColor:
-// UIGetBorderColor:
-// UIGetTextColor:
-// UIGetPadding:
-// UIGetSpacing:
-// UIGetCornerRadius:
-// UIGetFont:
-// UIGetDisplay:
-//   Small helpers to make code less verbose when querying properties.
-//   Ensure that it is a valid array of length StyleProperty_Count. No bounds checking are done.
+#define UI_PROPERTY_TABLE \
+    X(BorderWidth,    Float32,      f32,                   StyleProperty_BorderWidth)    \
+    X(Softness,       Float32,      f32,                   StyleProperty_Softness)       \
+    X(FontSize,       Float32,      f32,                   StyleProperty_FontSize)       \
+    X(Size,           Vec2,         vec2_unit,             StyleProperty_Size)           \
+    X(Color,          Color,        ui_color,              StyleProperty_Color)          \
+    X(BorderColor,    Color,        ui_color,              StyleProperty_BorderColor)    \
+    X(TextColor,      Color,        ui_color,              StyleProperty_TextColor)      \
+    X(Padding,        Padding,      ui_padding,            StyleProperty_Padding)        \
+    X(Spacing,        Spacing,      ui_spacing,            StyleProperty_Spacing)        \
+    X(CornerRadius,   CornerRadius, ui_corner_radius,      StyleProperty_CornerRadius)   \
+    X(Font,           Pointer,      ui_font *,             StyleProperty_Font)           \
+    X(Display,        Enum,         UIDisplay_Type,        StyleProperty_Display)        \
+    X(FlexDirection,  Enum,         UIFlexDirection_Type,  StyleProperty_FlexDirection)  \
+    X(JustifyContent, Enum,         UIJustifyContent_Type, StyleProperty_JustifyContent) \
+    X(AlignItems,     Enum,         UIAlignItems_Type,     StyleProperty_AlignItems)     \
+    X(SelfAlign,      Enum,         UIAlignItems_Type,     StyleProperty_SelfAlign)      \
+    X(XTextAlign,     Enum,         UIAlign_Type,          StyleProperty_XTextAlign)     \
+    X(YTextAlign,     Enum,         UIAlign_Type,          StyleProperty_YTextAlign)
 
-internal f32                   UIGetBorderWidth    (style_property Properties[StyleProperty_Count]);
-internal f32                   UIGetSoftness       (style_property Properties[StyleProperty_Count]);
-internal f32                   UIGetFontSize       (style_property Properties[StyleProperty_Count]);
-internal vec2_unit             UIGetSize           (style_property Properties[StyleProperty_Count]);
-internal ui_color              UIGetColor          (style_property Properties[StyleProperty_Count]);
-internal ui_color              UIGetBorderColor    (style_property Properties[StyleProperty_Count]);
-internal ui_color              UIGetTextColor      (style_property Properties[StyleProperty_Count]);
-internal ui_padding            UIGetPadding        (style_property Properties[StyleProperty_Count]);
-internal ui_spacing            UIGetSpacing        (style_property Properties[StyleProperty_Count]);
-internal ui_corner_radius      UIGetCornerRadius   (style_property Properties[StyleProperty_Count]);
-internal ui_font             * UIGetFont           (style_property Properties[StyleProperty_Count]);
-internal UIDisplay_Type        UIGetDisplay        (style_property Properties[StyleProperty_Count]);
-internal UIFlexDirection_Type  UIGetFlexDirection  (style_property Properties[StyleProperty_Count]);
-internal UIJustifyContent_Type UIGetJustifyContent (style_property Properties[StyleProperty_Count]);
-internal UIAlignItems_Type     UIGetAlignItems     (style_property Properties[StyleProperty_Count]);
-internal UIAlignItems_Type     UIGetSelfAlign      (style_property Properties[StyleProperty_Count]);
-
+#define X(Name, Member, Type, Enum)                                         \
+internal Type UIGet##Name(style_property Properties[StyleProperty_Count])   \
+{                                                                           \
+    return (Type)Properties[Enum].Member;                                   \
+}
+UI_PROPERTY_TABLE
+#undef X
 
 // GetHoverStyle:
 //

@@ -62,10 +62,11 @@ read_only global style_parser_table_entry StylePropertyTable[] =
     {byte_string_compile("display"), StyleProperty_Display},
 
     // Text Properties
-    {byte_string_compile("font")      , StyleProperty_Font     },
-    {byte_string_compile("font-size") , StyleProperty_FontSize },
-    {byte_string_compile("text-align"), StyleProperty_TextAlign},
-    {byte_string_compile("text-color"), StyleProperty_TextColor},
+    {byte_string_compile("font")        , StyleProperty_Font      },
+    {byte_string_compile("font-size")   , StyleProperty_FontSize  },
+    {byte_string_compile("text-align-x"), StyleProperty_XTextAlign},
+    {byte_string_compile("text-align-y"), StyleProperty_YTextAlign},
+    {byte_string_compile("text-color")  , StyleProperty_TextColor },
 
     // Flex Properties
     {byte_string_compile("flex-direction") , StyleProperty_FlexDirection },
@@ -1012,7 +1013,8 @@ ConvertToStyleProperty(style_token *Value, StyleProperty_Type PropType, style_fi
 
     case StyleProperty_Display:
     case StyleProperty_SelfAlign:
-    case StyleProperty_TextAlign:
+    case StyleProperty_XTextAlign:
+    case StyleProperty_YTextAlign:
     case StyleProperty_AlignItems:
     case StyleProperty_FlexDirection:
     case StyleProperty_JustifyContent:
@@ -1036,7 +1038,7 @@ ConvertToStyleProperty(style_token *Value, StyleProperty_Type PropType, style_fi
             Table     = SelfAlignTable;
             TableSize = ArrayCount(SelfAlignTable);
         } else
-        if(PropType == StyleProperty_TextAlign)
+        if(PropType == StyleProperty_XTextAlign || PropType == StyleProperty_YTextAlign)
         {
             Table     = TextAlignTable;
             TableSize = ArrayCount(TextAlignTable);

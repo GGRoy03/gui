@@ -25,6 +25,9 @@ TryConvertUnitToFloat(ui_unit Unit, f32 AvSpace)
     return Result;
 }
 
+// ----------------------------------------------------------------------------------
+// Text Layout Implementation
+
 // -----------------------------------------------
 // Tree/Node internal implementation (Helpers/Types)
 
@@ -454,6 +457,11 @@ UpdateNodeIfNeeded(u32 NodeIndex, ui_subtree *Subtree)
             ui_layout_box  *Box   = &LayoutNode->Value;
             style_property *Basic = Style->Properties[StyleState_Basic];
             Assert(Basic);
+
+            // NOTE:
+            // I still don't know about this part. We could very well query the needed style
+            // from the node's style. Unsure why we keep them here? Trying it out
+            // with some attribute (TextAlign-X, TextAlign-Y)
 
             // Defaults
             Box->BorderWidth = UIGetBorderWidth(Basic);
@@ -1102,6 +1110,59 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
     }
 }
 
+// ----------------------------------------------------------------------------------
+// Text Layout Implementation
+
+internal f32
+GetUITextOffset(UIAlign_Type Align, f32 ContentSize, f32 TextSize)
+{
+    f32 Result = 0.f;
+
+    if(Align == UIAlign_Center)
+    {
+        Result = (ContentSize - TextSize) * 0.5f;
+    } else
+    if(Align == UIAlign_End)
+    {
+        Result = (ContentSize - TextSize);
+    }
+
+    return Result;
+}
+
+internal f32
+GetUITextSpace(ui_layout_node *Node)
+{
+    Assert(Node);
+
+    ui_layout_box *Box = &Node->Value;
+
+    f32 Result = GetContentBoxSize(Box).X;
+
+    if(Box->Width.Type == UIUnit_Auto)
+    {
+        ui_layout_node *Parent = Node->Parent;
+        Result = GetContentBoxSize(&Parent->Value).X;
+    }
+
+    return Result;
+}
+
+internal void
+AlignUIText(u32 LineStart, u32 LineEnd, f32 ContentWidth, f32 LineWidth, UIAlign_Type XAlign, ui_text *Text)
+{
+    f32 XAlignOffset = GetUITextOffset(XAlign, ContentWidth, LineWidth);
+
+    if(XAlignOffset != 0.f)
+    {
+        for(u32 Idx = LineStart; Idx < LineEnd; ++Idx)
+        {
+            Text->Shaped[Idx].Position.Min.X += XAlignOffset;
+            Text->Shaped[Idx].Position.Max.X += XAlignOffset;
+        }
+    }
+}
+
 // -----------------------------------------------------------
 // FlexBox Internal Implementation
 
@@ -1154,8 +1215,9 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
         while (!IsNodeQueueEmpty(&Queue))
         {
-            ui_layout_node *Node = PopNodeQueue(&Queue);
-            ui_layout_box  *Box  = &Node->Value;
+            ui_layout_node *Node  = PopNodeQueue(&Queue);
+            ui_layout_box  *Box   = &Node->Value;
+            ui_node_style  *Style = GetNodeStyle(Node->Index, Subtree);
 
             vec2_f32 ContentPos  = GetContentBoxPosition(Box);
             vec2_f32 ContentSize = GetContentBoxSize(Box);
@@ -1221,6 +1283,10 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                         {
 
                         case UIAlignItems_Start:
+                        {
+
+                        } break;
+
                         case UIAlignItems_End:
                         case UIAlignItems_None:
                         {
@@ -1247,74 +1313,40 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                 }
             }
 
-            if(HasFlag(Node->Flags, UILayoutNode_PlaceChildrenX))
-            {
-                IterateLinkedList(Node, ui_layout_node *, Child)
-                {
-                    Child->Value.VisualOffset = Cursor;
-
-                    vec2_f32 ChildSize = GetOuterBoxSize(&Child->Value);
-                    Cursor.X += ChildSize.X + Box->Spacing.Horizontal;
-                    if(Cursor.X > MaxCursor.X)
-                    {
-                        break;
-                    }
-
-                    PushNodeQueue(&Queue, Child);
-                }
-            }
-
-            if(HasFlag(Node->Flags, UILayoutNode_PlaceChildrenY))
-            {
-                IterateLinkedList(Node, ui_layout_node *, Child)
-                {
-                    Child->Value.VisualOffset = Cursor;
-
-                    vec2_f32 ChildSize = GetOuterBoxSize(&Child->Value);
-                    Cursor.Y += ChildSize.Y + Box->Spacing.Vertical;
-                    if(Cursor.Y >= MaxCursor.Y)
-                    {
-                        break;
-                    }
-
-                    PushNodeQueue(&Queue, Child);
-                }
-            }
-
             if(HasFlag(Node->Flags, UILayoutNode_HasText))
             {
                 ui_text *Text = QueryTextResource(Node->Index, Subtree, Table);
 
-                u32 FilledLine = 0.f;
-                f32 LineWidth  = 0.f;
-                f32 LineStartX = 0.f;
-                f32 LineStartY = 0.f;
+                UIAlign_Type XAlign = UIGetXTextAlign(Style->Properties[StyleState_Basic]);
+                UIAlign_Type YAlign = UIGetYTextAlign(Style->Properties[StyleState_Basic]);
+
+                f32 WrapWidth   = GetUITextSpace(Node);
+                f32 LineWidth   = 0.f;
+                f32 LineStartX  = Cursor.X;
+                f32 LineStartY  = Cursor.Y + GetUITextOffset(YAlign, ContentSize.Y, Text->TotalHeight);
+
+                u32 LineStartIdx = 0;
 
                 for(u32 Idx = 0; Idx < Text->ShapedCount; ++Idx)
                 {
                     ui_shaped_glyph *Shaped = &Text->Shaped[Idx];
 
-                    f32      GlyphWidth    = Shaped->AdvanceX;
-                    vec2_f32 GlyphPosition = Vec2F32(LineStartX + LineWidth, LineStartY + (FilledLine * Text->LineHeight));
+                    if(LineWidth + Shaped->AdvanceX > WrapWidth && LineWidth > 0.f)
+                    {
+                        AlignUIText(LineStartIdx, Idx, WrapWidth, LineWidth, XAlign, Text);
 
+                        LineStartY  += Text->LineHeight;
+                        LineWidth    = 0.f;
+                        LineStartIdx = Idx;
+                    }
+
+                    vec2_f32 GlyphPosition = Vec2F32(LineStartX + LineWidth, LineStartY);
                     AlignShapedGlyph(GlyphPosition, Shaped);
 
-                    if(LineWidth + GlyphWidth > ContentSize.X)
-                    {
-                        if(LineWidth > 0.f)
-                        {
-                            ++FilledLine;
-                        }
-                        LineWidth = GlyphWidth;
-
-                        GlyphPosition = Vec2F32(LineStartX, LineStartY + (FilledLine * Text->LineHeight));
-                        AlignShapedGlyph(GlyphPosition, Shaped);
-                    }
-                    else
-                    {
-                        LineWidth += GlyphWidth;
-                    }
+                    LineWidth += Shaped->AdvanceX;
                 }
+
+                AlignUIText(LineStartIdx, Text->ShapedCount, WrapWidth, LineWidth, XAlign, Text);
             }
 
         }
@@ -1390,43 +1422,27 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
     {
         ui_text *Text = QueryTextResource(Root->Index, Subtree, UIState.ResourceTable);
 
-        // TODO: Handle other units
-        f32 InnerAvWidth = 0.f;
-        if (Box->Width.Type == UIUnit_Auto)
-        {
-            ui_layout_node *Parent = Root->Parent;
-            if(Parent)
-            {
-                // TODO: Unsure how we want to handle height?
-                InnerAvWidth = GetContentBoxSize(&Parent->Value).X;
-            }
-        }
-
-        f32 LineWidth = 0.f;
+        f32 InnerAvWidth  = GetUITextSpace(Root);
+        f32 LineWidth     = 0.f;
         u32 LineWrapCount = 0;
+
         if(Text->ShapedCount)
         {
             for(u32 Idx = 0; Idx < Text->ShapedCount; ++Idx)
             {
-                ui_shaped_glyph *Shaped     = &Text->Shaped [Idx];
-                f32              GlyphWidth = Shaped->AdvanceX;
+                ui_shaped_glyph *Shaped = &Text->Shaped [Idx];
 
-                if(LineWidth + GlyphWidth > InnerAvWidth)
+                if(LineWidth + Shaped->AdvanceX > InnerAvWidth && LineWidth > 0.f)
                 {
-                    if(LineWidth > 0.f)
-                    {
-                        ++LineWrapCount;
-                    }
+                    LineWrapCount += 1;
+                    LineWidth      = 0.f;
+                }
 
-                    LineWidth = GlyphWidth;
-                }
-                else
-                {
-                    LineWidth += GlyphWidth;
-                }
+                LineWidth += Shaped->AdvanceX;
             }
-
         }
+
+        Text->TotalHeight = ((LineWrapCount + 1 ) * Text->LineHeight);
 
         if(Box->Width.Type == UIUnit_Auto)
         {
@@ -1844,10 +1860,7 @@ PaintTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                     ui_color TextColor = UIGetTextColor(Style);
                     for(u32 Idx = 0; Idx < Text->ShapedCount; ++Idx)
                     {
-                        rect_f32 GlyphRect = TranslatedRectF32(Text->Shaped[Idx].Position, NodeOrigin);
-                        rect_f32 Source    = Text->Shaped[Idx].Source;
-
-                        PaintUIGlyph(GlyphRect, TextColor, Source, BatchList, Arena);
+                        PaintUIGlyph(Text->Shaped[Idx].Position, TextColor, Text->Shaped[Idx].Source, BatchList, Arena);
                     }
                 }
             }

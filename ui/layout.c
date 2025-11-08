@@ -25,9 +25,6 @@ TryConvertUnitToFloat(ui_unit Unit, f32 AvSpace)
     return Result;
 }
 
-// ----------------------------------------------------------------------------------
-// Text Layout Implementation
-
 // -----------------------------------------------
 // Tree/Node internal implementation (Helpers/Types)
 
@@ -752,28 +749,6 @@ RecordUITextInputEvent(byte_string Text, ui_layout_node *Node, ui_event_list *Ev
     RecordUIEvent(Event, EventList, Arena);
 }
 
-internal void
-ClearUIEvents(ui_event_list *EventList)
-{
-    Assert(EventList);
-
-    EventList->First = 0;
-    EventList->Last  = 0;
-    EventList->Count = 0;
-
-    b32 MouseReleased = OSIsMouseReleased(OSMouseButton_Left);
-    if(MouseReleased && EventList->Focused)
-    {
-        ui_layout_node *Focused = EventList->Focused;
-
-        if(!HasFlag(Focused->Flags, UILayoutNode_HasTextInput))
-        {
-            EventList->Focused = 0;
-            EventList->Intent  = UIIntent_None;
-        }
-    }
-}
-
 internal b32
 IsMouseInsideOuterBox(vec2_f32 MousePosition, ui_layout_node *Node)
 {
@@ -806,6 +781,36 @@ IsMouseInsideBorder(vec2_f32 MousePosition, ui_layout_node *Node)
 
     f32 Distance = RoundedRectSDF(Params);
     return Distance >= 0.f;
+}
+
+internal void
+ClearUIEvents(ui_event_list *EventList)
+{
+    Assert(EventList);
+
+    EventList->First = 0;
+    EventList->Last  = 0;
+    EventList->Count = 0;
+
+    b32      MouseReleased = OSIsMouseReleased(OSMouseButton_Left);
+    b32      MouseClicked  = OSIsMouseClicked(OSMouseButton_Left);
+    vec2_f32 MousePosition = OSGetMousePosition();
+
+    if(EventList->Focused)
+    {
+        ui_layout_node *Focused = EventList->Focused;
+
+        if(MouseReleased && !HasFlag(Focused->Flags, UILayoutNode_HasTextInput))
+        {
+            EventList->Focused = 0;
+            EventList->Intent  = UIIntent_None;
+        } else
+        if(MouseClicked && !IsMouseInsideOuterBox(MousePosition, EventList->Focused))
+        {
+            EventList->Focused = 0;
+            EventList->Intent  = UIIntent_None;
+        }
+    }
 }
 
 internal UIIntent_Type
@@ -891,7 +896,7 @@ AttemptNodeFocus(vec2_f32 MousePosition, ui_layout_node *Root, memory_arena *Are
         if(HasFlag(Root->Flags, UILayoutNode_HasTextInput))
         {
             Result->Focused = Root;
-            Result->Intent  = UIIntent_InputText;
+            Result->Intent  = UIIntent_ModifyText;
         }
 
         RecordUIClickEvent(Root, Result, Arena);
@@ -923,12 +928,7 @@ GenerateFocusedNodeEvents(ui_event_list *Events, memory_arena *Arena)
     vec2_f32 MouseDelta = OSGetMouseDelta();
     b32      MouseMoved = (MouseDelta.X != 0 || MouseDelta.Y != 0);
 
-    if(!MouseMoved)
-    {
-        return;
-    }
-
-    if(Events->Intent >= UIIntent_ResizeX && Events->Intent <= UIIntent_ResizeXY)
+    if(MouseMoved && Events->Intent >= UIIntent_ResizeX && Events->Intent <= UIIntent_ResizeXY)
     {
         vec2_f32 Delta = Vec2F32(0.f, 0.f);
 
@@ -947,29 +947,20 @@ GenerateFocusedNodeEvents(ui_event_list *Events, memory_arena *Arena)
 
         RecordUIResizeEvent(Events->Focused, Delta, Events, Arena);
     } else
-    if(Events->Intent == UIIntent_Drag)
+    if(MouseMoved && Events->Intent == UIIntent_Drag)
     {
         RecordUIDragEvent(Events->Focused, MouseDelta, Events, Arena);
-    }
-}
-
-internal void
-GenerateInputEvents(ui_event_list *Events, memory_arena *Arena)
-{
-    if(!Events->Focused)
+    } else
+    if(Events->Intent == UIIntent_ModifyText)
     {
-        return;
-    }
+        os_text_action_buffer *TextBuffer = OSGetTextActionBuffer();
+        for(u32 Idx = 0; Idx < TextBuffer->Count; ++Idx)
+        {
+            os_text_action *TextAction = &TextBuffer->Actions[Idx];
+            byte_string     Text       = ByteString(TextAction->UTF8, TextAction->Size);
 
-    // NOTE:
-    // This is a huge WIP.
-
-    os_text_action_buffer *TextBuffer = OSGetTextActionBuffer();
-    for(u32 Idx = 0; Idx < TextBuffer->Count; ++Idx)
-    {
-        os_text_action *TextAction = &TextBuffer->Actions[Idx];
-        byte_string Text = ByteString(TextAction->UTF8, TextAction->Size);
-        RecordUITextInputEvent(Text, Events->Focused, Events, Arena);
+            RecordUITextInputEvent(Text, Events->Focused, Events, Arena);
+        }
     }
 }
 
@@ -982,7 +973,6 @@ GenerateUIEvents(vec2_f32 MousePosition, ui_layout_node *Root, memory_arena *Are
     }
 
     GenerateFocusedNodeEvents(Result, Arena);
-    GenerateInputEvents(Result, Arena);
 }
 
 internal void
@@ -1007,6 +997,9 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
         {
         } break;
 
+        // WARN:
+        // Still frame of lag.
+
         case UIEvent_Resize:
         {
             ui_resize_event Resize = Event->Resize;
@@ -1029,7 +1022,6 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
             ui_drag_event Drag = Event->Drag;
             Drag.Node->Value.VisualOffset = Vec2F32Add(Drag.Node->Value.VisualOffset, Drag.Delta);
 
-            PreOrderPlaceSubtree(Drag.Node, Subtree);
         } break;
 
         case UIEvent_Scroll:
@@ -1050,56 +1042,54 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
 
             ui_resource_table *Table = UIState.ResourceTable;
             ui_layout_node    *Node  = TextInput.Node;
+            Assert(Node);
 
             ui_node_style *Style = GetNodeStyle(Node->Index, Subtree);
             ui_font       *Font  = UIGetFont(Style->Properties[StyleState_Basic]);
 
-            if(Node && HasFlag(Node->Flags, UILayoutNode_HasTextInput))
+            ui_resource_key   TextKey   = MakeResourceKey(UIResource_Text, Node->Index, Subtree);
+            ui_resource_state TextState = FindResourceByKey(TextKey, Table);
+
+            ui_text_input *Input = QueryTextInputResource(Node->Index, Subtree, Table);
+            Assert(Input);
+            Assert(Input->UserData.String);
+            Assert(Input->Size);
+
+            ui_text *Text = TextState.Resource;
+            if(!Text)
             {
-                ui_resource_key   TextKey   = MakeResourceKey(UIResource_Text, Node->Index, Subtree);
-                ui_resource_state TextState = FindResourceByKey(TextKey, Table);
+                // NOTE:
+                // These manual allocations should not exist. But we have no allocator for the resources.
 
-                ui_text_input *Input = QueryTextInputResource(Node->Index, Subtree, Table);
-                Assert(Input);
-                Assert(Input->UserData.String);
-                Assert(Input->Size);
+                u64   Size     = GetUITextFootprint(Input->Size);
+                void *Memory   = OSReserveMemory(Size);
+                b32   Commited = OSCommitMemory(Memory, Size);
+                Assert(Memory && Commited);
 
-                ui_text *Text = TextState.Resource;
-                if(!Text)
+                Text = PlaceUITextInMemory(ByteString(0, 0), Input->Size, Font, Memory);
+                Assert(Text);
+
+                // NOTE:
+                // Unsure if we want to do this here?
+
+                if(IsValidByteString(Input->UserData))
                 {
-                    // NOTE:
-                    // These manual allocations should not exist. But we have no allocator for the resources.
-
-                    u64   Size     = GetUITextFootprint(Input->Size);
-                    void *Memory   = OSReserveMemory(Size);
-                    b32   Commited = OSCommitMemory(Memory, Size);
-                    Assert(Memory && Commited);
-
-                    Text = PlaceUITextInMemory(ByteString(0, 0), Input->Size, Font, Memory);
-                    Assert(Text);
-
-                    // NOTE:
-                    // Unsure if we want to do this here?
-
-                    if(IsValidByteString(Input->UserData))
-                    {
-                        UITextAppend_(Input->UserData, Font, Text);
-                    }
-
-                    UpdateResourceTable(TextState.Id, TextKey, Text, UIResource_Text, Table);
+                    UITextAppend_(Input->UserData, Font, Text);
                 }
 
-                Assert(IsValidByteString(TextInput.UTF8Text));
-                UITextAppend_(TextInput.UTF8Text, Font, Text);
+                UpdateResourceTable(TextState.Id, TextKey, Text, UIResource_Text, Table);
+            }
 
-                if(Text->ShapedCount > 0)
-                {
-                    SetFlag(Node->Flags, UILayoutNode_HasText);
-                }
-                else
-                {
-                    ClearFlag(Node->Flags, UILayoutNode_HasText);
-                }
+            Assert(IsValidByteString(TextInput.UTF8Text));
+            UITextAppend_(TextInput.UTF8Text, Font, Text);
+
+            if(Text->ShapedCount > 0)
+            {
+                SetFlag(Node->Flags, UILayoutNode_HasText);
+            }
+            else
+            {
+                ClearFlag(Node->Flags, UILayoutNode_HasText);
             }
         } break;
 
@@ -1146,19 +1136,22 @@ GetUITextSpace(ui_layout_node *Node)
 }
 
 internal void
-AlignUIText(u32 LineStart, u32 LineEnd, f32 ContentWidth, f32 LineWidth, UIAlign_Type XAlign, ui_text *Text)
+AlignUITextLine(f32 ContentWidth, f32 LineWidth, UIAlign_Type XAlign, ui_shaped_glyph *Glyphs, u32 Count)
 {
     f32 XAlignOffset = GetUITextOffset(XAlign, ContentWidth, LineWidth);
 
     if(XAlignOffset != 0.f)
     {
-        for(u32 Idx = LineStart; Idx < LineEnd; ++Idx)
+        for(u32 Idx = 0; Idx < Count; ++Idx)
         {
-            Text->Shaped[Idx].Position.Min.X += XAlignOffset;
-            Text->Shaped[Idx].Position.Max.X += XAlignOffset;
+            Glyphs[Idx].Position.Min.X += XAlignOffset;
+            Glyphs[Idx].Position.Max.X += XAlignOffset;
         }
     }
 }
+
+float pixel = 1.0f; // or 1.0f / DPI scale
+float snap(float x) { return floorf(x + 0.5f * pixel) / pixel; }
 
 // -----------------------------------------------------------
 // FlexBox Internal Implementation
@@ -1332,20 +1325,27 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
                     if(LineWidth + Shaped->AdvanceX > WrapWidth && LineWidth > 0.f)
                     {
-                        AlignUIText(LineStartIdx, Idx, WrapWidth, LineWidth, XAlign, Text);
+                        u32              LineCount = Idx - LineStartIdx;
+                        ui_shaped_glyph *LineStart = Text->Shaped + LineStartIdx;
+                        AlignUITextLine(WrapWidth, LineWidth, XAlign, LineStart, LineCount);
 
                         LineStartY  += Text->LineHeight;
                         LineWidth    = 0.f;
                         LineStartIdx = Idx;
                     }
 
-                    vec2_f32 GlyphPosition = Vec2F32(LineStartX + LineWidth, LineStartY);
-                    AlignShapedGlyph(GlyphPosition, Shaped);
+                    vec2_f32 Position = Vec2F32(LineStartX + LineWidth, LineStartY);
+                    Shaped->Position.Min.X = snap(Position.X + Shaped->Offset.X);
+                    Shaped->Position.Min.Y = snap(Position.Y + Shaped->Offset.Y);
+                    Shaped->Position.Max.X = snap(Shaped->Position.Min.X + Shaped->Size.X);
+                    Shaped->Position.Max.Y = snap(Shaped->Position.Min.Y + Shaped->Size.Y);
 
                     LineWidth += Shaped->AdvanceX;
                 }
 
-                AlignUIText(LineStartIdx, Text->ShapedCount, WrapWidth, LineWidth, XAlign, Text);
+                u32              LineCount = Text->ShapedCount - LineStartIdx;
+                ui_shaped_glyph *LineStart = Text->Shaped + LineStartIdx;
+                AlignUITextLine(WrapWidth, LineWidth, XAlign, LineStart, LineCount);
             }
 
         }
@@ -1850,6 +1850,11 @@ PaintTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                 {
                     PaintUIRect(FinalRect, BorderColor, CornerRadii, BorderWidth, Softness, BatchList, Arena);
                 }
+
+                // rect_f32 ContentRect = TranslateRectF32(Node->Value.ContentBox, NodeOrigin);
+                // {
+                //    PaintUIRect(ContentRect, UIColor(0.f, 255.f, 0.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
+                // }
 
                 if(HasFlag(Node->Flags, UILayoutNode_HasText))
                 {

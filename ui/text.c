@@ -193,15 +193,6 @@ PrepareGlyph(byte_string UTF8, ui_font *Font)
 // -----------------------------------------------------------------------------------
 // Glyph Run Public API Implementation
 
-internal void
-AlignShapedGlyph(vec2_f32 Position, ui_shaped_glyph *Shaped)
-{
-    Shaped->Position.Min.X = roundf(Position.X + Shaped->Offset.X);
-    Shaped->Position.Min.Y = roundf(Position.Y + Shaped->Offset.Y);
-    Shaped->Position.Max.X = roundf(Shaped->Position.Min.X + Shaped->Size.X);
-    Shaped->Position.Max.Y = roundf(Shaped->Position.Min.Y + Shaped->Size.Y);
-}
-
 internal u64
 GetUITextFootprint(u64 TextSize)
 {

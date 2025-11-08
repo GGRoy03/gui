@@ -308,12 +308,12 @@ typedef struct ui_layout_node ui_layout_node;
 
 typedef enum UIIntent_Type
 {
-    UIIntent_None      = 0,
-    UIIntent_Drag      = 1,
-    UIIntent_ResizeX   = 2,
-    UIIntent_ResizeY   = 3,
-    UIIntent_ResizeXY  = 4,
-    UIIntent_InputText = 5,
+    UIIntent_None       = 0,
+    UIIntent_Drag       = 1,
+    UIIntent_ResizeX    = 2,
+    UIIntent_ResizeY    = 3,
+    UIIntent_ResizeXY   = 4,
+    UIIntent_ModifyText = 5,
 } UIIntent_Type;
 
 typedef struct ui_event_list

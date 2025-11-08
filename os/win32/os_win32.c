@@ -17,11 +17,6 @@ OSWin32WindowProc(HWND Handle, UINT Message, WPARAM WParam, LPARAM LParam)
     switch(Message)
     {
 
-    case WM_SETCURSOR:
-    {
-        return TRUE;
-    } break;
-
     case WM_MOUSEMOVE:
     {
         i32 MouseX = GET_X_LPARAM(LParam);
@@ -236,11 +231,11 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
             {
                 Params.AllocatedFromFile = __FILE__;
                 Params.AllocatedFromLine = __LINE__;
-                Params.ReserveSize = Megabyte(1);
-                Params.CommitSize = Kilobyte(64);
+                Params.ReserveSize       = Megabyte(1);
+                Params.CommitSize        = Kilobyte(64);
             }
 
-            UIState.StaticData = AllocateArena(Params);
+            UIState.StaticData       = AllocateArena(Params);
             UIState.Pipelines.Values = PushArray(UIState.StaticData, ui_pipeline, UIPipeline_Count);
             UIState.Pipelines.Size   = UIPipeline_Count;
         }

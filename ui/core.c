@@ -1047,7 +1047,7 @@ UICreatePipeline(ui_pipeline_params Params)
 internal void
 UIBeginAllSubtrees(ui_pipeline *Pipeline)
 {
-    Assert(Pipeline && "Pipeline Pointer is NULL.");
+    Assert(Pipeline);
 
     ui_subtree_list *List  = &Pipeline->Subtrees;
     IterateLinkedList(List, ui_subtree_node *, Node)
@@ -1063,15 +1063,18 @@ UIBeginAllSubtrees(ui_pipeline *Pipeline)
 internal void
 UIExecuteAllSubtrees(ui_pipeline *Pipeline)
 {
-    Assert(Pipeline && "Pipeline Pointer is NULL.");
+    Assert(Pipeline);
 
     ui_subtree_list *List = &Pipeline->Subtrees;
     IterateLinkedList(List, ui_subtree_node *, Node)
     {
         ui_subtree *Subtree = &Node->Value;
 
-        ComputeSubtreeLayout(Subtree);
+        // NOTE:
+        // Compute layout -> Update -> Paint
+
         UpdateSubtreeState(Subtree);
+        ComputeSubtreeLayout(Subtree);
         PaintSubtree(Subtree);
     }
 }

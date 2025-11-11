@@ -469,7 +469,7 @@ UpdateNodeIfNeeded(u32 NodeIndex, ui_subtree *Subtree)
         ui_layout_node *LayoutNode = GetLayoutNode(NodeIndex, Subtree->LayoutTree);
         Assert(LayoutNode);
         {
-            ui_layout_box  *Box   = &LayoutNode->Value;
+            ui_layout_box  *Box     = &LayoutNode->Value;
             style_property *Default = Style->Properties[StyleState_Default];
             Assert(Default);
 
@@ -1434,18 +1434,37 @@ PreOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                     if(Child->Value.Display != UIDisplay_None)
                     {
                         ui_layout_box  *CBox  = &Child->Value;
-                        style_property *Props = GetPaintProperties(Child->Index, Subtree);
+                        style_property *Props = GetPaintProperties(Child->Index, 0, Subtree);
 
                         resolved_unit Width  = TryConvertUnitToFloat(CBox->Width , ContentSize.X);
                         resolved_unit Height = TryConvertUnitToFloat(CBox->Height, ContentSize.Y);
 
-                        if(MainAxis == UIFlexDirection_Row)
+                        b32 MainSizeResolved = (MainAxis == UIFlexDirection_Row) ? Width.Resolved : Height.Resolved;
+                        if(MainSizeResolved)
                         {
-                            CBox->FlexItem.Size = Width.Value;
-                        } 
-                        else if(MainAxis == UIFlexDirection_Column)
+                            if(MainAxis == UIFlexDirection_Row)
+                            {
+                                CBox->FlexItem.Size = Width.Value;
+                            }
+                            else if(MainAxis == UIFlexDirection_Column)
+                            {
+                                CBox->FlexItem.Size = Height.Value;
+                            }
+
+                            ComputeNodeBoxes(Child, Width.Value, Height.Value);
+                        }
+                        else
                         {
-                            CBox->FlexItem.Size = Height.Value;
+                            if(MainAxis == UIFlexDirection_Row)
+                            {
+                                ComputeNodeBoxes(Child, 0.f, Height.Value);
+                            }
+                            else if(MainAxis == UIFlexDirection_Column)
+                            {
+                                ComputeNodeBoxes(Child, Width.Value, 0.f);
+                            }
+
+                            CBox->FlexItem.Size = 10.f;
                         }
 
                         f32 Grow   = UIGetFlexGrow(Props);
@@ -1455,15 +1474,10 @@ PreOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                         CBox->FlexItem.Shrink = Shrink;
 
                         Box->FlexBox.TotalGrow   += Grow;
-                        Box->FlexBox.TotalShrink += Shrink;
+                        Box->FlexBox.TotalShrink += Shrink * CBox->FlexItem.Size;
                         Box->FlexBox.ItemCount   += 1;
 
                         SpaceNeeded += CBox->FlexItem.Size;
-
-                        if (Width.Resolved || Height.Resolved)
-                        {
-                            ComputeNodeBoxes(Child, Width.Value, Height.Value);
-                        }
 
                         PushNodeQueue(&Queue, Child);
                     }
@@ -1611,7 +1625,12 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
     if(Box->Display == UIDisplay_Flex)
     {
         // NOTE:
-        // No clue what to do here.
+        // I have to somehow handle auto sized elements. So... Is it like:
+        // If parent is flex and contains auto elements, then find it/them.
+        // And recompute parent if needed? Because, otherwise it thinks auto sized
+        // elements have 0 width. I assume the reasons it works for console
+        // outputs right now is that: There is no centering. I don't get how auto
+        // interacts with other sizes?
     }
 
     if(HasFlag(Root->Flags, UILayoutNode_HasScrollRegion))

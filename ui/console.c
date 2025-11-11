@@ -2,15 +2,14 @@ typedef enum ConsoleStyle_Type
 {
     ConsoleStyle_Window          = 1,
     ConsoleStyle_Header          = 2,
-    ConsoleStyle_HeaderTitle     = 3,
-    ConsoleStyle_HeaderStatus    = 4,
-    ConsoleStyle_WindowContainer = 5,
-    ConsoleStyle_ScrollWindow    = 6,
-    ConsoleStyle_InspectWindow   = 7,
-    ConsoleStyle_MessageInfo     = 8,
-    ConsoleStyle_MessageWarning  = 9,
-    ConsoleStyle_MessageError    = 10,
-    ConsoleStyle_Prompt          = 11,
+    ConsoleStyle_HeaderStatus    = 3,
+    ConsoleStyle_WindowContainer = 4,
+    ConsoleStyle_ScrollWindow    = 5,
+    ConsoleStyle_InspectWindow   = 6,
+    ConsoleStyle_MessageInfo     = 7,
+    ConsoleStyle_MessageWarning  = 8,
+    ConsoleStyle_MessageError    = 9,
+    ConsoleStyle_Prompt          = 10,
 } ConsoleStyle_Type;
 
 typedef enum ConsoleMode_Type
@@ -220,7 +219,7 @@ InitializeConsoleUI(console_ui *Console)
 {
     Assert(!Console->IsInitialized);
 
-    Console->StatusText       = str8_lit("We shoud display useful information here.");
+    Console->StatusText       = str8_lit("We should display useful information here.");
     Console->MessageLimit     = ConsoleConstant_MessageCountLimit;
     Console->PromptBufferSize = ConsoleConstant_PromptBufferSize;
 

@@ -83,7 +83,7 @@ SetNodeStyleState(StyleState_Type State, u32 NodeIndex, ui_subtree *Subtree)
 }
 
 internal style_property *
-GetPaintProperties(u32 NodeIndex, ui_subtree *Subtree)
+GetPaintProperties(u32 NodeIndex, b32 ClearState, ui_subtree *Subtree)
 {
     Assert(Subtree);
 
@@ -105,8 +105,10 @@ GetPaintProperties(u32 NodeIndex, ui_subtree *Subtree)
         }
     }
 
-    // WARN: Unsure.
-    Style->State = StyleState_Default;
+    if(ClearState)
+    {
+        Style->State = StyleState_Default;
+    }
 
     return Result;
 }

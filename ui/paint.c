@@ -192,7 +192,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
             // Painting
             {
                 render_batch_list *BatchList = GetPaintBatchList(Node, Subtree, ClipRect);
-                style_property    *Style     = GetPaintProperties(Node->Index, Subtree);
+                style_property    *Style     = GetPaintProperties(Node->Index, 1, Subtree);
 
                 ui_corner_radius CornerRadii = UIGetCornerRadius(Style);
                 f32              Softness    = UIGetSoftness(Style);

@@ -74,6 +74,8 @@ read_only global style_parser_table_entry StylePropertyTable[] =
     {byte_string_compile("justify-content"), StyleProperty_JustifyContent},
     {byte_string_compile("align-items")    , StyleProperty_AlignItems    },
     {byte_string_compile("self-align")     , StyleProperty_SelfAlign     },
+    {byte_string_compile("flex-grow")      , StyleProperty_FlexGrow      },
+    {byte_string_compile("flex-shrink")    , StyleProperty_FlexShrink    },
 };
 
 read_only global style_parser_table_entry StyleUnitKeywordTable[] =
@@ -990,6 +992,8 @@ ConvertToStyleProperty(style_token *Value, StyleProperty_Type PropType, style_fi
     case StyleProperty_BorderWidth:
     case StyleProperty_FontSize:
     case StyleProperty_Softness:
+    case StyleProperty_FlexGrow:
+    case StyleProperty_FlexShrink:
     {
         if (Value->Type != StyleToken_Unit || Value->Unit.Type != UIUnit_Float32)
         {

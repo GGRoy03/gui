@@ -258,7 +258,7 @@ InitializeConsoleUI(console_ui *Console)
             }
 
             ui_node ContentWindows = {0};
-            UIBlock(ContentWindow = UINode(UILayoutNode_IsParent))
+            UIBlock(ContentWindows = UINode(UILayoutNode_IsParent))
             {
                 UINodeSetId(ContentWindows, ui_id("Console_ContentWindows"));
                 UINodeSetStyle(ContentWindows, ConsoleStyle_WindowContainer);

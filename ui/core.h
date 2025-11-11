@@ -169,7 +169,7 @@ internal void UINodeSetStyle      (ui_node Node, u32 StyleIndex);
 //   Make sure to check if Node.CanUse is set before trying to use a returned node.
 
 internal ui_node UINodeFindChild        (ui_node Node, u32 Index);
-internal void    UINodeAppendChild      (ui_node Node, u32 Child);
+internal void    UINodeAppendChild      (ui_node Node, ui_node Child);
 internal void    UINodeReserveChildren  (ui_node Node, u32 Amount);
 
 // Resource:
@@ -183,7 +183,7 @@ internal void UINodeSetScroll     (ui_node Node, UIAxis_Type Axis);
 // Debug:
 //   ---
 
-internal void UIDebugBox  (ui_node Node, bit_field Flag, b32 Draw);
+internal void UINodeDebugBox  (ui_node Node, bit_field Flag, b32 Draw);
 
 // Misc:
 //   ...

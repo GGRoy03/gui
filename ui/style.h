@@ -24,8 +24,10 @@ typedef enum StyleProperty_Type
     StyleProperty_JustifyContent = 15,
     StyleProperty_AlignItems     = 16,
     StyleProperty_SelfAlign      = 17,
+    StyleProperty_FlexGrow       = 18,
+    StyleProperty_FlexShrink     = 19,
 
-    StyleProperty_Count        = 18,
+    StyleProperty_Count        = 20,
     StyleProperty_None         = 666,
 } StyleProperty_Type;
 
@@ -84,10 +86,13 @@ typedef struct ui_node_style
     style_property  Properties[StyleState_Count][StyleProperty_Count];
 } ui_node_style;
 
-#define UI_PROPERTY_TABLE \
+#define UI_PROPERTY_TABLE                                                                \
     X(BorderWidth,    Float32,      f32,                   StyleProperty_BorderWidth)    \
     X(Softness,       Float32,      f32,                   StyleProperty_Softness)       \
     X(FontSize,       Float32,      f32,                   StyleProperty_FontSize)       \
+    X(FlexGrow,       Float32,      f32,                   StyleProperty_FlexGrow)       \
+    X(FlexShrink,     Float32,      f32,                   StyleProperty_FlexShrink)     \
+                                                                                         \
     X(Size,           Vec2,         vec2_unit,             StyleProperty_Size)           \
     X(Color,          Color,        ui_color,              StyleProperty_Color)          \
     X(BorderColor,    Color,        ui_color,              StyleProperty_BorderColor)    \

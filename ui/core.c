@@ -439,7 +439,7 @@ UINodeFindChild(ui_node Node, u32 Index)
 }
 
 internal void
-UINodeAppendChild(ui_node Node, u32 Child)
+UINodeAppendChild(ui_node Node, ui_node Child)
 {
     Assert(Node.CanUse);
 
@@ -590,7 +590,7 @@ UINodeSetScroll(ui_node Node, UIAxis_Type Axis)
 }
 
 internal void
-UIDebugBox(ui_node Node, bit_field Flag, b32 Draw)
+UINodeDebugBox(ui_node Node, bit_field Flag, b32 Draw)
 {
     Assert(Node.CanUse);
     Assert(Flag == UILayoutNode_DebugOuterBox || Flag == UILayoutNode_DebugInnerBox|| Flag == UILayoutNode_DebugContentBox);

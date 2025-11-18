@@ -370,7 +370,7 @@ InitializeConsoleUI(console_ui *Console)
     {
         UIBlock(UIWindow(ConsoleStyle_Window))
         {
-            UIImage(str8_lit("resources/images/annoyed.png"), str8_lit("ImageGroup"), ConsoleStyle_Image);
+            UIImage(str8_lit("resources/images/badge-alert.png"), str8_lit("ImageGroup"), ConsoleStyle_Image);
 
             ui_node Header = {0};
             UIBlock(Header = UINode(UILayoutNode_IsParent))

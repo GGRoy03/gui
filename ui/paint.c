@@ -137,7 +137,7 @@ PaintUIImage(rect_f32 Rect, rect_f32 Source, render_batch_list *BatchList, memor
 {
     ui_rect *UIRect = PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
-    UIRect->Color         = UIColor(0, 0, 0, 1);
+    UIRect->Color         = UIColor(1, 1, 1, 1);
     UIRect->CornerRadii   = UICornerRadius(0, 0, 0, 0);
     UIRect->BorderWidth   = 0;
     UIRect->Softness      = 0;

@@ -128,7 +128,7 @@ PaintUIRect(rect_f32 Rect, ui_color Color, ui_corner_radius CornerRadii, f32 Bor
     UIRect->CornerRadii   = CornerRadii;
     UIRect->BorderWidth   = BorderWidth;
     UIRect->Softness      = Softness;
-    UIRect->TextureSource = RectF32Zero();
+    UIRect->TextureSource = {};
     UIRect->SampleTexture = 0;
 }
 
@@ -200,7 +200,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
 
     if(IsValidPaintStack(&Stack))
     {
-        PushPaintStack((paint_stack_frame){.Node = Root, .AccScroll = Vec2F32(0.f ,0.f), .Clip = RectF32(0, 0, 0, 0)}, &Stack);
+        PushPaintStack((paint_stack_frame){.Node = Root, .AccScroll = vec2_f32(0.f ,0.f), .Clip = rect_f32(0, 0, 0, 0)}, &Stack);
 
         while(!IsPaintStackEmpty(&Stack))
         {
@@ -210,8 +210,8 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
             vec2_f32        AccScroll = Frame.AccScroll;
             ui_layout_node *Node      = Frame.Node;
 
-            vec2_f32 NodeOrigin = Vec2F32Add(Node->Value.VisualOffset, AccScroll);
-            rect_f32 FinalRect  = TranslateRectF32(Node->Value.OuterBox, NodeOrigin);
+            vec2_f32 NodeOrigin = Node->Value.VisualOffset + AccScroll;
+            rect_f32 FinalRect  = Node->Value.OuterBox.Translate(NodeOrigin);
 
             // Painting
             {
@@ -269,23 +269,23 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                     Assert(Input->CaretAnchor <= Text->ShapedCount);
 
                     vec2_f32 ContentPos = GetContentBoxPosition(&Node->Value);
-                    vec2_f32 CaretStart = Vec2F32(ContentPos.X, ContentPos.Y);
+                    vec2_f32 CaretStart = vec2_f32(ContentPos.X, ContentPos.Y);
 
                     if(Input->CaretAnchor > 0)
                     {
                         ui_shaped_glyph *AfterGlyph = &Text->Shaped[Input->CaretAnchor - 1];
-                        CaretStart.X = AfterGlyph->Position.Max.X;
-                        CaretStart.Y = AfterGlyph->Position.Min.Y;
+                        CaretStart.X = AfterGlyph->Position.Right;
+                        CaretStart.Y = AfterGlyph->Position.Top;
                     }
 
                     ui_color CaretColor = UIGetCaretColor(Style);
                     f32      CaretWidth = UIGetCaretWidth(Style);
 
                     rect_f32 Caret = {};
-                    Caret.Min.X = CaretStart.X;
-                    Caret.Max.X = CaretStart.X + CaretWidth;
-                    Caret.Min.Y = CaretStart.Y;
-                    Caret.Max.Y = CaretStart.Y + Text->LineHeight;
+                    Caret.Left   = CaretStart.X;
+                    Caret.Right  = CaretStart.X + CaretWidth;
+                    Caret.Top    = CaretStart.Y;
+                    Caret.Bottom = CaretStart.Y + Text->LineHeight;
 
                     Input->CaretTimer += 0.05f;
                     CaretColor.A       = (sinf(Input->CaretTimer * 3.14159f) + 1.f) * 0.5f;
@@ -311,15 +311,14 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
 
                 if(HasFlag(Frame.Node->Flags, UILayoutNode_HasClip))
                 {
-                    rect_f32 EmptyClip     = RectF32Zero();
+                    rect_f32 EmptyClip     = {};
                     b32      ParentHasClip = (MemoryCompare(&ClipRect, &EmptyClip, sizeof(rect_f32)) != 0);
 
-                    ClipRect = TranslatedRectF32(Node->Value.ContentBox, NodeOrigin);
+                    ClipRect = Node->Value.ContentBox.Translate(NodeOrigin);
 
                     if(ParentHasClip)
                     {
-
-                        ClipRect = IntersectRectF32(Frame.Clip, ClipRect);
+                        ClipRect = Frame.Clip.Intersect(ClipRect);
                     }
                 }
             }

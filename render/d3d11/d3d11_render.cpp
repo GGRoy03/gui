@@ -379,7 +379,7 @@ SubmitRenderCommands(render_handle HRenderer, vec2_i32 Resolution, render_pass_l
     // Update State
     vec2_i32 CurrentResolution = Renderer->LastResolution;
     {
-        if (!Vec2I32IsEqual(Resolution, CurrentResolution))
+        if (!(Resolution == CurrentResolution))
         {
             // TODO: Resize swap chain and whatever else we need.
 
@@ -439,7 +439,7 @@ SubmitRenderCommands(render_handle HRenderer, vec2_i32 Resolution, render_pass_l
                     Uniform.Transform[0]        = Vec4F32(NodeParams.Transform.c0r0, NodeParams.Transform.c0r1, NodeParams.Transform.c0r2, 0);
                     Uniform.Transform[1]        = Vec4F32(NodeParams.Transform.c1r0, NodeParams.Transform.c1r1, NodeParams.Transform.c1r2, 0);
                     Uniform.Transform[2]        = Vec4F32(NodeParams.Transform.c2r0, NodeParams.Transform.c2r1, NodeParams.Transform.c2r2, 0);
-                    Uniform.ViewportSizeInPixel = Vec2F32((f32)Resolution.X, (f32)Resolution.Y);
+                    Uniform.ViewportSizeInPixel = vec2_f32((f32)Resolution.X, (f32)Resolution.Y);
                     Uniform.AtlasSizeInPixel    = NodeParams.TextureSize;
 
                     D3D11_MAPPED_SUBRESOURCE Resource = {};
@@ -477,14 +477,14 @@ SubmitRenderCommands(render_handle HRenderer, vec2_i32 Resolution, render_pass_l
                     rect_f32   Clip = NodeParams.Clip;
                     D3D11_RECT Rect = {};
 
-                    if (Clip.Min.X == 0 && Clip.Min.Y == 0 && Clip.Max.X == 0 && Clip.Max.Y == 0)
+                    if (Clip.Left == 0 && Clip.Top == 0 && Clip.Right == 0 && Clip.Bottom == 0)
                     {
                         Rect.left   = 0;
                         Rect.right  = Resolution.X;
                         Rect.top    = 0;
                         Rect.bottom = Resolution.Y;
                     } else
-                    if (Clip.Min.X > Clip.Max.X || Clip.Min.Y > Clip.Max.Y)
+                    if (Clip.Left > Clip.Right || Clip.Top > Clip.Bottom)
                     {
                         Rect.left   = 0;
                         Rect.right  = 0;
@@ -493,10 +493,10 @@ SubmitRenderCommands(render_handle HRenderer, vec2_i32 Resolution, render_pass_l
                     }
                     else
                     {
-                        Rect.left   = Clip.Min.X;
-                        Rect.right  = Clip.Max.X;
-                        Rect.top    = Clip.Min.Y;
-                        Rect.bottom = Clip.Max.Y;
+                        Rect.left   = Clip.Left;
+                        Rect.right  = Clip.Right;
+                        Rect.top    = Clip.Top;
+                        Rect.bottom = Clip.Bottom;
                     }
 
                     DeviceContext->RSSetScissorRects(1, &Rect);
@@ -654,12 +654,12 @@ TransferGlyph(rect_f32 Rect, render_handle HRenderer, gpu_font_context *FontCont
         SourceBox.left   = 0;
         SourceBox.top    = 0;
         SourceBox.front  = 0;
-        SourceBox.right  = (UINT)Rect.Max.X;
-        SourceBox.bottom = (UINT)Rect.Max.Y;
+        SourceBox.right  = (UINT)Rect.Right;
+        SourceBox.bottom = (UINT)Rect.Bottom;
         SourceBox.back   = 1;
 
         Renderer->DeviceContext->CopySubresourceRegion((ID3D11Resource *)FontContext->GlyphCache,
-                                                      0, (UINT)Rect.Min.X, (UINT)Rect.Min.Y, 0,
+                                                      0, (UINT)Rect.Left, (UINT)Rect.Top, 0,
                                                       (ID3D11Resource *)FontContext->GlyphTransfer, 0, &SourceBox);
     }
 }
@@ -670,7 +670,7 @@ TransferGlyph(rect_f32 Rect, render_handle HRenderer, gpu_font_context *FontCont
 internal b32
 D3D11IsValidTexture(render_texture RenderTexture)
 {
-    b32 Result = IsValidRenderHandle(RenderTexture.Texture) && IsValidRenderHandle(RenderTexture.View) && !Vec2F32IsEmpty(RenderTexture.Size);
+    b32 Result = IsValidRenderHandle(RenderTexture.Texture) && IsValidRenderHandle(RenderTexture.View) && !RenderTexture.Size.IsEmpty();
     return Result;
 }
 
@@ -734,7 +734,7 @@ CreateRenderTexture(render_texture_params Params)
     render_texture Result = {};
     Result.Texture = RenderHandle((u64)Texture);
     Result.View    = RenderHandle((u64)View);
-    Result.Size    = Vec2F32(Params.Width, Params.Height);
+    Result.Size    = vec2_f32(Params.Width, Params.Height);
 
     return Result;
 }
@@ -747,11 +747,11 @@ CopyIntoRenderTexture(render_texture RenderTexture, rect_f32 Source, u8 *Pixels,
 
     D3D11_BOX Box =
     {
-        .left   = (UINT)Source.Min.X,
-        .top    = (UINT)Source.Min.Y,
+        .left   = (UINT)Source.Left,
+        .top    = (UINT)Source.Top,
         .front  = 0,
-        .right  = (UINT)Source.Max.X,
-        .bottom = (UINT)Source.Max.Y,
+        .right  = (UINT)Source.Right,
+        .bottom = (UINT)Source.Bottom,
         .back   = 1,
     };
 

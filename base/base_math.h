@@ -3,16 +3,6 @@
 // [Core Types]
 
 DisableWarning(4201)
-typedef struct vec2_f32
-{
-    union
-    {
-        struct {f32 X; f32 Y;};
-        f32 Values[2];
-    };
-} vec2_f32;
-
-DisableWarning(4201)
 typedef struct vec4_f32
 {
     union
@@ -21,11 +11,6 @@ typedef struct vec4_f32
         f32 Values[4];
     };
 } vec4_f32;
-
-typedef struct vec2_i32
-{
-    i32 X, Y;
-} vec2_i32;
 
 typedef struct matrix_3x3
 {
@@ -76,47 +61,9 @@ typedef struct matrix_4x4
 //   Simply insets a rect by some value. Clamped to 0 if rect ends up negative.
 //   Meant to be used by rects that represent a positive 2D rectangle.
 
-typedef struct rect_f32
-{
-    vec2_f32 Min;
-    vec2_f32 Max;
-} rect_f32;
-
-typedef struct rect_sdf_params
-{
-    f32      Radius;
-    vec2_f32 HalfSize;
-    vec2_f32 PointPosition;
-} rect_sdf_params;
-
-internal rect_f32 RectF32            (f32 MinX, f32 MinY, f32 Width, f32 Height);
-internal rect_f32 RectF32Zero        (void);
-internal rect_f32 TranslatedRectF32  (rect_f32 Rect, vec2_f32 Translation);
-
-internal rect_f32 IntersectRectF32  (rect_f32 R1, rect_f32 R2);
-internal b32      IsPointInRect     (rect_f32 Target, vec2_f32 Point);
-internal f32      RoundedRectSDF    (rect_sdf_params Params);
-internal b32      RectsIntersect    (rect_f32 A, rect_f32 B);
-internal rect_f32 InsetRectF32      (rect_f32 Rect, f32 Size);
-internal rect_f32 TranslateRectF32  (rect_f32 Rect, vec2_f32 Translation);
-
-// --------------------------------------------------------
-
-// [Constructors]
-
-internal vec2_f32   Vec2F32            (f32 X, f32 Y);
 internal vec4_f32   Vec4F32            (f32 X, f32 Y, f32 Z, f32 W);
-internal vec2_i32   Vec2I32            (i32 X, i32 Y);
-internal vec2_f32   Vec2I32ToVec2F32   (vec2_i32 Vec);
 internal matrix_3x3 Mat3x3Zero         (void);
 internal matrix_3x3 Mat3x3Identity     (void);
-
-// [Vector OPs]
-
-internal vec2_f32 Vec2F32Add     (vec2_f32 Vec1, vec2_f32 Vec2);
-internal vec2_f32 Vec2F32Sub     (vec2_f32 Vec1, vec2_f32 Vec2);
-internal vec2_f32 Vec2F32Abs     (vec2_f32 Vec);
-internal f32      Vec2F32Length  (vec2_f32 Vec);
 
 // [Ranges]
 
@@ -126,8 +73,168 @@ internal b32 IsInRangeF32(f32 Min, f32 Max, f32 Value);
 
 #define IterateVec4() for(u32 Index = 0; Index < 4; Index++)
 
-internal b32 Vec2I32IsEqual    (vec2_i32 Vec1, vec2_i32 Vec2);
-internal b32 Vec2I32IsEmpty    (vec2_i32 Vec);
-internal b32 Vec2F32IsEqual    (vec2_f32 Vec1, vec2_f32 Vec2);
-internal b32 Vec2F32IsEmpty    (vec2_f32 Vec);
 internal b32 Mat3x3AreEqual    (matrix_3x3 *m1, matrix_3x3 *m2);
+
+// NOTE:
+// Trying something new.
+
+#include <type_traits>
+
+namespace void_math
+{
+
+template <typename T>
+struct vector2_generic
+{
+    T X, Y;
+
+    constexpr vector2_generic() noexcept(std::is_nothrow_default_constructible_v<T>)
+        : X{T(0)}, Y{T(0)} {}
+
+    constexpr vector2_generic(T X_, T Y_) noexcept(std::is_nothrow_copy_constructible_v<T>)
+        : X(X_), Y(Y_) {}
+
+    constexpr vector2_generic Absolute() const noexcept
+    {
+        return {ClampBot(this->X, -this->X), ClampBot(this->Y, -this->Y)};
+    }
+
+    constexpr f32 Length() const noexcept
+    {
+        return sqrtf(this->X * this->X + this->Y * this->Y);
+    }
+
+    constexpr bool IsEmpty(void) const noexcept
+    {
+        return this->X == 0 && this->Y == 0;
+    }
+
+    constexpr vector2_generic operator+(vector2_generic Vec) const noexcept(noexcept(T{} + T{}))
+    {
+        return {this->X + Vec.X, this->Y + Vec.Y};
+    }
+
+    constexpr vector2_generic operator-(vector2_generic Vec) const noexcept(noexcept(T{} - T{}))
+    {
+        return {this->X - Vec.X, this->Y - Vec.Y};
+    }
+
+    constexpr vector2_generic operator*(T Scalar) const noexcept(noexcept(T{} * T{}))
+    {
+        return {this->X * Scalar, this->Y * Scalar};
+    }
+
+    constexpr vector2_generic& operator+=(vector2_generic Vec) noexcept
+    {
+        this->X += Vec.X;
+        this->Y += Vec.Y;
+
+        return *this;
+    }
+
+    constexpr vector2_generic& operator-=(vector2_generic Vec) noexcept
+    {
+        this->X -= Vec.X;
+        this->Y -= Vec.Y;
+
+        return *this;
+    }
+
+    constexpr vector2_generic& operator*=(T Scalar) noexcept
+    {
+        this->X *= Scalar;
+        this->Y *= Scalar;
+
+        return *this;
+    }
+
+    constexpr bool operator==(vector2_generic Vec) const noexcept
+    {
+        return this->X == Vec.X && this->Y == Vec.Y;
+    }
+};
+
+using vec2_f32 = vector2_generic<f32>;
+using vec2_i32 = vector2_generic<i32>;
+
+template <typename T>
+struct rectangle_generic
+{
+    T Left;
+    T Top;
+    T Right;
+    T Bottom;
+
+    constexpr rectangle_generic() noexcept
+        : Left(0), Top(0), Right(0), Bottom(0) {}
+
+    constexpr rectangle_generic(T Left_, T Top_, T Right_, T Bottom_) noexcept
+        : Left(Left_), Top(Top_), Right(Right_), Bottom(Bottom_) {}
+
+    static constexpr rectangle_generic FromXYWH(T X, T Y, T Width, T Height) noexcept
+    {
+        return {X, Y, X + Width, Y + Height};
+    }
+
+    static constexpr rectangle_generic FromMinMax(const vector2_generic<T>& Min, const vector2_generic<T>& Max) noexcept
+    {
+        return {Min.X, Min.Y, Max.X, Max.Y};
+    }
+
+    constexpr rectangle_generic Translate(vector2_generic<T> Vec) const noexcept
+    {
+        return {
+            this->Left   + Vec.X,
+            this->Top    + Vec.Y,
+            this->Right  + Vec.X,
+            this->Bottom + Vec.Y
+        };
+    }
+
+    constexpr rectangle_generic Inset(T Scalar) const noexcept
+    {
+        return {
+            ClampBot(0, this->Left   + Scalar),
+            ClampBot(0, this->Top    + Scalar),
+            ClampBot(0, this->Right  - Scalar),
+            ClampBot(0, this->Bottom - Scalar)
+        };
+    }
+
+    constexpr rectangle_generic Intersect(rectangle_generic<T> Rect) const noexcept
+    {
+        vector2_generic Min = {Max(this->Left , Rect.Left ), Max(this->Top   , Rect.Top   )};
+        vector2_generic Max = {Min(this->Right, Rect.Right), Min(this->Bottom, Rect.Bottom)};
+
+        if(Max.X <= Min.X || Max.Y <= Min.Y)
+        {
+            return {};
+        }
+        else
+        {
+            return {Min.X, Min.Y, Max.X, Max.Y};
+        }
+    }
+
+    constexpr b32 IsPointInside(vector2_generic<T> Point) const noexcept
+    {
+        return (Point.X <= this->Right && Point.X >= this->Left && Point.Y <= this->Bottom && Point.Y >= this->Top);
+    }
+
+    constexpr b32 IsIntersecting(rectangle_generic Rect) const noexcept
+    {
+        return !((this->Right >= Rect.Left || this->Left <= Rect.Right) || (this->Bottom >= Rect.Top || this->Top <= Rect.Bottom));
+    }
+};
+
+using rect_f32 = rectangle_generic<f32>;
+using rect_i32 = rectangle_generic<i32>;
+
+typedef struct rect_sdf_params
+{
+    f32      Radius;
+    vec2_f32 HalfSize;
+    vec2_f32 PointPosition;
+} rect_sdf_params;
+
+}

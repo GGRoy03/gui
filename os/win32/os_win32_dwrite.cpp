@@ -162,7 +162,7 @@ OSGetGlyphInfo(byte_string UTF8, f32 FontSize, os_font_context *Context)
     Assert(UTF8.Size);
     Assert(Context);
 
-    os_glyph_info   Result  = {{0}};
+    os_glyph_info   Result  = {};
     IDWriteFactory *Factory = OSWin32State.DWriteFactory; Assert(Factory);
     memory_arena   *Arena   = OSWin32State.Arena;         Assert(Arena);
 
@@ -256,8 +256,8 @@ OSRasterizeGlyph(byte_string UTF8, rect_f32 Rect, os_font_context *Context)
         D2D1_RECT_F DrawRect;
         DrawRect.left   = 0.f;
         DrawRect.top    = 0.f;
-        DrawRect.right  = Rect.Max.X;
-        DrawRect.bottom = Rect.Max.Y;
+        DrawRect.right  = Rect.Right;
+        DrawRect.bottom = Rect.Bottom;
 
         ID2D1RenderTarget    *RenderTarget = Context->RenderTarget;
         IDWriteTextFormat    *TextFormat   = Context->TextFormat;

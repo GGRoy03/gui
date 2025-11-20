@@ -1,5 +1,7 @@
 #pragma once
 
+using namespace void_math;
+
 // [Constants]
 
 #define OS_KeyboardButtonCount 256

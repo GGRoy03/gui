@@ -19,7 +19,7 @@ UILoadFont(byte_string Name, f32 Size)
 
     if(IsValidByteString(Name) && Size && IsValidRenderHandle(Renderer))
     {
-        vec2_i32 TextureSize = Vec2I32(1024, 1024);
+        vec2_i32 TextureSize = vec2_i32(1024, 1024);
         size_t   Footprint   = (TextureSize.X * sizeof(stbrp_node)) + sizeof(ui_font);
 
         Result = (ui_font *)PushArena(Arena, Footprint, AlignOf(ui_font));
@@ -29,7 +29,7 @@ UILoadFont(byte_string Name, f32 Size)
             Result->Name        = ByteStringCopy(Name, Arena);
             Result->Size        = Size;
             Result->AtlasNodes  = (stbrp_node*)(Result + 1);
-            Result->TextureSize = Vec2I32ToVec2F32(TextureSize);
+            Result->TextureSize = vec2_f32((f32)TextureSize.X, (f32)TextureSize.Y); // NOTE: Weird mismatch.
 
             stbrp_init_target(&Result->AtlasContext, TextureSize.X, TextureSize.Y, Result->AtlasNodes, TextureSize.X);
 
@@ -160,10 +160,10 @@ PrepareGlyph(byte_string UTF8, ui_font *Font)
         if (STBRect.was_packed)
         {
             rect_f32 PaddedRect;
-            PaddedRect.Min.X = (f32)STBRect.x + HalfPadding;
-            PaddedRect.Min.Y = (f32)STBRect.y + HalfPadding;
-            PaddedRect.Max.X = (f32)(STBRect.x + Info.Size.X + HalfPadding);
-            PaddedRect.Max.Y = (f32)(STBRect.y + Info.Size.Y + HalfPadding);
+            PaddedRect.Left   = (f32)STBRect.x + HalfPadding;
+            PaddedRect.Top    = (f32)STBRect.y + HalfPadding;
+            PaddedRect.Right  = (f32)(STBRect.x + Info.Size.X + HalfPadding);
+            PaddedRect.Bottom = (f32)(STBRect.y + Info.Size.Y + HalfPadding);
 
             State->IsRasterized = OSRasterizeGlyph(UTF8, PaddedRect, &Font->OSContext);
             State->Source       = PaddedRect;

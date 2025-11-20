@@ -736,7 +736,7 @@ UICreateImageGroup(byte_string Name, i32 Width, i32 Height)
         stbrp_node *AllocatorNodes = (stbrp_node *)Memory;
 
         ui_image_group *Group = (ui_image_group *)(AllocatorNodes + Width);
-        Group->Size           = Vec2F32(Width, Height);
+        Group->Size           = vec2_f32(Width, Height);
         Group->RenderTexture  = CreateRenderTexture(Texture);
         Group->AllocatorNodes = AllocatorNodes;
 
@@ -769,7 +769,7 @@ LoadImageInGroup(byte_string GroupName, byte_string Path)
 
         if(Rect.was_packed)
         {
-            Result.Source   = RectF32(Rect.x, Rect.y, Rect.w, Rect.h);
+            Result.Source   = rect_f32::FromXYWH(Rect.x, Rect.y, Rect.w, Rect.h);
             Result.IsLoaded = 1;
 
             CopyIntoRenderTexture(Group->RenderTexture, Result.Source, Pixels, Width * Channels);

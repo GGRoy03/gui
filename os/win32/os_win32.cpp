@@ -226,7 +226,7 @@ OSWin32QuerySystemInfo(void)
 internal vec2_i32
 OSWin32GetClientSize(HWND HWindow)
 {
-    vec2_i32 Result = Vec2I32(0, 0);
+    vec2_i32 Result = vec2_i32(0, 0);
 
     if(HWindow != INVALID_HANDLE_VALUE)
     {
@@ -266,7 +266,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
             ArenaParams.CommitSize        = Kilobyte(64);
         }
 
-        OSWin32State.HWindow    = OSWin32InitializeWindow(Vec2I32(1920,1080), ShowCmd);
+        OSWin32State.HWindow    = OSWin32InitializeWindow(vec2_i32(1920,1080), ShowCmd);
         OSWin32State.SystemInfo = OSWin32QuerySystemInfo();
         OSWin32State.Arena      = AllocateArena(ArenaParams);
 

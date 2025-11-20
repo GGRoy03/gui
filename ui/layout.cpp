@@ -127,54 +127,45 @@ typedef struct ui_layout_tree
 internal vec2_f32
 GetContentBoxSize(ui_layout_box *Box)
 {
-    vec2_f32 Result;
-    Result.X = Box->ContentBox.Max.X - Box->ContentBox.Min.X;
-    Result.Y = Box->ContentBox.Max.Y - Box->ContentBox.Min.Y;
-
+    vec2_f32 Result = vec2_f32(Box->ContentBox.Right - Box->ContentBox.Left, Box->ContentBox.Bottom - Box->ContentBox.Top);
     return Result;
 }
 
 internal vec2_f32
 GetContentBoxPosition(ui_layout_box *Box)
 {
-    vec2_f32 ContentStart = Vec2F32(Box->ContentBox.Min.X, Box->ContentBox.Min.Y);
-    vec2_f32 Result       = Vec2F32Add(ContentStart, Box->VisualOffset);
+    vec2_f32 ContentStart = vec2_f32(Box->ContentBox.Left, Box->ContentBox.Top);
+    vec2_f32 Result       = ContentStart + Box->VisualOffset;
     return Result;
 }
 
 internal vec2_f32
 GetOuterBoxSize(ui_layout_box *Box)
 {
-    vec2_f32 Result;
-    Result.X = Box->OuterBox.Max.X - Box->OuterBox.Min.X;
-    Result.Y = Box->OuterBox.Max.Y - Box->OuterBox.Min.Y;
-
+    vec2_f32 Result = vec2_f32(Box->OuterBox.Right - Box->OuterBox.Left, Box->OuterBox.Bottom - Box->OuterBox.Top);
     return Result;
 }
 
 internal vec2_f32
 GetOuterBoxPosition(ui_layout_box *Box)
 {
-    vec2_f32 OuterStart = Vec2F32(Box->OuterBox.Min.X, Box->OuterBox.Min.Y);
-    vec2_f32 Result     = Vec2F32Add(OuterStart, Box->VisualOffset);
+    vec2_f32 OuterStart = vec2_f32(Box->OuterBox.Left, Box->OuterBox.Top);
+    vec2_f32 Result     = OuterStart + Box->VisualOffset;
     return Result;
 }
 
 internal vec2_f32
 GetInnerBoxSize(ui_layout_box *Box)
 {
-    vec2_f32 Result;
-    Result.X = Box->InnerBox.Max.X - Box->InnerBox.Min.X;
-    Result.Y = Box->InnerBox.Max.Y - Box->InnerBox.Min.Y;
-
+    vec2_f32 Result = vec2_f32(Box->InnerBox.Right - Box->InnerBox.Left, Box->InnerBox.Bottom - Box->InnerBox.Top);
     return Result;
 }
 
 internal vec2_f32
 GetInnerBoxPosition(ui_layout_box *Box)
 {
-    vec2_f32 InnerStart = Vec2F32(Box->InnerBox.Min.X, Box->InnerBox.Min.Y);
-    vec2_f32 Result     = Vec2F32Add(InnerStart, Box->VisualOffset);
+    vec2_f32 InnerStart = vec2_f32(Box->InnerBox.Left, Box->InnerBox.Top);
+    vec2_f32 Result     = InnerStart + Box->VisualOffset;
     return Result;
 }
 
@@ -183,13 +174,13 @@ ComputeNodeBoxes(ui_layout_node *Node, f32 Width, f32 Height)
 {
     ui_layout_box *Box = &Node->Value;
 
-    Box->OuterBox = RectF32(0.f, 0.f, Width, Height);
-    Box->InnerBox = InsetRectF32(Box->OuterBox, Box->BorderWidth);
+    Box->OuterBox = rect_f32::FromXYWH(0.f, 0.f, Width, Height);
+    Box->InnerBox = Box->OuterBox.Inset(Box->BorderWidth);
 
-    Box->ContentBox.Min.X = Box->InnerBox.Min.X + Box->Padding.Left;
-    Box->ContentBox.Min.Y = Box->InnerBox.Min.Y + Box->Padding.Top;
-    Box->ContentBox.Max.X = Box->InnerBox.Max.X - Box->Padding.Right;
-    Box->ContentBox.Max.Y = Box->InnerBox.Max.Y - Box->Padding.Bot;
+    Box->ContentBox.Left   = Box->InnerBox.Left   + Box->Padding.Left;
+    Box->ContentBox.Top    = Box->InnerBox.Top    + Box->Padding.Top;
+    Box->ContentBox.Right  = Box->InnerBox.Right  - Box->Padding.Right;
+    Box->ContentBox.Bottom = Box->InnerBox.Bottom - Box->Padding.Bot;
 }
 
 internal b32 
@@ -573,15 +564,15 @@ UIEnd()
 internal vec2_f32
 GetScrollNodeTranslation(ui_scroll_region *Region)
 {
-    vec2_f32 Result = Vec2F32(0.f, 0.f);
+    vec2_f32 Result = vec2_f32(0.f, 0.f);
 
     if (Region->Axis == UIAxis_X)
     {
-        Result = Vec2F32(Region->ScrollOffset, 0.f);
+        Result = vec2_f32(Region->ScrollOffset, 0.f);
     } else
     if (Region->Axis == UIAxis_Y)
     {
-        Result = Vec2F32(0.f, Region->ScrollOffset);
+        Result = vec2_f32(0.f, Region->ScrollOffset);
     }
 
     return Result;
@@ -606,7 +597,7 @@ UpdateScrollNode(f32 ScrolledLines, ui_layout_node *Node, ui_scroll_region *Regi
     Region->ScrollOffset += ScrolledPixels;
     Region->ScrollOffset  = ClampTop(ClampBot(ScrollLimit, Region->ScrollOffset), 0);
 
-    vec2_f32 ScrollDelta = Vec2F32(0.f, 0.f);
+    vec2_f32 ScrollDelta = vec2_f32(0.f, 0.f);
     if(Region->Axis == UIAxis_X)
     {
         ScrollDelta.X = -1.f * Region->ScrollOffset;
@@ -617,7 +608,7 @@ UpdateScrollNode(f32 ScrolledLines, ui_layout_node *Node, ui_scroll_region *Regi
     }
 
     rect_f32 WindowContent = Node->Value.ContentBox;
-    rect_f32 WindowBounds  = TranslatedRectF32(WindowContent, ScrollDelta);
+    rect_f32 WindowBounds  = WindowContent.Translate(ScrollDelta);
 
     IterateLinkedList(Node, ui_layout_node *, Child)
     {
@@ -627,7 +618,7 @@ UpdateScrollNode(f32 ScrolledLines, ui_layout_node *Node, ui_scroll_region *Regi
 
             if (ContentSize.X > 0.0f && ContentSize.Y > 0.0f) 
             {
-                if (RectsIntersect(WindowBounds, Node->Value.ContentBox))
+                if (WindowBounds.IsIntersecting(Node->Value.ContentBox))
                 {
                     ClearFlag(Child->Flags, UILayoutNode_DoNotPaint);
                 }
@@ -812,9 +803,9 @@ IsMouseInsideOuterBox(vec2_f32 MousePosition, u32 NodeIndex, ui_subtree *Subtree
 
     vec2_f32 OuterSize  = GetOuterBoxSize(&Node->Value);
     vec2_f32 OuterPos   = GetOuterBoxPosition(&Node->Value);
-    vec2_f32 OuterHalf  = Vec2F32(OuterSize.X * 0.5f, OuterSize.Y * 0.5f);
-    vec2_f32 Center     = Vec2F32Add(OuterPos, OuterHalf);
-    vec2_f32 LocalMouse = Vec2F32Sub(MousePosition, Center);
+    vec2_f32 OuterHalf  = vec2_f32(OuterSize.X * 0.5f, OuterSize.Y * 0.5f);
+    vec2_f32 Center     = OuterPos + OuterHalf;
+    vec2_f32 LocalMouse = MousePosition - Center;
 
     rect_sdf_params Params = {0};
     Params.HalfSize      = OuterHalf;
@@ -829,13 +820,13 @@ IsMouseInsideBorder(vec2_f32 MousePosition, ui_layout_node *Node)
 {
     vec2_f32 InnerSize   = GetInnerBoxSize(&Node->Value);
     vec2_f32 InnerPos    = GetInnerBoxPosition(&Node->Value);
-    vec2_f32 InnerHalf   = Vec2F32(InnerSize.X * 0.5f, InnerSize.Y * 0.5f);
-    vec2_f32 InnerCenter = Vec2F32Add(InnerPos, InnerHalf);
+    vec2_f32 InnerHalf   = vec2_f32(InnerSize.X * 0.5f, InnerSize.Y * 0.5f);
+    vec2_f32 InnerCenter = InnerPos + InnerHalf;
 
     rect_sdf_params Params = {0};
     Params.Radius        = 0.f;
     Params.HalfSize      = InnerHalf;
-    Params.PointPosition = Vec2F32Sub(MousePosition, InnerCenter);
+    Params.PointPosition = MousePosition - InnerCenter;
 
     f32 Distance = RoundedRectSDF(Params);
     return Distance >= 0.f;
@@ -867,21 +858,21 @@ DetermineResizeIntent(vec2_f32 MousePosition, ui_layout_node *Node)
     f32 CornerX         = Left + Width;
     f32 CornerY         = Top  + Height;
 
-    rect_f32 RightEdge  = RectF32(Left + Width, Top, BorderWidth, Height);
-    rect_f32 BottomEdge = RectF32(Left, Top + Height, Width, BorderWidth);
-    rect_f32 Corner     = RectF32(CornerX, CornerY, CornerTolerance, CornerTolerance);
+    rect_f32 RightEdge  = rect_f32::FromXYWH(Left + Width, Top, BorderWidth, Height);
+    rect_f32 BottomEdge = rect_f32::FromXYWH(Left, Top + Height, Width, BorderWidth);
+    rect_f32 Corner     = rect_f32::FromXYWH(CornerX, CornerY, CornerTolerance, CornerTolerance);
 
     UIIntent_Type Result = UIIntent_None;
 
-    if(IsPointInRect(Corner, MousePosition))
+    if(Corner.IsPointInside(MousePosition))
     {
         Result = UIIntent_ResizeXY;
     } else
-    if(IsPointInRect(RightEdge, MousePosition))
+    if(RightEdge.IsPointInside(MousePosition))
     {
         Result = UIIntent_ResizeX;
     } else
-    if(IsPointInRect(BottomEdge, MousePosition))
+    if(BottomEdge.IsPointInside(MousePosition))
     {
         Result = UIIntent_ResizeY;
     }
@@ -987,7 +978,7 @@ GenerateFocusedNodeEvents(ui_focused_node Focused, ui_event_list *Events, memory
 
     if(MouseMoved && Focused.Intent >= UIIntent_ResizeX && Focused.Intent <= UIIntent_ResizeXY)
     {
-        vec2_f32 Delta = Vec2F32(0.f, 0.f);
+        vec2_f32 Delta = vec2_f32(0.f, 0.f);
 
         if(Focused.Intent == UIIntent_ResizeX)
         {
@@ -1106,7 +1097,7 @@ ProcessUIEvents(ui_event_list *Events, ui_subtree *Subtree)
         case UIEvent_Drag:
         {
             ui_drag_event Drag = Event->Drag;
-            Drag.Node->Value.VisualOffset = Vec2F32Add(Drag.Node->Value.VisualOffset, Drag.Delta);
+            Drag.Node->Value.VisualOffset = Drag.Node->Value.VisualOffset+ Drag.Delta;
 
         } break;
 
@@ -1233,8 +1224,8 @@ AlignUITextLine(f32 ContentWidth, f32 LineWidth, UIAlign_Type XAlign, ui_shaped_
     {
         for(u32 Idx = 0; Idx < Count; ++Idx)
         {
-            Glyphs[Idx].Position.Min.X += XAlignOffset;
-            Glyphs[Idx].Position.Max.X += XAlignOffset;
+            Glyphs[Idx].Position.Left += XAlignOffset;
+            Glyphs[Idx].Position.Right += XAlignOffset;
         }
     }
 }
@@ -1301,7 +1292,7 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
             vec2_f32 ContentSize = GetContentBoxSize(Box);
 
             vec2_f32 Cursor    = ContentPos;
-            vec2_f32 MaxCursor = Vec2F32Add(Cursor, ContentSize);
+            vec2_f32 MaxCursor = Cursor + ContentSize;
 
             if(HasFlag(Node->Flags, UILayoutNode_HasScrollRegion))
             {
@@ -1386,11 +1377,11 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
                     if(Direction == UIFlexDirection_Row)
                     {
-                        CBox->VisualOffset = Vec2F32(MainAxisCursor, CrossAxisCursor);
+                        CBox->VisualOffset = vec2_f32(MainAxisCursor, CrossAxisCursor);
                     } else
                     if(Direction == UIFlexDirection_Column)
                     {
-                        CBox->VisualOffset = Vec2F32(CrossAxisCursor, MainAxisCursor);
+                        CBox->VisualOffset = vec2_f32(CrossAxisCursor, MainAxisCursor);
                     }
 
                     MainAxisCursor += MainAxisChildSize + MainAxisSpacing;
@@ -1408,7 +1399,7 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                     ui_layout_box *CBox  = &Child->Value;
                     vec2_f32       CSize = GetOuterBoxSize(CBox);
 
-                    CBox->VisualOffset = Vec2F32(Cursor.X, Cursor.Y);
+                    CBox->VisualOffset = vec2_f32(Cursor.X, Cursor.Y);
 
                     Cursor.Y += CSize.Y;
 
@@ -1445,11 +1436,11 @@ PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                         LineStartIdx = Idx;
                     }
 
-                    vec2_f32 Position = Vec2F32(LineStartX + LineWidth, LineStartY);
-                    Shaped->Position.Min.X = Position.X + Shaped->Offset.X;
-                    Shaped->Position.Min.Y = Position.Y + Shaped->Offset.Y;
-                    Shaped->Position.Max.X = Shaped->Position.Min.X + Shaped->Size.X;
-                    Shaped->Position.Max.Y = Shaped->Position.Min.Y + Shaped->Size.Y;
+                    vec2_f32 Position = vec2_f32(LineStartX + LineWidth, LineStartY);
+                    Shaped->Position.Left = Position.X + Shaped->Offset.X;
+                    Shaped->Position.Top = Position.Y + Shaped->Offset.Y;
+                    Shaped->Position.Right = Shaped->Position.Left + Shaped->Size.X;
+                    Shaped->Position.Bottom = Shaped->Position.Top + Shaped->Size.Y;
 
                     LineWidth += Shaped->AdvanceX;
                 }
@@ -1679,8 +1670,8 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
 
         if(Box->Width.Type == UIUnit_Auto && Box->Height.Type == UIUnit_Auto)
         {
-            f32 Width  = Image->Source.Max.X - Image->Source.Min.X;
-            f32 Height = Image->Source.Max.Y - Image->Source.Min.Y;
+            f32 Width  = Image->Source.Right  - Image->Source.Left;
+            f32 Height = Image->Source.Bottom - Image->Source.Top;
 
             ComputeNodeBoxes(Root, Width, Height);
         }
@@ -1796,7 +1787,7 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                 TotalWidth += (VisibleCount - 1) * Spacing.Horizontal;
             }
 
-            Region->ContentSize = Vec2F32(TotalWidth, MaxHeight);
+            Region->ContentSize = vec2_f32(TotalWidth, MaxHeight);
         } else
         if (Region->Axis == UIAxis_Y)
         {
@@ -1805,7 +1796,7 @@ PostOrderMeasureSubtree(ui_layout_node *Root, ui_subtree *Subtree)
                 TotalHeight += (VisibleCount - 1) * Spacing.Vertical;
             }
 
-            Region->ContentSize = Vec2F32(MaxWidth, TotalHeight);
+            Region->ContentSize = vec2_f32(MaxWidth, TotalHeight);
         }
     }
 }

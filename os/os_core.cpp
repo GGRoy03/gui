@@ -93,7 +93,7 @@ internal void
 OSClearInputs(os_inputs *Inputs)
 {
     Inputs->ScrollDeltaInLines = 0.f;
-    Inputs->MouseDelta         = Vec2F32(0.f, 0.f);
+    Inputs->MouseDelta         = vec2_f32(0.f, 0.f);
 
     for (u32 Idx = 0; Idx < OS_KeyboardButtonCount; Idx++)
     {

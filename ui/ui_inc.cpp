@@ -5,4 +5,5 @@
 #include "layout.cpp"
 #include "paint.cpp"
 #include "component.cpp"
-#include "console.cpp"
+
+#include "documentation.cpp"

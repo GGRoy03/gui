@@ -1,4 +1,7 @@
-internal ui_node
+// NOTE:
+// Makes me think that we can unify flags initialization with functions.
+
+internal ui_node *
 UIWindow(u32 StyleIndex)
 {
     bit_field Flags = 0;
@@ -8,17 +11,18 @@ UIWindow(u32 StyleIndex)
         SetFlag(Flags, UILayoutNode_IsParent);
     }
 
-    ui_node Node = UINode(Flags);
-    if(Node.CanUse)
+    ui_node *Node = UICreateNode(Flags, 0);
+
+    if(Node && Node->CanUse)
     {
-        UINodeSetStyle(Node, StyleIndex);
+        Node->SetStyle(StyleIndex);
     }
 
     return Node;
 }
 
-internal ui_node
-UIScrollableContent(UIAxis_Type Axis, u32 StyleIndex)
+internal ui_node *
+UIScrollableContent(UIAxis_Type Axis, u32 Style)
 {
     bit_field Flags = 0;
     {
@@ -26,50 +30,54 @@ UIScrollableContent(UIAxis_Type Axis, u32 StyleIndex)
         SetFlag(Flags, UILayoutNode_HasClip);
     }
 
-    ui_node Node = UINode(Flags);
-    if(Node.CanUse)
+    ui_node *Node = UICreateNode(Flags, 0);
+
+    if(Node && Node->CanUse)
     {
-        UINodeSetStyle(Node, StyleIndex);
-        UINodeSetScroll(Node, Axis);
+        Node->SetStyle(Style);
+        Node->SetScroll(Axis);
     }
 
     return Node;
 }
 
-internal ui_node
+internal ui_node *
 UILabel(byte_string Text, u32 Style)
 {
-    ui_node Node = UINode(NoFlag);
-    if(Node.CanUse)
+    ui_node *Node = UICreateNode(NoFlag, 0);
+
+    if(Node && Node->CanUse)
     {
-        UINodeSetStyle(Node, Style);
-        UINodeSetText(Node, Text);
+        Node->SetStyle(Style);
+        Node->SetText(Text);
     }
 
     return Node;
 }
 
-internal ui_node
-UITextInput(u8 *Buffer, u64 BufferSize, u32 StyleIndex)
+internal ui_node *
+UITextInput(u8 *Buffer, u64 BufferSize, u32 Style)
 {
-    ui_node Node = UINode(NoFlag);
-    if(Node.CanUse)
+    ui_node *Node = UICreateNode(NoFlag, 0);
+
+    if(Node && Node->CanUse)
     {
-        UINodeSetStyle(Node, StyleIndex);
-        UINodeSetTextInput(Node, Buffer, BufferSize);
+        Node->SetStyle(Style);
+        Node->SetTextInput(Buffer, BufferSize);
     }
 
     return Node;
 }
 
-internal ui_node
+internal ui_node *
 UIImage(byte_string Path, byte_string Group, u32 Style)
 {
-    ui_node Node = UINode(NoFlag);
-    if(Node.CanUse)
+    ui_node *Node = UICreateNode(NoFlag, 0);
+
+    if(Node && Node->CanUse)
     {
-        UINodeSetStyle(Node, Style);
-        UINodeSetImage(Node, Path, Group);
+        Node->SetStyle(Style);
+        Node->SetImage(Path, Group);
     }
 
     return Node;

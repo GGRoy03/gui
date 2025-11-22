@@ -68,10 +68,10 @@ typedef struct ui_node_id_hash
 typedef struct ui_node_id_entry
 {
     ui_node_id_hash Hash;
-    ui_node         Node;
+    u32             NodeIndex;
 } ui_node_id_entry;
 
-typedef struct ui_node_id_table
+typedef struct ui_node_table
 {
     u8               *MetaData;
     ui_node_id_entry *Buckets;
@@ -80,17 +80,17 @@ typedef struct ui_node_id_table
     u64 GroupCount;
 
     u64 HashMask;
-} ui_node_id_table;
+} ui_node_table;
 
 internal b32
-IsValidNodeIdTable(ui_node_id_table *Table)
+IsValidNodeIdTable(ui_node_table *Table)
 {
     b32 Result = (Table && Table->MetaData && Table->Buckets && Table->GroupCount);
     return Result;
 }
 
 internal u32
-GetNodeIdGroupIndexFromHash(ui_node_id_hash Hash, ui_node_id_table *Table)
+GetNodeIdGroupIndexFromHash(ui_node_id_hash Hash, ui_node_table *Table)
 {
     u32 Result = Hash.Value & Table->HashMask;
     return Result;
@@ -114,7 +114,7 @@ ComputeNodeIdHash(byte_string Id)
 }
 
 internal ui_node_id_entry *
-FindNodeIdEntry(ui_node_id_hash Hash, ui_node_id_table *Table)
+FindNodeIdEntry(ui_node_id_hash Hash, ui_node_table *Table)
 {
     u32 ProbeCount = 0;
     u32 GroupIndex = GetNodeIdGroupIndexFromHash(Hash, Table);
@@ -168,7 +168,7 @@ FindNodeIdEntry(ui_node_id_hash Hash, ui_node_id_table *Table)
 }
 
 internal void
-InsertNodeId(ui_node_id_hash Hash, ui_node Node, ui_node_id_table *Table)
+InsertNodeId(ui_node_id_hash Hash, u32 NodeIndex, ui_node_table *Table)
 {
     u32 ProbeCount = 0;
     u32 GroupIndex = GetNodeIdGroupIndexFromHash(Hash, Table);
@@ -190,8 +190,8 @@ InsertNodeId(ui_node_id_hash Hash, ui_node Node, ui_node_id_table *Table)
             u32 Index = Lane + (GroupIndex * Table->GroupSize);
 
             ui_node_id_entry *Entry = Table->Buckets + Index;
-            Entry->Hash = Hash;
-            Entry->Node = Node;
+            Entry->Hash      = Hash;
+            Entry->NodeIndex = NodeIndex;
 
             Meta[Lane] = GetNodeIdTagFromHash(Hash);
 
@@ -210,8 +210,8 @@ InsertNodeId(ui_node_id_hash Hash, ui_node Node, ui_node_id_table *Table)
             u32 Index = Lane + (GroupIndex * Table->GroupSize);
 
             ui_node_id_entry *Entry = Table->Buckets + Index;
-            Entry->Hash = Hash;
-            Entry->Node = Node;
+            Entry->Hash      = Hash;
+            Entry->NodeIndex = NodeIndex;
 
             Meta[Lane] = GetNodeIdTagFromHash(Hash);
 
@@ -223,25 +223,48 @@ InsertNodeId(ui_node_id_hash Hash, ui_node Node, ui_node_id_table *Table)
     }
 }
 
+internal void
+SetNodeId(byte_string Id, u32 NodeIndex, ui_node_table *Table)
+{
+    if(!IsValidNodeIdTable(Table))
+    {
+        return;
+    }
+
+    ui_node_id_hash   Hash  = ComputeNodeIdHash(Id);
+    ui_node_id_entry *Entry = FindNodeIdEntry(Hash, Table);
+
+    if(!Entry)
+    {
+        InsertNodeId(Hash, NodeIndex, Table);
+    }
+    else
+    {
+        // TODO: Show which ID is faulty.
+
+        ConsoleWriteMessage(warn_message("ID could not be set because it already exists for this pipeline"));
+    }
+}
+
 internal u64
-GetNodeIdTableFootprint(ui_node_id_table_params Params)
+GetNodeIdTableFootprint(ui_node_table_params Params)
 {
     u64 GroupTotal = Params.GroupSize * Params.GroupCount;
 
     u64 MetaDataSize = GroupTotal * sizeof(u8);
     u64 BucketsSize  = GroupTotal * sizeof(ui_node_id_entry);
-    u64 Result       = sizeof(ui_node_id_table) + MetaDataSize + BucketsSize;
+    u64 Result       = sizeof(ui_node_table) + MetaDataSize + BucketsSize;
 
     return Result;
 }
 
-internal ui_node_id_table *
-PlaceNodeIdTableInMemory(ui_node_id_table_params Params, void *Memory)
+internal ui_node_table *
+PlaceNodeIdTableInMemory(ui_node_table_params Params, void *Memory)
 {
     Assert(Params.GroupSize == 16);
     Assert(Params.GroupCount > 0 && IsPowerOfTwo(Params.GroupCount));
 
-    ui_node_id_table *Result = 0;
+    ui_node_table *Result = 0;
 
     if(Memory)
     {
@@ -250,7 +273,7 @@ PlaceNodeIdTableInMemory(ui_node_id_table_params Params, void *Memory)
         u8 *              MetaData = (u8 *)Memory;
         ui_node_id_entry *Entries  = (ui_node_id_entry *)(MetaData + GroupTotal);
 
-        Result = (ui_node_id_table *)(Entries + GroupTotal);
+        Result = (ui_node_table *)(Entries + GroupTotal);
         Result->MetaData   = MetaData;
         Result->Buckets    = Entries;
         Result->GroupSize  = Params.GroupSize;
@@ -266,33 +289,10 @@ PlaceNodeIdTableInMemory(ui_node_id_table_params Params, void *Memory)
     return Result;
 }
 
-internal void
-SetNodeId(byte_string Id, ui_node Node, ui_node_id_table *Table)
+internal ui_node *
+UIFindNodeById(byte_string Id, ui_node_table *Table)
 {
-    if(!IsValidNodeIdTable(Table))
-    {
-        return;
-    }
-
-    ui_node_id_hash   Hash  = ComputeNodeIdHash(Id);
-    ui_node_id_entry *Entry = FindNodeIdEntry(Hash, Table);
-
-    if(!Entry)
-    {
-        InsertNodeId(Hash, Node, Table);
-    }
-    else
-    {
-        // TODO: Show which ID is faulty.
-
-        ConsoleWriteMessage(warn_message("ID could not be set because it already exists for this pipeline"));
-    }
-}
-
-internal ui_node
-UIFindNodeById(byte_string Id, ui_node_id_table *Table)
-{
-    ui_node Result = {};
+    ui_node *Result = 0;
 
     if(IsValidByteString(Id) && IsValidNodeIdTable(Table))
     {
@@ -301,7 +301,12 @@ UIFindNodeById(byte_string Id, ui_node_id_table *Table)
 
         if(Entry)
         {
-            Result = Entry->Node;
+            // BUG:
+            // Does not set subtree ID. But is it needed really?
+
+            Result = UICreateNode(NoFlag, 1);
+            Result->CanUse = 1;
+            Result->IndexInTree = Entry->NodeIndex;
         }
         else
         {
@@ -793,12 +798,12 @@ LoadImageInGroup(byte_string GroupName, byte_string Path)
 // UI Node Private Implementation
 
 internal ui_subtree *
-GetSubtreeForNode(ui_node Node)
+GetSubtreeForNode(ui_node *Node)
 {
     ui_subtree *Result = GetCurrentSubtree();
     if(!Result)
     {
-        Result = FindSubtree(Node);
+        Result = FindSubtree(*Node);
     }
 
     Assert(Result);
@@ -815,78 +820,79 @@ GetSubtreeForNode(ui_node Node)
     X(TextColor, ui_color,       UISetTextColor)
 
 #define DEFINE_UI_NODE_SETTER(Name, Type, SetFunc) \
-internal void                                      \
-UINodeSet##Name(ui_node Node, Type Value)          \
+void                                               \
+ui_node::Set##Name(Type Value)                     \
 {                                                  \
-    Assert(Node.CanUse);                           \
-    ui_subtree *Subtree = GetSubtreeForNode(Node); \
+    Assert(this->CanUse);                          \
+    ui_subtree *Subtree = GetSubtreeForNode(this); \
     Assert(Subtree);                               \
-    SetFunc(Node.IndexInTree, Value, Subtree);     \
+    SetFunc(this->IndexInTree, Value, Subtree);    \
 }
 UI_NODE_SETTERS(DEFINE_UI_NODE_SETTER)
 #undef DEFINE_UI_NODE_SETTER
 
-internal void
-UINodeSetStyle(ui_node Node, u32 StyleIndex)
+void ui_node::SetStyle(u32 StyleIndex)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
-    ui_node_style *Style = GetNodeStyle(Node.IndexInTree, Subtree);
+    ui_node_style *Style = GetNodeStyle(this->IndexInTree, Subtree);
     Assert(Style);
 
     Style->CachedStyleIndex = StyleIndex;
     Style->IsLastVersion    = 0;
 
-    UpdateNodeIfNeeded(Node.IndexInTree, Subtree);
+    UpdateNodeIfNeeded(this->IndexInTree, Subtree);
 }
 
-internal ui_node
-UINodeFindChild(ui_node Node, u32 Index)
+ui_node * ui_node::FindChild(u32 Index)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_node    *Result  = 0;
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
-    ui_node Result = FindLayoutChild(Node.IndexInTree, Index, Subtree);
+    u32 NodeIndex = FindLayoutChild(this->IndexInTree, Index, Subtree);
+    if(NodeIndex != InvalidLayoutNodeIndex)
+    {
+        Result = 0; // TODO: Alloc.
+    }
+
     return Result;
 }
 
-internal void
-UINodeAppendChild(ui_node Node, ui_node Child)
+void ui_node::AppendChild(ui_node *Child)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
-    AppendLayoutChild(Node.IndexInTree, Child.IndexInTree, Subtree);
+    AppendLayoutChild(this->IndexInTree, Child->IndexInTree, Subtree);
 }
 
-internal void
-UINodeReserveChildren(ui_node Node, u32 Amount)
+void ui_node::ReserveChildren(u32 Amount)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
-    ReserveLayoutChildren(Node, Amount, Subtree); // TODO: Pass index.
+    ReserveLayoutChildren(this->IndexInTree, Amount, Subtree);
 }
 
-internal void
-UINodeClearTextInput(ui_node Node)
+void ui_node::ClearTextInput(void)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
-    ui_text       *Text      = (ui_text *)      QueryNodeResource(Node.IndexInTree, Subtree, UIResource_Text     , UIState.ResourceTable);
-    ui_text_input *TextInput = (ui_text_input *)QueryNodeResource(Node.IndexInTree, Subtree, UIResource_TextInput, UIState.ResourceTable);
+    ui_text       *Text      = (ui_text *)      QueryNodeResource(this->IndexInTree, Subtree, UIResource_Text     , UIState.ResourceTable);
+    ui_text_input *TextInput = (ui_text_input *)QueryNodeResource(this->IndexInTree, Subtree, UIResource_TextInput, UIState.ResourceTable);
 
     Assert(Text);
     Assert(TextInput);
@@ -895,12 +901,11 @@ UINodeClearTextInput(ui_node Node)
     UITextInputClear_(TextInput);
 }
 
-internal void
-UINodeSetText(ui_node Node, byte_string Text)
+void ui_node::SetText(byte_string Text)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
     ui_resource_table *Table = UIState.ResourceTable;
@@ -909,7 +914,7 @@ UINodeSetText(ui_node Node, byte_string Text)
     // This code is still a bit of a mess, especially if we have mutlipl
     // ways to create text. We should unify somehow.
 
-    ui_resource_key   Key   = MakeResourceKey(UIResource_Text, Node.IndexInTree, Subtree);
+    ui_resource_key   Key   = MakeResourceKey(UIResource_Text, this->IndexInTree, Subtree);
     ui_resource_state State = FindResourceByKey(Key, Table);
 
     if(!State.Resource)
@@ -917,14 +922,14 @@ UINodeSetText(ui_node Node, byte_string Text)
         u64   Size   = GetUITextFootprint(Text.Size);
         void *Memory = AllocateUIResource(Size, &UIState.ResourceTable->Allocator);
 
-        ui_node_style *Style = GetNodeStyle(Node.IndexInTree, Subtree);
+        ui_node_style *Style = GetNodeStyle(this->IndexInTree, Subtree);
         ui_font       *Font  = UIGetFont(Style->Properties[StyleState_Default]);
 
         ui_text *UIText = PlaceUITextInMemory(Text, Text.Size, Font, Memory);
         Assert(UIText);
 
         UpdateResourceTable(State.Id, Key, UIText, Table);
-        SetLayoutNodeFlags(Node.IndexInTree, UILayoutNode_HasText, Subtree);
+        SetLayoutNodeFlags(this->IndexInTree, UILayoutNode_HasText, Subtree);
     }
     else
     {
@@ -934,18 +939,17 @@ UINodeSetText(ui_node Node, byte_string Text)
         Assert(!"Not Implemented");
     }
 
-    UpdateNodeIfNeeded(Node.IndexInTree, Subtree);
+    UpdateNodeIfNeeded(this->IndexInTree, Subtree);
 }
 
-internal void
-UINodeSetTextInput(ui_node Node, u8 *Buffer, u64 BufferSize)
+void ui_node::SetTextInput(u8 *Buffer, u64 BufferSize)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
-    ui_resource_key   Key   = MakeResourceKey(UIResource_TextInput, Node.IndexInTree, Subtree);
+    ui_resource_key   Key   = MakeResourceKey(UIResource_TextInput, this->IndexInTree, Subtree);
     ui_resource_state State = FindResourceByKey(Key, UIState.ResourceTable);
 
     u64   Size   = sizeof(ui_text_input);
@@ -962,20 +966,19 @@ UINodeSetTextInput(ui_node Node, u8 *Buffer, u64 BufferSize)
     // the resource table perhaps? And then we kinda have the index from the key.
     // Just need to make global keys recognizable.
 
-    SetLayoutNodeFlags(Node.IndexInTree, UILayoutNode_HasTextInput, Subtree);
+    SetLayoutNodeFlags(this->IndexInTree, UILayoutNode_HasTextInput, Subtree);
 
-    UINodeSetText(Node, ByteString(Buffer, BufferSize));
+    this->SetText(ByteString(Buffer, BufferSize));
 }
 
-internal void
-UINodeSetScroll(ui_node Node, UIAxis_Type Axis)
+void ui_node::SetScroll(UIAxis_Type Axis)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
-    ui_resource_key   Key   = MakeResourceKey(UIResource_ScrollRegion, Node.IndexInTree, Subtree);
+    ui_resource_key   Key   = MakeResourceKey(UIResource_ScrollRegion, this->IndexInTree, Subtree);
     ui_resource_state State = FindResourceByKey(Key, UIState.ResourceTable);
 
     u64   Size   = sizeof(ui_scroll_region);
@@ -990,18 +993,17 @@ UINodeSetScroll(ui_node Node, UIAxis_Type Axis)
     // WARN:
     // Still don't know how to feel about this.
     // It's not great, that's for sure. Again this idea of centralizing
-    SetLayoutNodeFlags(Node.IndexInTree, UILayoutNode_HasScrollRegion, Subtree);
+    SetLayoutNodeFlags(this->IndexInTree, UILayoutNode_HasScrollRegion, Subtree);
 }
 
 // NOTE:
 // Then we at least need to specify that group names must be static strings.
 
-internal void
-UINodeSetImage(ui_node Node, byte_string Path, byte_string Group)
+void ui_node::SetImage(byte_string Path, byte_string Group)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
     ui_loaded_image Image = LoadImageInGroup(Group, Path);
@@ -1016,11 +1018,11 @@ UINodeSetImage(ui_node Node, byte_string Path, byte_string Group)
             ImageResource->Source    = Image.Source;
             ImageResource->GroupName = Group;
 
-            ui_resource_key   Key   = MakeResourceKey(UIResource_Image, Node.IndexInTree, Subtree);
+            ui_resource_key   Key   = MakeResourceKey(UIResource_Image, this->IndexInTree, Subtree);
             ui_resource_state State = FindResourceByKey(Key, UIState.ResourceTable);
 
             UpdateResourceTable(State.Id, Key, ImageResource, UIState.ResourceTable);
-            SetLayoutNodeFlags(Node.IndexInTree, UILayoutNode_HasImage, Subtree);
+            SetLayoutNodeFlags(this->IndexInTree, UILayoutNode_HasImage, Subtree);
         }
         else
         {
@@ -1029,30 +1031,27 @@ UINodeSetImage(ui_node Node, byte_string Path, byte_string Group)
     }
 }
 
-internal void
-UINodeListenOnKey(ui_node Node, ui_text_input_onkey Callback, void *UserData)
+void ui_node::ListenOnKey(ui_text_input_onkey Callback, void *UserData)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
 
-    ui_subtree *Subtree = GetSubtreeForNode(Node);
+    ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
     // NOTE:
     // For now these callbacks are limited to text inputs. Unsure if I want to expose
     // them more generally. It's also not clear that it's limited to text input.
 
-    ui_text_input *TextInput = (ui_text_input *)QueryNodeResource(Node.IndexInTree, Subtree, UIResource_TextInput, UIState.ResourceTable);
+    ui_text_input *TextInput = (ui_text_input *)QueryNodeResource(this->IndexInTree, Subtree, UIResource_TextInput, UIState.ResourceTable);
     Assert(TextInput);
 
     TextInput->OnKey         = Callback;
     TextInput->OnKeyUserData = UserData;
 }
 
-
-internal void
-UINodeDebugBox(ui_node Node, bit_field Flag, b32 Draw)
+void ui_node::DebugBox(bit_field Flag, b32 Draw)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
     Assert(Flag == UILayoutNode_DebugOuterBox || Flag == UILayoutNode_DebugInnerBox|| Flag == UILayoutNode_DebugContentBox);
 
     ui_subtree *Subtree = GetCurrentSubtree();
@@ -1060,38 +1059,43 @@ UINodeDebugBox(ui_node Node, bit_field Flag, b32 Draw)
 
     if(Draw)
     {
-        SetLayoutNodeFlags(Node.IndexInTree, Flag, Subtree);
+        SetLayoutNodeFlags(this->IndexInTree, Flag, Subtree);
     }
     else
     {
-        ClearLayoutNodeFlags(Node.IndexInTree, Flag, Subtree);
+        ClearLayoutNodeFlags(this->IndexInTree, Flag, Subtree);
     }
 }
 
-internal void
-UINodeSetId(ui_node Node, byte_string Id)
+void ui_node::SetId(byte_string Id, ui_node_table *Table)
 {
-    Assert(Node.CanUse);
+    Assert(this->CanUse);
+    Assert(IsValidByteString(Id));
+    Assert(Table);
 
     ui_pipeline *Pipeline = GetCurrentPipeline();
     Assert(Pipeline);
 
-    SetNodeId(Id, Node, Pipeline->IdTable);
+    SetNodeId(Id, this->IndexInTree, Table);
 }
 
-internal ui_node
-UINode(bit_field Flags)
+internal ui_node *
+UICreateNode(bit_field Flags, b32 IsFrameNode)
 {
     ui_subtree *Subtree = GetCurrentSubtree();
     Assert(Subtree);
 
-    ui_node Node = AllocateUINode(Flags, Subtree);
-    Assert(Node.CanUse);
+    ui_node *Node = PushStruct(Subtree->Transient, ui_node);
+
+    if(Node && !IsFrameNode)
+    {
+        Node->IndexInTree = AllocateLayoutNode(Flags, Subtree);
+        Node->CanUse      = true;
+        Node->SubtreeId   = Subtree->Id;
+    }
 
     return Node;
 }
-
-
 
 // ----------------------------------------------------------------------------------
 // Context Internal Implementation
@@ -1332,18 +1336,6 @@ UICreatePipeline(ui_pipeline_params Params)
         ArenaParams.CommitSize        = Kilobyte(1);
 
         Result->StaticArena = AllocateArena(ArenaParams);
-    }
-
-    // Node Id Table
-    {
-        ui_node_id_table_params Params = {};
-        Params.GroupSize  = NodeIdTable_128Bits;
-        Params.GroupCount = 32;
-
-        u64   Footprint = GetNodeIdTableFootprint(Params);
-        void *Memory    = PushArray(Result->StaticArena, u8, Footprint);
-
-        Result->IdTable = PlaceNodeIdTableInMemory(Params, Memory);
     }
 
     // Registry - Maybe just return a buffer?

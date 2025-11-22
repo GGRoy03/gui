@@ -347,7 +347,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
             TimeBlock("UI Logic");
 
             UIBeginFrame(ClientSize);
-            ShowConsoleUI();
+            ShowVoidDocumentationUI();
             UIEndFrame();
         }
 
@@ -369,7 +369,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, i32 ShowCmd
             PrintProfilingFrame = 0;
         }
     }
-
+ 
     // NOTE:
     // This shouldn't be needed but the debug layer for D3D is triggering
     // an error and preventing the window from closing if the resources

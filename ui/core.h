@@ -70,7 +70,7 @@ typedef struct ui_style         ui_style;
 typedef struct ui_layout_node   ui_layout_node;
 typedef struct ui_layout_tree   ui_layout_tree;
 typedef struct ui_node_style    ui_node_style;
-typedef struct ui_node_id_table ui_node_id_table;
+typedef struct ui_node_table ui_node_id_table;
 typedef struct ui_pipeline      ui_pipeline;
 
 typedef void ui_click_callback(ui_layout_node *Node, ui_pipeline *Pipeline);
@@ -160,49 +160,46 @@ typedef UIEvent_State (*ui_text_input_onkey)   (OSInputKey_Type Key, void *UserD
 
 // ui_node:
 //  Main representation of a node in the UI (Button, Window, ...)
+//  A node can be anything you want. Nodes are only valid for a single frame, do
+//  not keep them in memory.
 
-typedef struct ui_subtree ui_subtree;
-typedef struct ui_node    ui_node;
-
-typedef struct ui_node
+struct ui_node
 {
-    b32 CanUse;
-    u32 IndexInTree;
-    u64 SubtreeId;
-} ui_node;
+    bool CanUse;
+    u64  IndexInTree;
+    u64  SubtreeId;
 
-// Layout:
-//   Make sure to check if Node.CanUse is set before trying to use a returned node.
+    // Style
+    void SetStyle      (u32 Style);
+    void SetSize       (vec2_unit Size);
+    void SetDisplay    (UIDisplay_Type Type);
+    void SetColor      (ui_color Color);
+    void SetTextColor  (ui_color Color);
 
-internal ui_node UINodeFindChild        (ui_node Node, u32 Index);
-internal void    UINodeAppendChild      (ui_node Node, ui_node Child);
-internal void    UINodeReserveChildren  (ui_node Node, u32 Amount);
+    // Layout
+    ui_node* FindChild        (u32 Index);
+    void     AppendChild      (ui_node *Child);
+    void     ReserveChildren  (u32 Amount);
 
-// Resource:
-//   ...
+    // Resource
+    void SetText         (byte_string Text);
+    void SetTextInput    (u8 *Buffer, u64 BufferSize);
+    void SetScroll       (UIAxis_Type Axis);
+    void SetImage        (byte_string Path, byte_string Group);
+    void ClearTextInput  (void);
 
-internal void UINodeSetText        (ui_node Node, byte_string Text);
-internal void UINodeSetTextInput   (ui_node Node, u8 *Buffer, u64 BufferSize);
-internal void UINodeSetScroll      (ui_node Node, UIAxis_Type Axis);
-internal void UINodeSetImage       (ui_node Node, byte_string Path, byte_string Group);
+    // Callbacks
+    void ListenOnKey        (ui_text_input_onkey Callback, void *UserData);
 
-internal void UINodeClearTextInput (ui_node Node);
+    // Debug
+    void DebugBox           (bit_field Flag, b32 Draw);
 
-// Callbacks:
-//   ...
+    // Misc
+    void SetId              (byte_string Id, ui_node_table *Table);
+};
 
-internal void UINodeListenOnKey  (ui_node Node, ui_text_input_onkey Callback, void *UserData);
 
-// Debug:
-//   ---
-
-internal void UINodeDebugBox  (ui_node Node, bit_field Flag, b32 Draw);
-
-// Misc:
-//   ...
-
-internal ui_node UINode       (bit_field Flags);
-internal void    UINodeSetId  (ui_node Node, byte_string Id);
+internal ui_node * UICreateNode  (bit_field Flags, b32 IsFrameNode);
 
 // -----------------------------------------------------------------------------------
 // Image API
@@ -213,7 +210,7 @@ internal void UICreateImageGroup  (byte_string Name, i32 Width, i32 Height);
 // NodeIdTable_Size:
 //  NodeIdTable_128Bits is the default size for this table which uses 128 SIMD to find/insert in the table
 //
-// ui_node_id_table_params
+// ui_node_table_params
 //  GroupSize : How many values per "groups" this must be one of NodeIDTableSize
 //  GroupCount: How many groups the table contains, this must be a power of two (Asserted in PlaceNodeIdTableInMemory)
 //  This table never resizes and the amount of slots must acount for the worst case scenario.
@@ -221,39 +218,33 @@ internal void UICreateImageGroup  (byte_string Name, i32 Width, i32 Height);
 //
 // GetNodeIdTableFootprint:
 //   Return the number of bytes required to store a node-id table for `Params`.
-//   The caller must allocate at least this many bytes (aligned for ui_node_id_entry/ui_node_id_table)
+//   The caller must allocate at least this many bytes (aligned for ui_node_id_entry/ui_node_table)
 //   before calling PlaceNodeIdTableInMemory.
 //
 // PlaceNodeIdTableInMemory:
-//   Initialize a ui_node_id_table inside the caller-supplied Memory block and return a pointer
-//   to the placed ui_node_id_table. Does NOT allocate memory. If Memory == NULL the function
+//   Initialize a ui_node_table inside the caller-supplied Memory block and return a pointer
+//   to the placed ui_node_table. Does NOT allocate memory. If Memory == NULL the function
 //   returns NULL, thus caller must only check that the returned memory is non-null.
 //   Caller owns the memory and is responsible for managing it.
 // -------------------------------------------------------------------------------------------------------------------
+
+// NOTE:
+// This could be a user managed attachment? Because not every subtree needs this.
 
 typedef enum NodeIdTable_Size
 {
     NodeIdTable_128Bits = 16,
 } NodeIdTable_Size;
 
-typedef struct ui_node_id_table_params
+typedef struct ui_node_table_params
 {
     NodeIdTable_Size GroupSize;
     u64              GroupCount;
-} ui_node_id_table_params;
+} ui_node_table_params;
 
-internal u64                GetNodeIdTableFootprint   (ui_node_id_table_params Params);
-internal ui_node_id_table * PlaceNodeIdTableInMemory  (ui_node_id_table_params Params, void *Memory);
-
-// ui_node_id_table:
-//   Opaque pointer to the LRU cache. There is no resource life time whatsover, you do not need to de-allocate resources.
-//
-// SetNodeId:
-//  Make sure the table and the node are valid.
-//  Make sure this id is unique for this pipeline.
-//
-// FindNodeById:
-//  Returns the node if found (Must be inserted via SetNodeId) or an unusable one if not.
+internal u64             UIGetNodeTableFootprint   (ui_node_table_params Params);
+internal ui_node_table * UIPlaceNodeTableInMemory  (ui_node_table_params Params, void *Memory);
+internal ui_node       * UIFindNodeById            (byte_string Id, ui_node_table *Table);
 
 #include <immintrin.h>
 
@@ -301,6 +292,8 @@ internal ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_para
 //   Opaque handles to resources. Use a resource table to retrieve the associated data
 //   MakeResourceKey is used for node-based resources (Text, Scroll Region, Images)
 //   MakeGlobalResourceKey is used for node-less resources (Image Group, ...)
+
+typedef struct ui_subtree ui_subtree;
 
 internal ui_resource_key MakeResourceKey       (UIResource_Type Type, u32 NodeIndex, ui_subtree *Subtree);
 internal ui_resource_key MakeGlobalResourceKey (UIResource_Type Type, byte_string Name);
@@ -472,8 +465,7 @@ typedef struct ui_pipeline
     void *PShader;
 
     // WIP
-    ui_style_registry *Registry;
-    ui_node_id_table  *IdTable;
+    ui_style_registry *Registry;         // NOTE: Linked list this.
     u64                NextSubtreeId;
     ui_subtree        *CurrentSubtree;
     ui_subtree_list    Subtrees;

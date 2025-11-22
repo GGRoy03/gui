@@ -186,7 +186,7 @@ ComputeNodeBoxes(ui_layout_node *Node, f32 Width, f32 Height)
 internal b32 
 IsValidLayoutNode(ui_layout_node *Node)
 {
-    b32 Result = Node && Node->Index != InvalidUINodeIndex;
+    b32 Result = Node && Node->Index != InvalidLayoutNodeIndex;
     return Result;
 }
 
@@ -346,17 +346,17 @@ PlaceLayoutTreeInMemory(u64 NodeCount, void *Memory)
 
         for (u32 Idx = 0; Idx < Result->NodeCapacity; Idx++)
         {
-            Result->Nodes[Idx].Index = InvalidUINodeIndex;
+            Result->Nodes[Idx].Index = InvalidLayoutNodeIndex;
         }
     }
 
     return Result;
 }
 
-internal ui_node
+internal u32
 FindLayoutChild(u32 NodeIndex, u32 ChildIndex, ui_subtree *Subtree)
 {
-    ui_node Result = {0};
+    u32 Result = InvalidLayoutNodeIndex;
 
     ui_layout_node *LayoutNode = GetLayoutNode(NodeIndex, Subtree->LayoutTree);
     if(IsValidLayoutNode(LayoutNode))
@@ -369,9 +369,7 @@ FindLayoutChild(u32 NodeIndex, u32 ChildIndex, ui_subtree *Subtree)
 
         if(Child)
         {
-            Result.CanUse      = 1;
-            Result.SubtreeId   = Subtree->Id;
-            Result.IndexInTree = Child->Index;
+            Result = Child->Index;
         }
     }
 
@@ -394,19 +392,19 @@ AppendLayoutChild(u32 ParentIndex, u32 ChildIndex, ui_subtree *Subtree)
 }
 
 internal void
-ReserveLayoutChildren(ui_node Node, u32 Amount, ui_subtree *Subtree)
+ReserveLayoutChildren(u32 Index, u32 Amount, ui_subtree *Subtree)
 {
-    Assert(Node.CanUse);
+    Assert(Index != InvalidLayoutNodeIndex);
     Assert(Subtree);
 
     ui_layout_tree *Tree = Subtree->LayoutTree;
     Assert(Tree);
 
-    b32 NeedPush = (PeekParentStack(&Tree->ParentStack)->Index != Node.IndexInTree);
+    b32 NeedPush = (PeekParentStack(&Tree->ParentStack)->Index !=Index);
 
     if(NeedPush)
     {
-        ui_layout_node *LayoutNode = GetLayoutNode(Node.IndexInTree, Tree);
+        ui_layout_node *LayoutNode = GetLayoutNode(Index, Tree);
         Assert(LayoutNode);
 
         PushParentStack(LayoutNode, &Tree->ParentStack);
@@ -524,17 +522,17 @@ ClearLayoutNodeFlags(u32 NodeIndex, bit_field Flags, ui_subtree *Subtree)
     ClearFlag(Node->Flags, Flags);
 }
 
-internal ui_node
-AllocateUINode(bit_field Flags, ui_subtree *Subtree)
+internal u32
+AllocateLayoutNode(bit_field Flags, ui_subtree *Subtree)
 {
     Assert(Subtree);
 
-    ui_node Result = {.CanUse = 0};
+    u32 Result = InvalidLayoutNodeIndex;
 
     ui_layout_node *Node = CreateAndInsertLayoutNode(Flags, Subtree);
     if (Node)
     {
-        Result = (ui_node){.CanUse = 1, .IndexInTree = Node->Index, .SubtreeId = Subtree->Id};
+        Result = Node->Index;
     }
 
     return Result;
@@ -633,9 +631,12 @@ UpdateScrollNode(f32 ScrolledLines, ui_layout_node *Node, ui_scroll_region *Regi
 }
 
 // -----------------------------------------------------------
-// UI Event Internal Implementation
+// UI Dirty Logic Internal Implementation
 
-internal void PreOrderPlaceSubtree(ui_layout_node *Root, ui_subtree *Subtree);
+
+
+// -----------------------------------------------------------
+// UI Event Internal Implementation
 
 typedef enum UIEvent_Type
 {

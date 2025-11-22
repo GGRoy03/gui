@@ -17,7 +17,10 @@
 typedef struct ui_layout_node  ui_layout_node;
 typedef struct ui_layout_tree  ui_layout_tree;
 
-#define InvalidUINodeIndex 0xFFFFFFFF
+#define InvalidLayoutNodeIndex 0xFFFFFFFF
+
+// NOTE:
+// Should not be exposed in the header?
 
 typedef enum UILayoutNode_Flag
 {
@@ -46,12 +49,12 @@ typedef enum UILayoutNode_Flag
 
 internal u64              GetLayoutTreeFootprint   (u64 NodeCount);
 internal ui_layout_tree * PlaceLayoutTreeInMemory  (u64 NodeCount, void *Memory);
-internal ui_node          AllocateUINode           (bit_field Flags, ui_subtree *Subtree);
+internal u32              AllocateLayoutNode       (bit_field Flags, ui_subtree *Subtree);
 internal void             UIEnd                    (void);
 
-internal ui_node FindLayoutChild        (u32 NodeIndex, u32 ChildIndex, ui_subtree *Subtree);
+internal u32     FindLayoutChild        (u32 NodeIndex, u32 ChildIndex, ui_subtree *Subtree);
 internal void    AppendLayoutChild      (u32 ParentIndex, u32 ChildIndex, ui_subtree *Subtree);
-internal void    ReserveLayoutChildren  (ui_node Node, u32 Amount, ui_subtree *Subtree);
+internal void    ReserveLayoutChildren  (u32 Index, u32 Amount, ui_subtree *Subtree);
 
 internal b32 IsMouseInsideOuterBox  (vec2_f32 MousePosition, u32 NodeIndex, ui_subtree *Subtree);
 

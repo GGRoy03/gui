@@ -4,7 +4,6 @@
 typedef struct paint_stack_frame
 {
     ui_layout_node *Node;
-    vec2_f32        AccScroll;
     rect_f32        Clip;
 } paint_stack_frame;
 
@@ -164,24 +163,24 @@ PaintUIGlyph(rect_f32 Rect, ui_color Color, rect_f32 Source, render_batch_list *
 #ifdef DEBUG
 
 internal void
-PaintDebugInformation(ui_layout_node *Node, vec2_f32 NodeOrigin, ui_corner_radius CornerRadii, f32 Softness, render_batch_list *BatchList, memory_arena *Arena)
+PaintDebugInformation(ui_layout_node *Node, ui_corner_radius CornerRadii, f32 Softness, render_batch_list *BatchList, memory_arena *Arena)
 {
     if(HasFlag(Node->Flags, UILayoutNode_DebugOuterBox))
     {
-        rect_f32 OuterRect = Node->Value.OuterBox.Translate(NodeOrigin);
-        PaintUIRect(OuterRect, UIColor(0.f, 255.f, 0.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
+        rect_f32 OuterRect = GetOuterBoxRect(&Node->Value);
+        PaintUIRect(OuterRect, UIColor(255.f, 0.f, 0.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
     }
 
     if(HasFlag(Node->Flags, UILayoutNode_DebugInnerBox))
     {
-        rect_f32 InnerRect = Node->Value.InnerBox.Translate(NodeOrigin);
+        rect_f32 InnerRect = GetInnerBoxRect(&Node->Value);
         PaintUIRect(InnerRect, UIColor(0.f, 255.f, 0.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
     }
 
     if(HasFlag(Node->Flags, UILayoutNode_DebugContentBox))
     {
-        rect_f32 ContentRect = Node->Value.ContentBox.Translate(NodeOrigin);
-        PaintUIRect(ContentRect, UIColor(0.f, 255.f, 0.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
+        rect_f32 ContentRect = GetContentBoxRect(&Node->Value);
+        PaintUIRect(ContentRect, UIColor(0.f, 0.f, 255.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
     }
 }
 
@@ -200,18 +199,16 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
 
     if(IsValidPaintStack(&Stack))
     {
-        PushPaintStack((paint_stack_frame){.Node = Root, .AccScroll = vec2_f32(0.f ,0.f), .Clip = rect_f32(0, 0, 0, 0)}, &Stack);
+        PushPaintStack((paint_stack_frame){.Node = Root, .Clip = rect_f32(0, 0, 0, 0)}, &Stack);
 
         while(!IsPaintStackEmpty(&Stack))
         {
             paint_stack_frame Frame = PopPaintStack(&Stack);
 
             rect_f32        ClipRect  = Frame.Clip;
-            vec2_f32        AccScroll = Frame.AccScroll;
             ui_layout_node *Node      = Frame.Node;
 
-            vec2_f32 NodeOrigin = Node->Value.VisualOffset + AccScroll;
-            rect_f32 FinalRect  = Node->Value.OuterBox.Translate(NodeOrigin);
+            rect_f32 FinalRect = GetOuterBoxRect(&Node->Value);
 
             // Painting
             {
@@ -243,7 +240,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                     ui_color TextColor = UIGetTextColor(Style);
                     for(u32 Idx = 0; Idx < Text->ShapedCount; ++Idx)
                     {
-                        PaintUIGlyph(Text->Shaped[Idx].Position.Translate(AccScroll), TextColor, Text->Shaped[Idx].Source, BatchList, Arena);
+                        PaintUIGlyph(Text->Shaped[Idx].Position, TextColor, Text->Shaped[Idx].Source, BatchList, Arena);
                     }
                 }
 
@@ -268,7 +265,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                     Assert(Input);
                     Assert(Input->CaretAnchor <= Text->ShapedCount);
 
-                    vec2_f32 ContentPos = GetContentBoxPosition(&Node->Value);
+                    vec2_f32 ContentPos = Node->Value.FixedContentPosition;
                     vec2_f32 CaretStart = vec2_f32(ContentPos.X, ContentPos.Y);
 
                     if(Input->CaretAnchor > 0)
@@ -293,7 +290,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                     PaintUIRect(Caret, CaretColor, UICornerRadius(0, 0, 0, 0), 0, 0, BatchList, Arena);
                 }
 
-                PaintDebugInformation(Node, NodeOrigin, CornerRadii, Softness, BatchList, Arena);
+                PaintDebugInformation(Node, CornerRadii, Softness, BatchList, Arena);
             }
 
             // Stack Frame
@@ -302,8 +299,6 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                 {
                     ui_scroll_region *Region = (ui_scroll_region *)QueryNodeResource(Frame.Node->Index, Subtree, UIResource_ScrollRegion, UIState.ResourceTable);
                     Assert(Region);
-
-                    AccScroll += GetScrollNodeTranslation(Region);
                 }
 
                 if(HasFlag(Frame.Node->Flags, UILayoutNode_HasClip))
@@ -311,7 +306,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                     rect_f32 EmptyClip     = {};
                     b32      ParentHasClip = (MemoryCompare(&ClipRect, &EmptyClip, sizeof(rect_f32)) != 0);
 
-                    ClipRect = Node->Value.ContentBox.Translate(NodeOrigin);
+                    ClipRect = GetContentBoxRect(&Node->Value);
 
                     if(ParentHasClip)
                     {
@@ -324,7 +319,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
             {
                 if (!(HasFlag(Child->Flags, UILayoutNode_DoNotPaint)) && Child->Value.Display != UIDisplay_None)
                 {
-                    PushPaintStack({.Node = Child, .AccScroll = AccScroll, .Clip = ClipRect}, &Stack);
+                    PushPaintStack({.Node = Child, .Clip = ClipRect}, &Stack);
                 }
             }
         }

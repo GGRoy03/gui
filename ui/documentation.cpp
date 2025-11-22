@@ -76,10 +76,17 @@ InitializeVoidDocumentation(ui_void_documentation *Doc)
         {
             Assert(Window);
             Window->SetScroll(UIAxis_Y);
+            Window->DebugBox(UILayoutNode_DebugOuterBox  , 1);
+            Window->DebugBox(UILayoutNode_DebugInnerBox  , 1);
+            Window->DebugBox(UILayoutNode_DebugContentBox, 1);
 
-            UILabel(DocumentationIntroTitle     , VoidDocumentation_TextTitle);
-            UILabel(DocumentationPurposeSubtitle, VoidDocumentation_TextSubtitle);
-            UILabel(DocumentationPurposeText    , VoidDocumentation_TextBody);
+            ui_node *Title    = UILabel(DocumentationIntroTitle     , VoidDocumentation_TextTitle);
+            ui_node *Subtitle = UILabel(DocumentationPurposeSubtitle, VoidDocumentation_TextSubtitle);
+            ui_node *Text     = UILabel(DocumentationPurposeText    , VoidDocumentation_TextBody);
+
+            Title->DebugBox(UILayoutNode_DebugContentBox, 1);
+            Subtitle->DebugBox(UILayoutNode_DebugContentBox, 1);
+            Text->DebugBox(UILayoutNode_DebugContentBox, 1);
 
             UILabel(DocumentationKeyFeaturesSubtitle, VoidDocumentation_TextSubtitle);
             UILabel(DocumentationKeyFeaturesText    , VoidDocumentation_TextBody);

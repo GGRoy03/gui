@@ -123,13 +123,14 @@ UI_PROPERTY_TABLE
 #undef X
 
 // NOTE:
-// Should just expose a way to clear the paint properties. It's that simple.
+// Should just expose a way to clear the paint properties.
 
 // GetHoverStyle:
 //
 
 internal void             SetNodeStyleState    (StyleState_Type State, u32 NodeIndex, ui_subtree *Subtree);
 internal style_property * GetPaintProperties   (u32 NodeIndex, b32 ClearState, ui_subtree *Subtree);
+internal void             SetNodeStyle         (u32 NodeIndex, u32 Style, ui_subtree *Subtree);
 internal ui_node_style  * GetNodeStyle         (u32 NodeIndex, ui_subtree *Subtree);
 internal style_property * GetCachedProperties  (u32 StyleIndex, StyleState_Type State, ui_style_registry *Registry);
 

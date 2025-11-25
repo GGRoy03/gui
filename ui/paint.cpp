@@ -317,7 +317,9 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
 
             IterateLinkedListBackward(Frame.Node, ui_layout_node *, Child)
             {
-                if (!(HasFlag(Child->Flags, UILayoutNode_DoNotPaint)) && Child->Value.Display != UIDisplay_None)
+                style_property *CProps = GetPaintProperties(Child->Index, 0, Subtree);
+
+                if (!(HasFlag(Child->Flags, UILayoutNode_DoNotPaint)) && UIGetDisplay(CProps) != UIDisplay_None)
                 {
                     PushPaintStack({.Node = Child, .Clip = ClipRect}, &Stack);
                 }

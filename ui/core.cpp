@@ -827,13 +827,16 @@ void ui_node::SetStyle(u32 StyleIndex)
     ui_subtree *Subtree = GetSubtreeForNode(this);
     Assert(Subtree);
 
+    // NOTE:
+    // Looks weird..
+
     ui_node_style *Style = GetNodeStyle(this->IndexInTree, Subtree);
     Assert(Style);
 
     Style->CachedStyleIndex = StyleIndex;
     Style->IsLastVersion    = 0;
 
-    UpdateNodeIfNeeded(this->IndexInTree, Subtree);
+    SetNodeStyle(this->IndexInTree, StyleIndex, Subtree);
 }
 
 ui_node * ui_node::FindChild(u32 Index)

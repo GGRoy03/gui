@@ -157,7 +157,6 @@ internal void             UIEnd                    (void);
 
 internal b32 IsMouseInsideOuterBox  (vec2_f32 MousePosition, u32 NodeIndex, ui_subtree *Subtree);
 
-internal void UpdateNodeIfNeeded    (u32 NodeIndex, ui_subtree *Subtree);
 internal void SetLayoutNodeFlags    (u32 NodeIndex, bit_field Flags, ui_subtree *Subtree);
 internal void ClearLayoutNodeFlags  (u32 NodeIndex, bit_field Flags, ui_subtree *Subtree);
 

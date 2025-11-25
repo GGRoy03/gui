@@ -1,5 +1,14 @@
-// -------------------------------------------------------------------------------------
-// Style Manipulation Internal API
+//-------------------------------------------------------------------------------------
+// @Internal: Style Helpers
+
+internal u32
+ResolveCachedIndex(u32 Index)
+{
+    Assert(Index);
+
+    u32 Result = Index - 1;
+    return Result;
+}
 
 internal ui_cached_style *
 GetCachedStyle(u32 Index, ui_style_registry *Registry)
@@ -16,17 +25,27 @@ GetCachedStyle(u32 Index, ui_style_registry *Registry)
     return Result;
 }
 
-// ------------------------------------------------------------------------------------
-// Style Manipulation Public API
-
-internal u32
-ResolveCachedIndex(u32 Index)
+internal style_property *
+GetCachedProperties(u32 StyleIndex, StyleState_Type State, ui_style_registry *Registry)
 {
-    Assert(Index);
+    Assert(StyleIndex);
+    Assert(StyleIndex <= Registry->StylesCount);
 
-    u32 Result = Index - 1;
+    style_property  *Result = 0;
+
+    u32              ResolvedIndex = ResolveCachedIndex(StyleIndex);
+    ui_cached_style *Cached        = GetCachedStyle(ResolvedIndex, Registry);
+
+    if(Cached)
+    {
+        Result = Cached->Properties[State];
+    }
+
     return Result;
 }
+
+// ------------------------------------------------------------------------------------
+// Style Manipulation Public API
 
 internal void
 SetNodeStyleState(StyleState_Type State, u32 NodeIndex, ui_subtree *Subtree)
@@ -37,6 +56,36 @@ SetNodeStyleState(StyleState_Type State, u32 NodeIndex, ui_subtree *Subtree)
     Assert(Style);
 
     Style->State = State;
+}
+
+internal void
+SetNodeStyle(u32 NodeIndex, u32 StyleIndex, ui_subtree *Subtree)
+{
+    ui_node_style *Style = GetNodeStyle(NodeIndex, Subtree);
+    Assert(Style);
+
+    ui_pipeline *Pipeline = GetCurrentPipeline();
+    Assert(Pipeline);
+
+    style_property *Cached[StyleState_Count] = {0};
+    Cached[StyleState_Default] = GetCachedProperties(Style->CachedStyleIndex, StyleState_Default, Pipeline->Registry);
+    Cached[StyleState_Hovered] = GetCachedProperties(Style->CachedStyleIndex, StyleState_Hovered, Pipeline->Registry);
+    Cached[StyleState_Focused] = GetCachedProperties(Style->CachedStyleIndex, StyleState_Focused, Pipeline->Registry);
+
+    ForEachEnum(StyleState_Type, StyleState_Count, State)
+    {
+        Assert(Cached[State]);
+
+        ForEachEnum(StyleProperty_Type, StyleProperty_Count, Prop)
+        {
+            if(!Style->Properties[State][Prop].IsSetRuntime)
+            {
+                 Style->Properties[State][Prop] = Cached[State][Prop];
+            }
+        }
+    }
+
+    Style->CachedStyleIndex = StyleIndex;
 }
 
 internal style_property *
@@ -80,25 +129,6 @@ GetNodeStyle(u32 Index, ui_subtree *Subtree)
     if(Index < Subtree->NodeCount)
     {
         Result = Subtree->ComputedStyles + Index;
-    }
-
-    return Result;
-}
-
-internal style_property *
-GetCachedProperties(u32 StyleIndex, StyleState_Type State, ui_style_registry *Registry)
-{
-    Assert(StyleIndex);
-    Assert(StyleIndex <= Registry->StylesCount);
-
-    style_property  *Result = 0;
-
-    u32              ResolvedIndex = ResolveCachedIndex(StyleIndex);
-    ui_cached_style *Cached        = GetCachedStyle(ResolvedIndex, Registry);
-
-    if(Cached)
-    {
-        Result = Cached->Properties[State];
     }
 
     return Result;

@@ -175,6 +175,18 @@ internal void ClearLayoutNodeFlags  (u32 NodeIndex, bit_field Flags, ui_subtree 
 //  Parameters structure used when calling PlaceScrollRegionInMemory.
 //  PixelPerLine: Specifies the speed at which the content will scroll.
 //  Axis:         Specifies the axis along which the content scrolls.
+//
+// GetScrollRegionFootprint & PlaceScrollRegionInMemory
+//   Used to initilialize in memory a scroll region. You may specify parameters to modify the behavior of the scroll region.
+//   Note that you may re-use the same memory with different parameters to modify the behaviors with new parameters.
+//
+//   Example Usage:
+//   u64   Size   = GetScrollRegionFootprint(); -> Get the size needed to allocate
+//   void *Memory = malloc(Size);               -> Allocate (Do not check for 0s yet!)
+//
+//   scroll_region_params Params = {.PixelPerLine = ScrollSpeed, .Axis = Axis};  -> Prepare the params
+//   ui_scroll_region *ScrollRegion = PlaceScrollRegionInMemory(Params, Memory); -> Allocate!
+//   if(ScrollRegion)                                                            -> Now check if it succeeded
 
 struct ui_scroll_region;
 

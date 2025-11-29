@@ -2,10 +2,10 @@
 
 typedef struct memory_arena_params
 {
-    uint64_t         CommitSize;
-    uint64_t         ReserveSize;
+    uint64_t    ReserveSize;
+    uint64_t    CommitSize;
     const char *AllocatedFromFile;
-    uint32_t         AllocatedFromLine;
+    uint32_t    AllocatedFromLine;
 } memory_arena_params;
 
 typedef struct memory_arena memory_arena;

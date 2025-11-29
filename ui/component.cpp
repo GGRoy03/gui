@@ -6,10 +6,10 @@ UIWindow(uint32_t StyleIndex)
 {
     uint32_t Flags = 0;
     {
-        VOID_SETBIT(Flags, UILayoutNode_IsDraggable);
-        VOID_SETBIT(Flags, UILayoutNode_IsResizable);
-        VOID_SETBIT(Flags, UILayoutNode_IsParent);
-        VOID_SETBIT(Flags, UILayoutNode_HasClip);
+        Flags |= UILayoutNode_IsDraggable;
+        Flags |= UILayoutNode_IsResizable;
+        Flags |= UILayoutNode_IsParent;
+        Flags |= UILayoutNode_HasClip;
     }
 
     ui_node *Node = UICreateNode(Flags, 0);
@@ -27,8 +27,8 @@ UIScrollableContent(float ScrollSpeed, UIAxis_Type Axis, uint32_t Style)
 {
     uint32_t Flags = 0;
     {
-        VOID_SETBIT(Flags, UILayoutNode_IsParent);
-        VOID_SETBIT(Flags, UILayoutNode_HasClip);
+        Flags |= UILayoutNode_IsParent;
+        Flags |= UILayoutNode_HasClip;
     }
 
     ui_node *Node = UICreateNode(Flags, 0);

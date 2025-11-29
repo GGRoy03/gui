@@ -73,7 +73,7 @@ GetPaintBatchList(ui_layout_node *LayoutNode, ui_subtree *Subtree, rect_float Cl
         Params.Transform = Mat3x3Identity();
         Params.Clip      = Clip;
 
-        if(VOID_HASBIT(LayoutNode->Flags, UILayoutNode_HasText))
+        if((LayoutNode->Flags & UILayoutNode_HasText))
         {
             ui_text *Text = (ui_text *)QueryNodeResource(LayoutNode->Index, Subtree, UIResource_Text, UIState.ResourceTable);
             VOID_ASSERT(Text);
@@ -82,7 +82,7 @@ GetPaintBatchList(ui_layout_node *LayoutNode, ui_subtree *Subtree, rect_float Cl
             Params.TextureSize = Text->AtlasSize;
         }
 
-        if(VOID_HASBIT(LayoutNode->Flags, UILayoutNode_HasImage))
+        if((LayoutNode->Flags & UILayoutNode_HasImage))
         {
             ui_image *Image = (ui_image *)QueryNodeResource(LayoutNode->Index, Subtree, UIResource_Image, UIState.ResourceTable);
             VOID_ASSERT(Image);
@@ -136,8 +136,8 @@ PaintUIImage(rect_float Rect, rect_float Source, render_batch_list *BatchList, m
 {
     ui_rect *UIRect = (ui_rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
-    UIRect->Color         = UIColor(1, 1, 1, 1);
-    UIRect->CornerRadii   = UICornerRadius(0, 0, 0, 0);
+    UIRect->Color         = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
+    UIRect->CornerRadii   = {.TL = 0, .TR = 0, .BR = 0, .BL = 0};
     UIRect->BorderWidth   = 0;
     UIRect->Softness      = 0;
     UIRect->TextureSource = Source;
@@ -150,7 +150,7 @@ PaintUIGlyph(rect_float Rect, ui_color Color, rect_float Source, render_batch_li
     ui_rect *UIRect = (ui_rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
     UIRect->Color         = Color;
-    UIRect->CornerRadii   = UICornerRadius(0, 0, 0, 0);
+    UIRect->CornerRadii   = {.TL = 0, .TR = 0, .BR = 0, .BL = 0};
     UIRect->BorderWidth   = 0;
     UIRect->Softness      = 0;
     UIRect->TextureSource = Source;
@@ -165,22 +165,22 @@ PaintUIGlyph(rect_float Rect, ui_color Color, rect_float Source, render_batch_li
 static void
 PaintDebugInformation(ui_layout_node *Node, ui_corner_radius CornerRadii, float Softness, render_batch_list *BatchList, memory_arena *Arena)
 {
-    if(VOID_HASBIT(Node->Flags, UILayoutNode_DebugOuterBox))
+    if((Node->Flags & UILayoutNode_DebugOuterBox))
     {
         rect_float OuterRect = GetOuterBoxRect(&Node->Value);
-        PaintUIRect(OuterRect, UIColor(255.f, 0.f, 0.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
+        PaintUIRect(OuterRect, {.R = 255.f, .G = 0.f, .B = 0.f, .A = 255.f}, CornerRadii, 1.f, Softness, BatchList, Arena);
     }
 
-    if(VOID_HASBIT(Node->Flags, UILayoutNode_DebugInnerBox))
+    if((Node->Flags & UILayoutNode_DebugInnerBox))
     {
         rect_float InnerRect = GetInnerBoxRect(&Node->Value);
-        PaintUIRect(InnerRect, UIColor(0.f, 255.f, 0.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
+        PaintUIRect(InnerRect, {.R = 0.f, .G = 255.f, .B = 0.f, .A = 255.f}, CornerRadii, 1.f, Softness, BatchList, Arena);
     }
 
-    if(VOID_HASBIT(Node->Flags, UILayoutNode_DebugContentBox))
+    if((Node->Flags & UILayoutNode_DebugContentBox))
     {
         rect_float ContentRect = GetContentBoxRect(&Node->Value);
-        PaintUIRect(ContentRect, UIColor(0.f, 0.f, 255.f, 255.f), CornerRadii, 1.f, Softness, BatchList, Arena);
+        PaintUIRect(ContentRect, {.R = 0.f, .G = 0.f, .B = 255.f, .A = 255.f}, CornerRadii, 1.f, Softness, BatchList, Arena);
     }
 }
 
@@ -212,39 +212,38 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
 
             // Painting
             {
-                render_batch_list *BatchList = GetPaintBatchList(Node, Subtree, ClipRect);
+                render_batch_list   *BatchList = GetPaintBatchList(Node, Subtree, ClipRect);
+                ui_paint_properties *Paint     = GetPaintProperties(Node->Index, Subtree);
 
-                style_property *Style = GetPaintProperties(Node->Index, 1, Subtree);
+                ui_corner_radius CornerRadii = Paint->Properties.CornerRadius;
+                float            Softness    = Paint->Properties.Softness;
+                ui_color         Color       = Paint->Properties.Color;
+                ui_color         BorderColor = Paint->Properties.BorderColor;
+                ui_color         TextColor   = Paint->Properties.TextColor;
+                float            BorderWidth = Paint->Properties.BorderWidth;
 
-                ui_corner_radius CornerRadii = UIGetCornerRadius(Style);
-                float              Softness    = UIGetSoftness(Style);
-
-                ui_color BackgroundColor = UIGetColor(Style);
-                if(IsVisibleColor(BackgroundColor))
+                if(IsVisibleColor(Color))
                 {
-                    PaintUIRect(FinalRect, BackgroundColor, CornerRadii, 0, Softness, BatchList, Arena);
+                    PaintUIRect(FinalRect, Color, CornerRadii, 0, Softness, BatchList, Arena);
                 }
 
-                ui_color BorderColor = UIGetBorderColor(Style);
-                float      BorderWidth = UIGetBorderWidth(Style);
                 if(IsVisibleColor(BorderColor) && BorderWidth > 0.f)
                 {
                     PaintUIRect(FinalRect, BorderColor, CornerRadii, BorderWidth, Softness, BatchList, Arena);
                 }
 
-                if(VOID_HASBIT(Node->Flags, UILayoutNode_HasText))
+                if((Node->Flags & UILayoutNode_HasText))
                 {
                     ui_text *Text = (ui_text *)QueryNodeResource(Node->Index, Subtree, UIResource_Text, UIState.ResourceTable);
                     VOID_ASSERT(Text);
 
-                    ui_color TextColor = UIGetTextColor(Style);
                     for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
                     {
                         PaintUIGlyph(Text->Shaped[Idx].Position, TextColor, Text->Shaped[Idx].Source, BatchList, Arena);
                     }
                 }
 
-                if(VOID_HASBIT(Node->Flags, UILayoutNode_HasImage))
+                if((Node->Flags & UILayoutNode_HasImage))
                 {
                     ui_image *Image = (ui_image *)QueryNodeResource(Node->Index, Subtree, UIResource_Image, UIState.ResourceTable);
                     VOID_ASSERT(Image);
@@ -252,11 +251,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                     PaintUIImage(FinalRect, Image->Source, BatchList, Arena);
                 }
 
-                // NOTE:
-                // Should we check if the input is focused or not? Or let the user figure that out?
-                // Because they can just set : @Focused: Caret-Color, Caret-Width
-
-                if(VOID_HASBIT(Node->Flags, UILayoutNode_HasTextInput))
+                if((Node->Flags & UILayoutNode_HasTextInput))
                 {
                     ui_text       *Text  = (ui_text *)      QueryNodeResource(Node->Index, Subtree, UIResource_Text     , UIState.ResourceTable);
                     ui_text_input *Input = (ui_text_input *)QueryNodeResource(Node->Index, Subtree, UIResource_TextInput, UIState.ResourceTable);
@@ -275,8 +270,8 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                         CaretStart.Y = AfterGlyph->Position.Top;
                     }
 
-                    ui_color CaretColor = UIGetCaretColor(Style);
-                    float      CaretWidth = UIGetCaretWidth(Style);
+                    ui_color CaretColor = Paint->Properties.CaretColor;
+                    float    CaretWidth = Paint->Properties.CaretWidth;
 
                     rect_float Caret = {};
                     Caret.Left   = CaretStart.X;
@@ -287,7 +282,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
                     Input->CaretTimer += 0.05f;
                     CaretColor.A       = (sinf(Input->CaretTimer * 3.14159f) + 1.f) * 0.5f;
 
-                    PaintUIRect(Caret, CaretColor, UICornerRadius(0, 0, 0, 0), 0, 0, BatchList, Arena);
+                    PaintUIRect(Caret, CaretColor, {.TL = 0, .TR = 0, .BR = 0, .BL = 0}, 0, 0, BatchList, Arena);
                 }
 
                 PaintDebugInformation(Node, CornerRadii, Softness, BatchList, Arena);
@@ -295,13 +290,13 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
 
             // Stack Frame
             {
-                if (VOID_HASBIT(Frame.Node->Flags, UILayoutNode_HasScrollRegion))
+                if ((Frame.Node->Flags & UILayoutNode_HasScrollRegion))
                 {
                     ui_scroll_region *Region = (ui_scroll_region *)QueryNodeResource(Frame.Node->Index, Subtree, UIResource_ScrollRegion, UIState.ResourceTable);
                     VOID_ASSERT(Region);
                 }
 
-                if(VOID_HASBIT(Frame.Node->Flags, UILayoutNode_HasClip))
+                if((Frame.Node->Flags & UILayoutNode_HasClip))
                 {
                     rect_float EmptyClip     = {};
                     bool      ParentHasClip = (MemoryCompare(&ClipRect, &EmptyClip, sizeof(rect_float)) != 0);
@@ -317,9 +312,7 @@ PaintLayoutTreeFromRoot(ui_layout_node *Root, ui_subtree *Subtree)
 
             IterateLinkedListBackward(Frame.Node, ui_layout_node *, Child)
             {
-                style_property *CProps = GetPaintProperties(Child->Index, 0, Subtree);
-
-                if (!(VOID_HASBIT(Child->Flags, UILayoutNode_DoNotPaint)) && UIGetDisplay(CProps) != UIDisplay_None)
+                if (!(Child->Flags & UILayoutNode_DoNotPaint))
                 {
                     PushPaintStack({.Node = Child, .Clip = ClipRect}, &Stack);
                 }

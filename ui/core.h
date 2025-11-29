@@ -30,46 +30,10 @@ typedef enum UIAlign_Type
     UIAlign_None    = 4,
 } UIAlign_Type;
 
-// Flex:
-//   UIFlexDirection_Type:
-//     Which axis is the main axis when placing flex items.
-//     Will default to UIFlexDirection_Row if nothing is specified.
-//
-//   UIFlexJustify:
-//
-//   UIFlexAlign:
-
-typedef enum UIFlexDirection_Type
-{
-    UIFlexDirection_Row    = 0,
-    UIFlexDirection_Column = 1,
-} UIFlexDirection_Type;
-
-typedef enum UIJustifyContent_Type
-{
-    UIJustifyContent_Start        = 0,
-    UIJustifyContent_Center       = 1,
-    UIJustifyContent_End          = 2,
-    UIJustifyContent_SpaceBetween = 3,
-    UIJustifyContent_SpaceAround  = 4,
-    UIJustifyContent_SpaceEvenly  = 5,
-} UIJustifyContent_Type;
-
-typedef enum UIAlignItems_Type
-{
-    UIAlignItems_None    = 0,
-    UIAlignItems_Start   = 1,
-    UIAlignItems_Center  = 2,
-    UIAlignItems_End     = 3,
-    UIAlignItems_Stretch = 4,
-} UIAlignItems_Type;
-
 // [FORWARD DECLARATIONS]
 
-typedef struct ui_style         ui_style;
 typedef struct ui_layout_node   ui_layout_node;
 typedef struct ui_layout_tree   ui_layout_tree;
-typedef struct ui_node_style    ui_node_style;
 typedef struct ui_node_table ui_node_id_table;
 typedef struct ui_pipeline      ui_pipeline;
 
@@ -77,27 +41,21 @@ typedef void ui_click_callback(ui_layout_node *Node, ui_pipeline *Pipeline);
 
 // [CORE TYPES]
 
-typedef struct ui_color
+struct ui_color
 {
     float R;
     float G;
     float B;
     float A;
-} ui_color;
+};
 
 typedef struct ui_corner_radius
 {
-    float TopLeft;
-    float TopRight;
-    float BotLeft;
-    float BotRight;
+    float TL;
+    float TR;
+    float BR;
+    float BL;
 } ui_corner_radius;
-
-typedef struct ui_spacing
-{
-    float Horizontal;
-    float Vertical;
-} ui_spacing;
 
 typedef struct ui_padding
 {
@@ -316,7 +274,6 @@ static void * QueryGlobalResource  (byte_string Name, UIResource_Type Type, ui_r
 
 // ------------------------------------------------------------------------------------
 
-typedef struct ui_style_registry ui_style_registry;
 typedef struct ui_font ui_font;
 
 typedef enum UIIntent_Type
@@ -333,14 +290,14 @@ typedef struct ui_font_list
 {
     ui_font *First;
     ui_font *Last;
-    uint32_t      Count;
+    uint32_t Count;
 } ui_font_list;
 
 typedef struct ui_pipeline_buffer
 {
     ui_pipeline *Values;
-    uint32_t          Count;
-    uint32_t          Size;
+    uint32_t     Count;
+    uint32_t     Size;
 } ui_pipeline_buffer;
 
 typedef struct ui_hovered_node
@@ -393,23 +350,21 @@ static ui_focused_node UIGetNodeFocus  (void);
 
 // [Helpers]
 
-static ui_color         UIColor            (float R, float G, float B, float A);
-static ui_spacing       UISpacing          (float Horizontal, float Vertical);
-static ui_padding       UIPadding          (float Left, float Top, float Right, float Bot);
-static ui_corner_radius UICornerRadius     (float TopLeft, float TopRight, float BotLeft, float BotRight);
 static vec2_unit        Vec2Unit           (ui_unit U0, ui_unit U1);
 static bool              IsNormalizedColor  (ui_color Color);
 
 // ------------------
 
-typedef struct ui_event_node ui_event_node;
-typedef struct ui_layout_node ui_layout_node;
+typedef struct ui_event_node        ui_event_node;
+typedef struct ui_layout_node       ui_layout_node;
+typedef struct ui_paint_properties  ui_paint_properties;
+typedef struct ui_cached_style_list ui_cached_style_list;
 
 typedef struct ui_event_list
 {
     ui_event_node *First;
     ui_event_node *Last;
-    uint32_t            Count;
+    uint32_t       Count;
 } ui_event_list;
 
 typedef struct ui_subtree_params
@@ -421,9 +376,9 @@ typedef struct ui_subtree_params
 typedef struct ui_subtree
 {
     // Persistent
-    memory_arena    *Persistent;
-    ui_layout_tree  *LayoutTree;
-    ui_node_style   *ComputedStyles;
+    memory_arena        *Persistent;
+    ui_layout_tree      *LayoutTree;
+    ui_paint_properties *PaintArray;
 
     // Semi-Transient
     ui_event_list Events;
@@ -450,7 +405,7 @@ typedef struct ui_subtree_list
 {
     ui_subtree_node *First;
     ui_subtree_node *Last;
-    uint32_t              Count;
+    uint32_t         Count;
 } ui_subtree_list;
 
 typedef struct ui_pipeline_params
@@ -465,8 +420,9 @@ typedef struct ui_pipeline
     void *PShader;
 
     // WIP
-    ui_style_registry *Registry;         // NOTE: Linked list this.
-    uint64_t                NextSubtreeId;
+    ui_cached_style_list *CachedStyles; // NOTE: Incomplete. Then pointer?
+
+    uint64_t           NextSubtreeId;
     ui_subtree        *CurrentSubtree;
     ui_subtree_list    Subtrees;
     memory_arena      *internalArena;

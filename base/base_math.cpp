@@ -61,7 +61,7 @@ RoundedRectSDF(rect_sdf_params Params)
 // [Ranges]
 
 static bool
-IsInRangefloat(float Min, float Max, float Value)
+IsInRange(float Min, float Max, float Value)
 {
     bool Result = (Value >= Min && Value <= Max);
     return Result;

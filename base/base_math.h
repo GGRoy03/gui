@@ -66,7 +66,7 @@ static matrix_3x3 Mat3x3Identity     (void);
 
 // [Ranges]
 
-static bool IsInRangefloat(float Min, float Max, float Value);
+static bool IsInRange(float Min, float Max, float Value);
 
 // [Helpers]
 
@@ -149,7 +149,7 @@ struct vector2_generic
 };
 
 using vec2_float = vector2_generic<float>;
-using vec2_int = vector2_generic<int>;
+using vec2_int   = vector2_generic<int>;
 
 template <typename T>
 struct rectangle_generic

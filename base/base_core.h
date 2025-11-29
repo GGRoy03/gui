@@ -1,7 +1,7 @@
 #pragma once
 
 // ====================================================================================
-// @internal: Standard Includes & Context Cracking & Utility Macros
+// @Internal: Standard Includes & Context Cracking & Utility Macros
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -46,9 +46,6 @@
 
 #define VOID_BIT(n)              ((uint64_t)( 1ULL << ((n) - 1)))
 #define VOID_BITMASK(n)          ((uint64_t)((1ULL << (n)) - 1ULL))
-#define VOID_SETBIT(F, B)        ((F) |=  (B))
-#define VOID_CLEARBIT(F, B)      ((F) &= ~(B))
-#define VOID_HASBIT(F, B)        ((F) &   (B))
 
 // [Alignment]
 
@@ -71,7 +68,7 @@
 
 // [Loop Macros]
 
-#define ForEachEnum(Type, Count, It)  for(Type It = (Type)0; It < Count; It = (Type)(It + 1))
+#define ForEachEnum(Type, Count, It)  for(uint32_t It = (uint32_t)0; (uint32_t)It < Count; It = ((uint32_t)It + 1))
 #define DeferLoop(Begin, End) for(int VOID_NAMECONCAT(_defer_, __LINE__) = ((Begin), 0); !VOID_NAMECONCAT(_defer_, __LINE__); VOID_NAMECONCAT(_defer_, __LINE__)++, (End))
 
 // [Linked List]

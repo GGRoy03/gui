@@ -313,34 +313,6 @@ UIFindNodeById(byte_string Id, ui_node_table *Table)
 
 // ----------------------------------------------------------------------------
 
-static ui_color
-UIColor(float R, float G, float B, float A)
-{
-    ui_color Result = { R, G, B, A };
-    return Result;
-}
-
-static ui_spacing
-UISpacing(float Horizontal, float Vertical)
-{
-    ui_spacing Result = { Horizontal, Vertical };
-    return Result;
-}
-
-static ui_padding
-UIPadding(float Left, float Top, float Right, float Bot)
-{
-    ui_padding Result = { Left, Top, Right, Bot };
-    return Result;
-}
-
-static ui_corner_radius
-UICornerRadius(float TopLeft, float TopRight, float BotLeft, float BotRight)
-{
-    ui_corner_radius Result = { TopLeft, TopRight, BotLeft, BotRight };
-    return Result;
-}
-
 static vec2_unit
 Vec2Unit(ui_unit U0, ui_unit U1)
 {
@@ -802,24 +774,6 @@ GetSubtreeForNode(ui_node *Node)
 // -------------------------------------------------------------
 // UI Node Public API Implementation
 
-#define UI_NODE_SETTERS(X)                       \
-    X(Size,      vec2_unit,      UISetSize)      \
-    X(Display,   UIDisplay_Type, UISetDisplay)   \
-    X(Color,     ui_color,       UISetColor)     \
-    X(TextColor, ui_color,       UISetTextColor)
-
-#define DEFINE_UI_NODE_SETTER(Name, Type, SetFunc) \
-void                                               \
-ui_node::Set##Name(Type Value)                     \
-{                                                  \
-    VOID_ASSERT(this->CanUse);                          \
-    ui_subtree *Subtree = GetSubtreeForNode(this); \
-    VOID_ASSERT(Subtree);                               \
-    SetFunc(this->IndexInTree, Value, Subtree);    \
-}
-UI_NODE_SETTERS(DEFINE_UI_NODE_SETTER)
-#undef DEFINE_UI_NODE_SETTER
-
 void ui_node::SetStyle(uint32_t StyleIndex)
 {
     VOID_ASSERT(this->CanUse);
@@ -827,16 +781,8 @@ void ui_node::SetStyle(uint32_t StyleIndex)
     ui_subtree *Subtree = GetSubtreeForNode(this);
     VOID_ASSERT(Subtree);
 
-    // NOTE:
-    // Looks weird..
-
-    ui_node_style *Style = GetNodeStyle(this->IndexInTree, Subtree);
-    VOID_ASSERT(Style);
-
-    Style->CachedStyleIndex = StyleIndex;
-    Style->IsLastVersion    = 0;
-
-    SetNodeStyle(this->IndexInTree, StyleIndex, Subtree);
+    // TODO:
+    // ReImplement this.
 }
 
 ui_node * ui_node::FindChild(uint32_t Index)
@@ -901,33 +847,26 @@ void ui_node::SetText(byte_string Text)
     VOID_ASSERT(Subtree);
 
     ui_resource_table *Table = UIState.ResourceTable;
-
-    // WARN:
-    // This code is still a bit of a mess, especially if we have mutlipl
-    // ways to create text. We should unify somehow.
-
-    ui_resource_key   Key   = MakeResourceKey(UIResource_Text, this->IndexInTree, Subtree);
-    ui_resource_state State = FindResourceByKey(Key, Table);
+    ui_resource_key    Key   = MakeResourceKey(UIResource_Text, this->IndexInTree, Subtree);
+    ui_resource_state  State = FindResourceByKey(Key, Table);
 
     if(!State.Resource)
     {
-        uint64_t   Size   = GetUITextFootprint(Text.Size);
-        void *Memory = AllocateUIResource(Size, &UIState.ResourceTable->Allocator);
+        uint64_t  Size   = GetUITextFootprint(Text.Size);
+        void     *Memory = AllocateUIResource(Size, &Table->Allocator);
 
-        ui_node_style *Style = GetNodeStyle(this->IndexInTree, Subtree);
-        ui_font       *Font  = UIGetFont(Style->Properties[StyleState_Default]);
+        ui_paint_properties *Paint = GetPaintProperties(this->IndexInTree, Subtree);
+        if(Paint)
+        {
+            ui_text *UIText = PlaceUITextInMemory(Text, Text.Size, Paint->Properties.Font, Memory);
+            VOID_ASSERT(UIText);
 
-        ui_text *UIText = PlaceUITextInMemory(Text, Text.Size, Font, Memory);
-        VOID_ASSERT(UIText);
-
-        UpdateResourceTable(State.Id, Key, UIText, Table);
-        SetLayoutNodeFlags(this->IndexInTree, UILayoutNode_HasText, Subtree);
+            UpdateResourceTable(State.Id, Key, UIText, Table);
+            SetLayoutNodeFlags(this->IndexInTree, UILayoutNode_HasText, Subtree);
+        }
     }
     else
     {
-        // NOTE:
-        // This is not an error, but let's not implement it for now.
-
         VOID_ASSERT(!"Not Implemented");
     }
 }
@@ -1097,11 +1036,11 @@ UICreateNode(uint32_t Flags, bool IsFrameNode)
 // Context internal Implementation
 
 static uint64_t
-GetSubtreeinternalFootprint(uint64_t NodeCount)
+GetSubtreeFootprint(uint64_t NodeCount)
 {
-    uint64_t TreeSize  = GetLayoutTreeFootprint(NodeCount);
-    uint64_t StyleSize = NodeCount * sizeof(ui_node_style);
-    uint64_t Result    = sizeof(ui_subtree) + TreeSize + StyleSize;
+    uint64_t TreeSize = GetLayoutTreeFootprint(NodeCount);
+    uint64_t Styles   = NodeCount * sizeof(ui_paint_properties);
+    uint64_t Result   = sizeof(ui_subtree) + TreeSize + Styles;
 
     return Result;
 }
@@ -1237,7 +1176,7 @@ UIBeginSubtree(ui_subtree_params Params)
 
         memory_arena *Persistent = 0;
         {
-            uint64_t Footprint = GetSubtreeinternalFootprint(Params.NodeCount);
+            uint64_t Footprint = GetSubtreeFootprint(Params.NodeCount);
 
             memory_arena_params Params = {};
             Params.AllocatedFromFile = __FILE__;
@@ -1268,12 +1207,10 @@ UIBeginSubtree(ui_subtree_params Params)
             Subtree->Transient  = Transient;
             Subtree->NodeCount  = Params.NodeCount;
 
-            Subtree->ComputedStyles = PushArray(Subtree->Persistent, ui_node_style, Params.NodeCount);
-
             ui_layout_tree *Tree = 0;
             {
-                uint64_t   Footprint = GetLayoutTreeFootprint(Params.NodeCount);
-                void *Memory    = PushArray(Subtree->Persistent, uint8_t, Footprint);
+                uint64_t Footprint = GetLayoutTreeFootprint(Params.NodeCount);
+                void    *Memory    = PushArray(Subtree->Persistent, uint8_t, Footprint);
 
                 Tree = PlaceLayoutTreeInMemory(Params.NodeCount, Memory);
             }
@@ -1336,7 +1273,8 @@ UICreatePipeline(ui_pipeline_params Params)
 
     // Registry - Maybe just return a buffer?
     {
-        Result->Registry = CreateStyleRegistry(Params.ThemeFile, Result->internalArena);
+        // TODO: Implement the file loading and calling the new API.
+        VOID_ASSERT(!"Not Implemented");
     }
 
     State->CurrentPipeline = Result;

@@ -11,34 +11,23 @@ ResolveCachedIndex(uint32_t Index)
 }
 
 static ui_cached_style *
-GetCachedStyle(uint32_t Index, ui_style_registry *Registry)
+GetCachedStyle(uint32_t StyleIndex, ui_cached_style_list *List)
 {
-    VOID_ASSERT(Registry);
+    VOID_ASSERT(StyleIndex);
+    VOID_ASSERT(StyleIndex <= List->Count);
 
     ui_cached_style *Result = 0;
 
-    if(Index < Registry->StylesCount)
+    uint32_t IterCount = 0;
+    IterateLinkedList(List, ui_cached_style_node *, Node)
     {
-        Result = Registry->Styles + Index;
-    }
+        if(StyleIndex == IterCount)
+        {
+            Result = &Node->Value;
+            break;
+        }
 
-    return Result;
-}
-
-static style_property *
-GetCachedProperties(uint32_t StyleIndex, StyleState_Type State, ui_style_registry *Registry)
-{
-    VOID_ASSERT(StyleIndex);
-    VOID_ASSERT(StyleIndex <= Registry->StylesCount);
-
-    style_property  *Result = 0;
-
-    uint32_t              ResolvedIndex = ResolveCachedIndex(StyleIndex);
-    ui_cached_style *Cached        = GetCachedStyle(ResolvedIndex, Registry);
-
-    if(Cached)
-    {
-        Result = Cached->Properties[State];
+        IterCount++;
     }
 
     return Result;
@@ -47,91 +36,41 @@ GetCachedProperties(uint32_t StyleIndex, StyleState_Type State, ui_style_registr
 // ------------------------------------------------------------------------------------
 // Style Manipulation Public API
 
-static void
-SetNodeStyleState(StyleState_Type State, uint32_t NodeIndex, ui_subtree *Subtree)
+static ui_paint_properties *
+GetPaintProperties(uint32_t NodeIndex, ui_subtree *Subtree)
 {
     VOID_ASSERT(Subtree);
 
-    ui_node_style *Style = GetNodeStyle(NodeIndex, Subtree);
-    VOID_ASSERT(Style);
+    ui_paint_properties *Result = 0;
 
-    Style->State = State;
+    if(NodeIndex < Subtree->NodeCount)
+    {
+        Result = Subtree->PaintArray + NodeIndex;
+    }
+
+    return Result;
+}
+
+static void
+ClearPaintProperties(uint32_t NodeIndex, ui_subtree *Subtree)
+{
+    VOID_ASSERT(!"Not Implemented");
 }
 
 static void
 SetNodeStyle(uint32_t NodeIndex, uint32_t StyleIndex, ui_subtree *Subtree)
 {
-    ui_node_style *Style = GetNodeStyle(NodeIndex, Subtree);
-    VOID_ASSERT(Style);
-
     ui_pipeline *Pipeline = GetCurrentPipeline();
     VOID_ASSERT(Pipeline);
 
-    style_property *Cached[StyleState_Count] = {0};
-    Cached[StyleState_Default] = GetCachedProperties(Style->CachedStyleIndex, StyleState_Default, Pipeline->Registry);
-    Cached[StyleState_Hovered] = GetCachedProperties(Style->CachedStyleIndex, StyleState_Hovered, Pipeline->Registry);
-    Cached[StyleState_Focused] = GetCachedProperties(Style->CachedStyleIndex, StyleState_Focused, Pipeline->Registry);
+    ui_cached_style *CachedStyle = GetCachedStyle(StyleIndex, Pipeline->CachedStyles);
+    VOID_ASSERT(CachedStyle);
 
-    ForEachEnum(StyleState_Type, StyleState_Count, State)
-    {
-        VOID_ASSERT(Cached[State]);
+    ui_paint_properties *Paint = GetPaintProperties(NodeIndex, Subtree);
+    VOID_ASSERT(Paint);
 
-        ForEachEnum(StyleProperty, StylePropertyCount, Prop)
-        {
-            if(!Style->Properties[State][Prop].IsSetRuntime)
-            {
-                 Style->Properties[State][Prop] = Cached[State][Prop];
-            }
-        }
-    }
-
-    Style->CachedStyleIndex = StyleIndex;
-}
-
-static style_property *
-GetPaintProperties(uint32_t NodeIndex, bool ClearState, ui_subtree *Subtree)
-{
-    VOID_ASSERT(Subtree);
-
-    ui_node_style *Style = GetNodeStyle(NodeIndex, Subtree);
-    VOID_ASSERT(Style);
-
-    style_property *Result = PushArray(Subtree->Transient, style_property, StylePropertyCount);
-    VOID_ASSERT(Result);
-
-    ForEachEnum(StyleProperty, StylePropertyCount, Prop)
-    {
-        if(Style->Properties[Style->State][Prop].IsSet)
-        {
-            Result[Prop] = Style->Properties[Style->State][Prop];
-        }
-        else
-        {
-            Result[Prop] = Style->Properties[StyleState_Default][Prop];
-        }
-    }
-
-    if(ClearState)
-    {
-        Style->State = StyleState_Default;
-    }
-
-    return Result;
-}
-
-static ui_node_style *
-GetNodeStyle(uint32_t Index, ui_subtree *Subtree)
-{
-    VOID_ASSERT(Subtree);
-
-    ui_node_style *Result = 0;
-
-    if(Index < Subtree->NodeCount)
-    {
-        Result = Subtree->ComputedStyles + Index;
-    }
-
-    return Result;
+    Paint->CachedIndex = StyleIndex;
+    MemoryCopy(&Paint->Properties, &CachedStyle->Properties[StyleState_Default], sizeof(Paint->Properties));
 }
 
 // [Helpers]

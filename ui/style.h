@@ -48,35 +48,32 @@ typedef enum StyleState_Type
 
 #define InvalidCachedStyleIndex 0
 
-struct ui_box_edges
-{
-    float Left;
-    float Top;
-    float Right;
-    float Bottom;
-};
-
-struct ui_cached_style
+struct ui_style_properties
 {
     // TODO:
     // Size, MinSize, MaxSize, TextAlign
 
-    ui_box_edges Padding;
-    float        Spacing;
-    float        BorderWidth;
-    float        Grow;
-    float        Shrink;
+    ui_padding       Padding;
+    float            Spacing;
+    float            BorderWidth;
+    float            Grow;
+    float            Shrink;
 
-    ui_color     Color;
-    ui_color     BorderColor;
-    float        Softness;
-    ui_box_edges CornerRadius;
+    ui_color         Color;
+    ui_color         BorderColor;
+    float            Softness;
+    ui_corner_radius CornerRadius;
 
-    ui_font      *Font;
-    float         FontSize;
-    ui_color      TextColor;
-    ui_color      CaretColor;
-    float         CaretWidth;
+    ui_font          *Font;
+    float             FontSize;
+    ui_color          TextColor;
+    ui_color          CaretColor;
+    float             CaretWidth;
+};
+
+struct ui_cached_style
+{
+    ui_style_properties Properties[StyleState_Count];
 };
 
 struct ui_cached_style_node
@@ -92,12 +89,20 @@ struct ui_cached_style_list
     uint32_t              Count;
 };
 
-static void             SetNodeStyleState    (StyleState_Type State, uint32_t NodeIndex, ui_subtree *Subtree);
-static style_property * GetPaintProperties   (uint32_t NodeIndex, ui_subtree *Subtree);
-static void             ClearPaintProperties (uint32_t NodeIndex, ui_subtree *Subtree);
-static void             SetNodeStyle         (uint32_t NodeIndex, uint32_t Style, ui_subtree *Subtree);
-static ui_node_style  * GetNodeStyle         (uint32_t NodeIndex, ui_subtree *Subtree);
-static style_property * GetCachedProperties  (uint32_t StyleIndex, StyleState_Type State, ui_style_registry *Registry);
+struct ui_paint_properties
+{
+    ui_style_properties Properties;
+    uint32_t            CachedIndex;
+};
+
+static ui_paint_properties *
+GetPaintProperties(uint32_t NodeIndex, ui_subtree *Subtree);
+
+static void
+SetNodeStyle(uint32_t NodeIndex, uint32_t StyleIndex, ui_subtree *Subtree);
+
+static void
+ClearPaintProperties(uint32_t NodeIndex, ui_subtree *Subtree);
 
 // ===================================================================================
 // @Internal: Small Helpers

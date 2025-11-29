@@ -28,85 +28,64 @@ enum class StyleToken : uint32_t
     Vector      = 260,
     Style       = 261,
     Var         = 262,
+    None        = 1000,
 };
 
-static constexpr uint64_t HashMapEntryCompile(const char *String, size_t Size)
+static inline StyleToken FindStyleKeywordToken(byte_string Name)
 {
-    uint64_t Hash = FNV64_BASIS;
+    if (ByteStringMatches(str8_lit("style"), Name, 0)) return StyleToken::Style;
+    if (ByteStringMatches(str8_lit("var")  , Name, 0)) return StyleToken::Var;
 
-    for (uint64_t Idx = 0; Idx < Size; ++Idx)
-    {
-        Hash ^= static_cast<uint8_t>(String[Idx]);
-        Hash *= FNV64_PRIME;
-    }
-
-    return Hash;
+    return StyleToken::None;
 }
 
-static inline uint64_t HashMapEntry(uint8_t *String, size_t Size)
+static inline StyleProperty FindStyleProperty(byte_string Name)
 {
-    uint64_t Hash = FNV64_BASIS;
+    if (ByteStringMatches(str8_lit("size")            , Name, 0)) return StyleProperty::Size;
+    if (ByteStringMatches(str8_lit("min-size")        , Name, 0)) return StyleProperty::MinSize;
+    if (ByteStringMatches(str8_lit("max-size")        , Name, 0)) return StyleProperty::MaxSize;
+    if (ByteStringMatches(str8_lit("layout-direction"), Name, 0)) return StyleProperty::LayoutDirection;
+    if (ByteStringMatches(str8_lit("color")           , Name, 0)) return StyleProperty::Color;
+    if (ByteStringMatches(str8_lit("padding")         , Name, 0)) return StyleProperty::Padding;
+    if (ByteStringMatches(str8_lit("spacing")         , Name, 0)) return StyleProperty::Spacing;
+    if (ByteStringMatches(str8_lit("softness")        , Name, 0)) return StyleProperty::Softness;
+    if (ByteStringMatches(str8_lit("border-width")    , Name, 0)) return StyleProperty::BorderWidth;
+    if (ByteStringMatches(str8_lit("border-color")    , Name, 0)) return StyleProperty::BorderColor;
+    if (ByteStringMatches(str8_lit("corner-radius")   , Name, 0)) return StyleProperty::CornerRadius;
+    if (ByteStringMatches(str8_lit("font")            , Name, 0)) return StyleProperty::Font;
+    if (ByteStringMatches(str8_lit("font-size")       , Name, 0)) return StyleProperty::FontSize;
+    if (ByteStringMatches(str8_lit("text-align")      , Name, 0)) return StyleProperty::TextAlign;
+    if (ByteStringMatches(str8_lit("text-color")      , Name, 0)) return StyleProperty::TextColor;
+    if (ByteStringMatches(str8_lit("caret-color")     , Name, 0)) return StyleProperty::CaretColor;
+    if (ByteStringMatches(str8_lit("caret-width")     , Name, 0)) return StyleProperty::CaretWidth;
 
-    for (uint64_t Idx = 0; Idx < Size; ++Idx)
-    {
-        Hash ^= String[Idx];
-        Hash *= FNV64_PRIME;
-    }
-
-    return Hash;
+    return StyleProperty::None;
 }
 
-#define STYLE_KEYWORD_MAP                            \
-    X("style"        , StyleToken::Style)            \
-    X("var"          , StyleToken::Var)              \
-                                                     \
-    X("size"         , StyleProperty::Size)          \
-    X("min-size"     , StyleProperty::MinSize)       \
-    X("max-size"     , StyleProperty::MaxSize)       \
-    X("color"        , StyleProperty::Color)         \
-    X("padding"      , StyleProperty::Padding)       \
-    X("spacing"      , StyleProperty::Spacing)       \
-    X("softness"     , StyleProperty::Softness)      \
-    X("border-width" , StyleProperty::BorderWidth)   \
-    X("border-color" , StyleProperty::BorderColor)   \
-    X("corner-radius", StyleProperty::CornerRadius)  \
-    X("font"         , StyleProperty::Font)          \
-    X("font-size"    , StyleProperty::FontSize)      \
-    X("text-align-x" , StyleProperty::XTextAlign)    \
-    X("text-align-y" , StyleProperty::YTextAlign)    \
-    X("text-color"   , StyleProperty::TextColor)     \
-    X("caret-color"  , StyleProperty::CaretColor)    \
-    X("caret-width"  , StyleProperty::CaretWidth)    \
-                                                     \
-    X("start"        , Alignment::Start)             \
-    X("center"       , Alignment::Center)            \
-    X("end"          , Alignment::End)               \
-                                                     \
-    X("default"      , StyleState_Default)           \
-    X("hovered"      , StyleState_Hovered)           \
-    X("focused"      , StyleState_Focused)           \
-
-static uint32_t
-FindKeywordMapEntry(byte_string Name)
+static inline Alignment FindAlignmentKeyword(byte_string Name)
 {
-    uint64_t Hash = HashMapEntry(Name.String, Name.Size);
+    if (ByteStringMatches(str8_lit("start"),  Name, 0)) return Alignment::Start;
+    if (ByteStringMatches(str8_lit("center"), Name, 0)) return Alignment::Center;
+    if (ByteStringMatches(str8_lit("end"),    Name, 0)) return Alignment::End;
 
-    switch(Hash)
-    {
+    return Alignment::None;
+}
 
-    #define X(Literal, Enum)                                                         \
-        case static_cast<uint64_t>(HashMapEntryCompile(Literal, sizeof(Literal)-1)): \
-        {                                                                            \
-            return static_cast<uint32_t>(Enum);                                      \
-        } break;
+static inline LayoutDirection FindLayoutDirection(byte_string Name)
+{
+    if (ByteStringMatches(str8_lit("horizontal"), Name, 0)) return LayoutDirection::Horizontal;
+    if (ByteStringMatches(str8_lit("vertical"),   Name, 0)) return LayoutDirection::Vertical;
 
-        STYLE_KEYWORD_MAP
-    #undef X
+    return LayoutDirection::None;
+}
 
-    default: break;
-    }
+static inline StyleState FindStyleModifier(byte_string Name)
+{
+    if (ByteStringMatches(str8_lit("default"), Name, 0)) return StyleState::Default;
+    if (ByteStringMatches(str8_lit("hovered"), Name, 0)) return StyleState::Hovered;
+    if (ByteStringMatches(str8_lit("focused"), Name, 0)) return StyleState::Focused;
 
-    return INVALID_MAP_ENTRY;
+    return StyleState::None;
 }
 
 // ----------------------------------------------------------------------------------
@@ -421,9 +400,15 @@ ReadVector(os_read_file *File, file_debug_info &Debug)
     return Result;
 }
 
-static void
-TokenizeStyleFile(os_read_file File, token_buffer &Buffer, file_debug_info &Debug)
+static token_buffer
+TokenizeStyleFile(os_read_file File, memory_arena *ParsingArena, file_debug_info &Debug)
 {
+    token_buffer Buffer =
+    {
+        .Tokens = PushArray(ParsingArena, style_token, MAXIMUM_TOKEN_PER_FILE),
+        .Size   = MAXIMUM_TOKEN_PER_FILE,
+    };
+
     while (IsValidFile(&File) && Buffer.IsValid())
     {
         SkipWhiteSpaces(&File);
@@ -439,10 +424,9 @@ TokenizeStyleFile(os_read_file File, token_buffer &Buffer, file_debug_info &Debu
             {
                 style_token *Token = 0;
 
-                uint32_t KeywordEntry = FindKeywordMapEntry(Identifier);
-                if(KeywordEntry != INVALID_MAP_ENTRY)
+                StyleToken TokenType = FindStyleKeywordToken(Identifier);
+                if(TokenType != StyleToken::None)
                 {
-                    StyleToken TokenType = static_cast<StyleToken>(KeywordEntry);
                     Token = Buffer.Emit(TokenType, AtLine, AtByte);
                 }
 
@@ -576,6 +560,8 @@ TokenizeStyleFile(os_read_file File, token_buffer &Buffer, file_debug_info &Debu
     // and we will parse to infinity.
 
     Buffer.Emit(StyleToken::EndOfFile, 0, 0);
+
+    return Buffer;
 }
 
 //-----------------------------------------------------------------------------------
@@ -827,7 +813,7 @@ ParsedVectorToColor(vec4_unit Vector)
 }
 
 static void
-ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *Style, file_debug_info &Debug)
+ValidateProperty(style_token *Value, StyleProperty PropType, StyleState State, ui_cached_style *Style, file_debug_info &Debug)
 {
     switch (PropType)
     {
@@ -839,8 +825,80 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        // TODO:
-        // Correctly store the result.
+        if(Value->Vector.V.X.Type == UIUnit_Float32)
+        {
+            Style->Properties[static_cast<uint32_t>(State)].Size.Horizontal.Type  = Sizing::Fixed;
+            Style->Properties[static_cast<uint32_t>(State)].Size.Horizontal.Fixed = Value->Vector.V.X.Float32;
+        } else
+        if(Value->Vector.V.X.Type == UIUnit_Percent && IsInRange(0.f, 100.f, Value->Vector.V.X.Percent))
+        {
+            Style->Properties[static_cast<uint32_t>(State)].Size.Horizontal.Type  = Sizing::Percent;
+            Style->Properties[static_cast<uint32_t>(State)].Size.Horizontal.Fixed = Value->Vector.V.X.Percent;
+        }
+        else
+        {
+            break;
+        }
+
+        if(Value->Vector.V.Y.Type == UIUnit_Float32)
+        {
+            Style->Properties[static_cast<uint32_t>(State)].Size.Vertical.Type  = Sizing::Fixed;
+            Style->Properties[static_cast<uint32_t>(State)].Size.Vertical.Fixed = Value->Vector.V.Y.Float32;
+        } else
+        if(Value->Vector.V.Y.Type == UIUnit_Percent)
+        {
+            Style->Properties[static_cast<uint32_t>(State)].Size.Vertical.Type  = Sizing::Percent;
+            Style->Properties[static_cast<uint32_t>(State)].Size.Vertical.Fixed = Value->Vector.V.X.Percent;
+        }
+        else
+        {
+            break;
+        }
+    } break;
+
+    case StyleProperty::MinSize:
+    {
+        if(!CheckParsedVector(Value, 2, UIUnit_Float32, str8_lit("Expected a vector with two values."), Debug))
+        {
+            break;
+        }
+
+        Style->Properties[static_cast<uint32_t>(State)].MinSize =
+        {
+            .Width  = Value->Vector.V.X.Float32,
+            .Height = Value->Vector.V.Y.Float32,
+        };
+
+    } break;
+
+    case StyleProperty::MaxSize:
+    {
+        if(!CheckParsedVector(Value, 2, UIUnit_Float32, str8_lit("Expected a vector with two values."), Debug))
+        {
+            break;
+        }
+
+        Style->Properties[static_cast<uint32_t>(State)].MaxSize =
+        {
+            .Width  = Value->Vector.V.X.Float32,
+            .Height = Value->Vector.V.Y.Float32,
+        };
+    } break;
+
+    case StyleProperty::LayoutDirection:
+    {
+        if(!Value->Matches(StyleToken::Identifier))
+        {
+            break;
+        }
+
+        LayoutDirection Direction = FindLayoutDirection(Value->Identifier);
+        if(Direction == LayoutDirection::None)
+        {
+            break;
+        }
+
+        Style->Properties[static_cast<uint32_t>(State)].LayoutDirection = Direction;
     } break;
 
     case StyleProperty::Padding:
@@ -850,7 +908,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].Padding =
+        Style->Properties[static_cast<uint32_t>(State)].Padding =
         {
             .Left  = Value->Vector.V.X.Float32,
             .Top   = Value->Vector.V.Y.Float32,
@@ -867,7 +925,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].CornerRadius =
+        Style->Properties[static_cast<uint32_t>(State)].CornerRadius =
         {
             .TL = Value->Vector.V.X.Float32,
             .TR = Value->Vector.V.Y.Float32,
@@ -884,7 +942,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].Color = ParsedVectorToColor(Value->Vector.V);
+        Style->Properties[static_cast<uint32_t>(State)].Color = ParsedVectorToColor(Value->Vector.V);
     } break;
 
     case StyleProperty::BorderColor:
@@ -894,7 +952,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].BorderColor = ParsedVectorToColor(Value->Vector.V);
+        Style->Properties[static_cast<uint32_t>(State)].BorderColor = ParsedVectorToColor(Value->Vector.V);
     } break;
 
     case StyleProperty::TextColor:
@@ -904,7 +962,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].TextColor = ParsedVectorToColor(Value->Vector.V);
+        Style->Properties[static_cast<uint32_t>(State)].TextColor = ParsedVectorToColor(Value->Vector.V);
     } break;
 
     case StyleProperty::CaretColor:
@@ -914,7 +972,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].BorderColor = ParsedVectorToColor(Value->Vector.V);
+        Style->Properties[static_cast<uint32_t>(State)].BorderColor = ParsedVectorToColor(Value->Vector.V);
     } break;
 
     case StyleProperty::Spacing:
@@ -924,7 +982,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].Spacing = Value->Unit.Float32;
+        Style->Properties[static_cast<uint32_t>(State)].Spacing = Value->Unit.Float32;
     } break;
 
     case StyleProperty::BorderWidth:
@@ -934,7 +992,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].BorderWidth = Value->Unit.Float32;
+        Style->Properties[static_cast<uint32_t>(State)].BorderWidth = Value->Unit.Float32;
     } break;
 
     case StyleProperty::Softness:
@@ -944,7 +1002,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].Softness = Value->Unit.Float32;
+        Style->Properties[static_cast<uint32_t>(State)].Softness = Value->Unit.Float32;
     } break;
 
     case StyleProperty::Grow:
@@ -954,7 +1012,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].Grow = Value->Unit.Float32;
+        Style->Properties[static_cast<uint32_t>(State)].Grow = Value->Unit.Float32;
     } break;
 
     case StyleProperty::Shrink:
@@ -964,7 +1022,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].Shrink = Value->Unit.Float32;
+        Style->Properties[static_cast<uint32_t>(State)].Shrink = Value->Unit.Float32;
     } break;
 
     case StyleProperty::FontSize:
@@ -974,7 +1032,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].FontSize = Value->Unit.Float32;
+        Style->Properties[static_cast<uint32_t>(State)].FontSize = Value->Unit.Float32;
     } break;
 
     case StyleProperty::CaretWidth:
@@ -984,7 +1042,7 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        Style->Properties[0].CaretWidth = Value->Unit.Float32;
+        Style->Properties[static_cast<uint32_t>(State)].CaretWidth = Value->Unit.Float32;
     } break;
 
     case StyleProperty::Font:
@@ -994,14 +1052,18 @@ ValidateProperty(style_token *Value, StyleProperty PropType, ui_cached_style *St
             break;
         }
 
-        // TODO:
-        // Store the value.
+        VOID_ASSERT(!"Implement");
 
+    } break;
+
+    case StyleProperty::TextAlign:
+    {
+        VOID_ASSERT(!"Implement");
     } break;
 
     default:
     {
-        VOID_ASSERT(!"Forgot to handle property type");
+        VOID_ASSERT(!"Impossible");
     } break;
 
     }
@@ -1019,7 +1081,6 @@ enum class StyleParserState : uint32_t
 
     ExpectEffect,
     ExpectProperty,
-    StoreProperty,
 
     Done,
     Error,
@@ -1030,14 +1091,12 @@ struct style_parser
     StyleParserState State;
     ui_cached_style  Output;
     variable         Variable;
-    StyleState_Type  StyleState; // NOTE: Important, but unsused.
+    StyleState       StyleState;
 };
 
-ui_cached_style_list
-ParseStyleFile(token_buffer &Buffer, variable_table *VariableTable, memory_arena *OutputArena, file_debug_info &Debug)
+static void
+ParseStyleFile(token_buffer &Buffer, variable_table *VariableTable, memory_arena *OutputArena, ui_cached_style_list *List, file_debug_info &Debug)
 {
-    ui_cached_style_list Result = {};
-
     style_parser Parser =
     {
         .State  = StyleParserState::Start,
@@ -1137,10 +1196,9 @@ ParseStyleFile(token_buffer &Buffer, variable_table *VariableTable, memory_arena
             {
                 Entry->ValueToken          = Parser.Variable.ValueToken;
                 Parser.Variable.ValueToken = {};
-
-                Parser.State = StyleParserState::Start;
             }
 
+            Parser.State = StyleParserState::Start;
         } break;
 
         case StyleParserState::ExpectHeader:
@@ -1170,18 +1228,24 @@ ParseStyleFile(token_buffer &Buffer, variable_table *VariableTable, memory_arena
 
             if(Buffer.Expect(StyleToken::CloseBrace))
             {
-                Parser.State = StyleParserState::StoreProperty;
+                ui_cached_style_node *Node = PushStruct(OutputArena, ui_cached_style_node);
+
+                if (!Node)
+                {
+                    Parser.State = StyleParserState::Error;
+                    break;
+                }
+
+                Node->Value   = Parser.Output;
+                Parser.Output = {};            // TODO: Create a small helper to reset the state or do it inline at the start state.
+
+                AppendToLinkedList(List, Node, List->Count);
+
+                Parser.State = StyleParserState::Start;
                 break;
             }
 
             Parser.State = StyleParserState::ExpectProperty;
-        } break;
-
-        case StyleParserState::StoreProperty:
-        {
-            // TODO: Push a node and whatnot.
-
-            Parser.State = StyleParserState::Start;
         } break;
 
         case StyleParserState::ExpectEffect:
@@ -1189,10 +1253,10 @@ ParseStyleFile(token_buffer &Buffer, variable_table *VariableTable, memory_arena
             style_token *Name = Buffer.Consume(StyleToken::Identifier, str8_lit("Expected a valid effect name"), Debug);
             if(Name)
             {
-                uint32_t StateEntry = FindKeywordMapEntry(Name->Identifier);
-                if(StateEntry != INVALID_MAP_ENTRY)
+                StyleState Modifier = FindStyleModifier(Name->Identifier);
+                if(Modifier != StyleState::None)
                 {
-                    Parser.StyleState = static_cast<StyleState_Type>(StateEntry);
+                    Parser.StyleState = Modifier;
                 }
             }
 
@@ -1206,14 +1270,12 @@ ParseStyleFile(token_buffer &Buffer, variable_table *VariableTable, memory_arena
             style_token *Name = Buffer.Consume(StyleToken::Identifier, str8_lit("Expected a property name"), Debug);
             if(Name)
             {
-                uint32_t PropertyEntry = FindKeywordMapEntry(Name->Identifier);
-                if(PropertyEntry == INVALID_MAP_ENTRY)
+                Property = FindStyleProperty(Name->Identifier);
+                if(Property == StyleProperty::None)
                 {
                     ReportStyleFileError(Debug, error_message("Invalid attribute name"));
                     break;
                 }
-
-                Property = static_cast<StyleProperty>(PropertyEntry);
             }
             else
             {
@@ -1262,7 +1324,7 @@ ParseStyleFile(token_buffer &Buffer, variable_table *VariableTable, memory_arena
                 break;
             }
 
-            ValidateProperty(Value, Property, &Parser.Output, Debug);
+            ValidateProperty(Value, Property, Parser.StyleState, &Parser.Output, Debug);
 
             Parser.State = StyleParserState::BlockStart;
         } break;
@@ -1274,20 +1336,18 @@ ParseStyleFile(token_buffer &Buffer, variable_table *VariableTable, memory_arena
 
         }
     }
-
-    return Result; // BUG: This contains nothing?
 }
 
 // ----------------------------------------------------------------------------------
 // @Public: Parser API
 
-static ui_cached_style_list
+static ui_cached_style_list *
 LoadStyles(os_read_file *Files, uint32_t FileCount, memory_arena *OutputArena)
 {
     VOID_ASSERT(Files);
     VOID_ASSERT(OutputArena);
 
-    ui_cached_style_list Result = {};
+    ui_cached_style_list *Result = PushStruct(OutputArena, ui_cached_style_list);
 
     memory_arena *ParsingArena = {};
     {
@@ -1302,7 +1362,7 @@ LoadStyles(os_read_file *Files, uint32_t FileCount, memory_arena *OutputArena)
         ParsingArena = AllocateArena(Params);
     }
 
-    if(ParsingArena)
+    if(Result && ParsingArena)
     {
         variable_table *VariableTable = 0;
         {
@@ -1318,16 +1378,12 @@ LoadStyles(os_read_file *Files, uint32_t FileCount, memory_arena *OutputArena)
             VariableTable = PlaceVariableTableInMemory(Params, Memory);
         }
 
-        token_buffer Buffer =
-        {
-            .Tokens = PushArray(ParsingArena, style_token, MAXIMUM_TOKEN_PER_FILE),
-            .Size   = MAXIMUM_TOKEN_PER_FILE,
-        };
-
         if(VariableTable)
         {
             for(uint32_t Idx = 0; Idx < FileCount; ++Idx)
             {
+                memory_region Loop = EnterMemoryRegion(ParsingArena);
+
                 os_read_file File = Files[Idx];
                 if(File.FullyRead)
                 {
@@ -1336,12 +1392,14 @@ LoadStyles(os_read_file *Files, uint32_t FileCount, memory_arena *OutputArena)
                         .FileContent = File,
                     };
 
-                    TokenizeStyleFile(File, Buffer, Debug);
-
-                    ui_cached_style_list List = ParseStyleFile(Buffer, VariableTable, OutputArena, Debug);
-
-                    // TODO: Dump the list? I think there's an issue with us pusing too much data with this pattern.
+                    token_buffer Buffer = TokenizeStyleFile(File, ParsingArena, Debug);
+                    if(Buffer.IsValid())
+                    {
+                        ParseStyleFile(Buffer, VariableTable, OutputArena, Result, Debug);
+                    }
                 }
+
+                LeaveMemoryRegion(Loop);
             }
         }
 

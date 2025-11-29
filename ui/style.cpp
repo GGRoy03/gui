@@ -40,6 +40,7 @@ static ui_paint_properties *
 GetPaintProperties(uint32_t NodeIndex, ui_subtree *Subtree)
 {
     VOID_ASSERT(Subtree);
+    VOID_ASSERT(Subtree->PaintArray);
 
     ui_paint_properties *Result = 0;
 
@@ -70,7 +71,7 @@ SetNodeStyle(uint32_t NodeIndex, uint32_t StyleIndex, ui_subtree *Subtree)
     VOID_ASSERT(Paint);
 
     Paint->CachedIndex = StyleIndex;
-    MemoryCopy(&Paint->Properties, &CachedStyle->Properties[StyleState_Default], sizeof(Paint->Properties));
+    MemoryCopy(&Paint->Properties, &CachedStyle->Properties[(uint32_t)StyleState::Default], sizeof(Paint->Properties));
 }
 
 // [Helpers]

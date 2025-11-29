@@ -3,26 +3,26 @@
 enum class StyleProperty : uint32_t
 {
     // Layout Properties
-    Size        = 0,
-    MinSize     = 1,
-    MaxSize     = 2,
-    Padding     = 3,
-    Spacing     = 4,
-    BorderWidth = 5,
-    Grow        = 6,
-    Shrink      = 7,
+    Size            = 0,
+    MinSize         = 1,
+    MaxSize         = 2,
+    Padding         = 3,
+    Spacing         = 4,
+    BorderWidth     = 5,
+    Grow            = 6,
+    Shrink          = 7,
+    LayoutDirection = 8,
 
     // Style Properties
-    Color        = 8,
-    BorderColor  = 9,
-    Softness     = 10,
-    CornerRadius = 11,
+    Color        = 9,
+    BorderColor  = 10,
+    Softness     = 11,
+    CornerRadius = 12,
 
     // Text Properties
-    Font       = 12,
-    FontSize   = 13,
-    XTextAlign = 14,
-    YTextAlign = 15,
+    Font       = 13,
+    FontSize   = 14,
+    TextAlign  = 15,
     TextColor  = 16,
     CaretColor = 17,
     CaretWidth = 18,
@@ -34,24 +34,81 @@ enum class StyleProperty : uint32_t
 
 constexpr uint32_t StylePropertyCount = static_cast<uint32_t>(StyleProperty::Count);
 
-typedef enum StyleState_Type
+enum class StyleState
 {
-    StyleState_Default = 0,
-    StyleState_Hovered = 1,
-    StyleState_Focused = 2,
+    Default = 0,
+    Hovered = 1,
+    Focused = 2,
 
-    StyleState_None  = 3,
-    StyleState_Count = 3,
-} StyleState_Type;
+    None  = 3,
+    Count = 3,
+};
+
+constexpr uint32_t StyleStateCount = static_cast<uint32_t>(StyleState::Count);
 
 // [CORE TYPES]
 
 #define InvalidCachedStyleIndex 0
 
+enum class Alignment
+{
+    None   = 0,
+    Start  = 1,
+    Center = 2,
+    End    = 3,
+};
+
+enum class LayoutDirection
+{
+    None       = 0,
+    Horizontal = 1,
+    Vertical   = 2,
+};
+
+enum class Sizing
+{
+    None    = 0,
+    Fit     = 1,
+    Grow    = 2,
+    Percent = 3,
+    Fixed   = 4,
+    Stretch = 5,
+};
+
+struct ui_size
+{
+    float Width;
+    float Height;
+};
+
+struct ui_sizing_bounds
+{
+    float Min;
+    float Max;
+};
+
+struct ui_sizing_axis
+{
+    Sizing Type;
+    union
+    {
+        float Fixed;
+        float Percent;
+    };
+};
+
+struct ui_sizing
+{
+    ui_sizing_axis Horizontal;
+    ui_sizing_axis Vertical;
+};
+
 struct ui_style_properties
 {
-    // TODO:
-    // Size, MinSize, MaxSize, TextAlign
+    ui_sizing        Size;
+    ui_size          MinSize;
+    ui_size          MaxSize;
+    LayoutDirection  LayoutDirection;
 
     ui_padding       Padding;
     float            Spacing;
@@ -64,16 +121,17 @@ struct ui_style_properties
     float            Softness;
     ui_corner_radius CornerRadius;
 
-    ui_font          *Font;
-    float             FontSize;
-    ui_color          TextColor;
-    ui_color          CaretColor;
-    float             CaretWidth;
+    ui_font         *Font;
+    float            FontSize;
+    ui_color         TextColor;
+    ui_color         CaretColor;
+    float            CaretWidth;
+    Alignment        TextAlign[2];
 };
 
 struct ui_cached_style
 {
-    ui_style_properties Properties[StyleState_Count];
+    ui_style_properties Properties[StyleStateCount];
 };
 
 struct ui_cached_style_node

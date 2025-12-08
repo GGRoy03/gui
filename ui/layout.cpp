@@ -49,10 +49,11 @@ enum class LayoutNodeFlag
     UseFocusedStyle = 1 << 1,
 };
 
-inline LayoutNodeFlag operator|(LayoutNodeFlag a, LayoutNodeFlag b)   {return static_cast<LayoutNodeFlag>(static_cast<int>(a) | static_cast<int>(b));}
-inline LayoutNodeFlag operator&(LayoutNodeFlag a, LayoutNodeFlag b)   {return static_cast<LayoutNodeFlag>(static_cast<int>(a) & static_cast<int>(b));}
+inline LayoutNodeFlag operator|(LayoutNodeFlag A, LayoutNodeFlag B)   {return static_cast<LayoutNodeFlag>(static_cast<int>(A) | static_cast<int>(B));}
+inline LayoutNodeFlag operator&(LayoutNodeFlag A, LayoutNodeFlag B)   {return static_cast<LayoutNodeFlag>(static_cast<int>(A) & static_cast<int>(B));}
 inline LayoutNodeFlag operator|=(LayoutNodeFlag& A, LayoutNodeFlag B) {return A = A | B;}
 inline LayoutNodeFlag operator&=(LayoutNodeFlag& A, LayoutNodeFlag B) {return A = A & B;}
+inline LayoutNodeFlag operator~(LayoutNodeFlag A)                     {return static_cast<LayoutNodeFlag>(~static_cast<int>(A));}
 
 struct ui_layout_node
 {
@@ -90,10 +91,11 @@ struct ui_layout_node
     float           Shrink;
 
     // Extra Info
-    uint32_t Index;
-    uint32_t StyleIndex;
-    uint32_t ChildCount;
-    uint32_t LegacyFlags;
+    uint32_t       Index;
+    uint32_t       StyleIndex;
+    uint32_t       ChildCount;
+    LayoutNodeFlag Flags;
+    uint32_t       LegacyFlags;
 };
 
 struct ui_parent_node
@@ -608,9 +610,7 @@ ConsumePointerEvents(uint32_t NodeIndex, ui_layout_tree *Tree, pointer_event_lis
 
                 if(IsMouseInsideOuterBox(Event.Position, Node))
                 {
-                    // NOTE:
-                    // Now that we have fixed how we draw, we simply have to set _some_ flag and the paint command generator will
-                    // figure out what to pass.
+                    Node->Flags |= LayoutNodeFlag::UseHoveredStyle;
                 }
 
             } break;
@@ -967,11 +967,29 @@ GeneratePaintBuffer(ui_layout_tree *Tree, ui_cached_style *Cached, memory_arena 
             Command.RectangleClip = {};
             Command.TextKey       = {};
             Command.ImageKey      = {};
-            Command.Color         = Style.Default.Color;
-            Command.BorderColor   = Style.Default.BorderColor;
             Command.CornerRadius  = Style.Default.CornerRadius;
             Command.Softness      = Style.Default.Softness;
             Command.BorderWidth   = Style.Default.BorderWidth;
+
+            if ((Node->Flags & LayoutNodeFlag::UseFocusedStyle) != LayoutNodeFlag::None)
+            {
+                Command.Color       = Style.Focused.Color;
+                Command.BorderColor = Style.Focused.BorderColor;
+
+                Node->Flags &= ~(LayoutNodeFlag::UseFocusedStyle);
+            } else
+            if ((Node->Flags & LayoutNodeFlag::UseHoveredStyle) != LayoutNodeFlag::None)
+            {
+                Command.Color       = Style.Hovered.Color;
+                Command.BorderColor = Style.Hovered.BorderColor;
+
+                Node->Flags &= ~(LayoutNodeFlag::UseHoveredStyle);
+            }
+            else
+            {
+                Command.Color       = Style.Default.Color;
+                Command.BorderColor = Style.Default.BorderColor;
+            }
 
             IterateLinkedList(Node, ui_layout_node *, Child)
             {

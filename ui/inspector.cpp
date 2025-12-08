@@ -48,9 +48,14 @@ static ui_cached_style InspectorStyleArray[] =
             .CornerRadius = ui_corner_radius(4.f, 4.f, 4.f, 4.f),
         },
 
+        // NOTE:
+        // This repetition is really annoying. There's no automatic inheritence
+        // which is a big design flaw.
+
         .Hovered =
         {
-            .Color = HoverOrange,
+            .Color       = Background,
+            .BorderColor = HoverOrange,
         },
 
         .Focused =

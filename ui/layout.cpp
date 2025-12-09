@@ -44,9 +44,12 @@ struct ui_size_bounds
 
 enum class LayoutNodeFlag
 {
-    None                 = 0,
-    UseHoveredStyle = 1 << 0,
-    UseFocusedStyle = 1 << 1,
+    None                = 0,
+
+    UseHoveredStyle    = 1 << 0,
+    UseFocusedStyle    = 1 << 1,
+
+    HasCapturedPointer = 1 << 2,
 };
 
 inline LayoutNodeFlag operator|(LayoutNodeFlag A, LayoutNodeFlag B)   {return static_cast<LayoutNodeFlag>(static_cast<int>(A) | static_cast<int>(B));}
@@ -599,20 +602,68 @@ ConsumePointerEvents(uint32_t NodeIndex, ui_layout_tree *Tree, pointer_event_lis
         {
             pointer_event &Event = EventNode->Value;
 
+            bool MouseInsideBox = IsMouseInsideOuterBox(Event.Position, Node);
+
             switch(Event.Type)
             {
 
+            // TODO:
+            // I do not know how to generate this event. It seems trivial.
+            // I don't know if iterating the pointers to check their
+            // button mask is the correct approach.
+
             case PointerEvent::Hover:
             {
-                if(IsMouseInsideOuterBox(Event.Position, Node))
+                if(MouseInsideBox)
                 {
                     Node->Flags |= LayoutNodeFlag::UseHoveredStyle;
 
-                    // WARN: Direct mutation over what we are iterating. Perhaps we want to prune after the iteration?
-                    // Is it even dangerous here since there is no re-allocations?
+                    // WARN:
+                    // Direct mutation over what we are iterating. Perhaps we want to prune after the iteration?
+                    // Is it even dangerous here since there is no re-allocations? This might be meaningless if we just use a
+                    // buffer with swap back.
 
                     ConsumePointerEvent(EventNode, EventList);
                 }
+            } break;
+
+            case PointerEvent::Click:
+            {
+                if(MouseInsideBox)
+                {
+                    Node->Flags |= LayoutNodeFlag::HasCapturedPointer;
+
+                    // WARN:
+                    // Direct mutation over what we are iterating. Perhaps we want to prune after the iteration?
+                    // Is it even dangerous here since there is no re-allocations? This might be meaningless if we just use a
+                    // buffer with swap back.
+
+                    ConsumePointerEvent(EventNode, EventList);
+                }
+            } break;
+
+            // NOTE: Since we need the pointer ID to do this, it doesn't need to
+            // be a flag.
+
+            case PointerEvent::Move:
+            {
+                if(((Node->Flags       & LayoutNodeFlag::HasCapturedPointer) != LayoutNodeFlag::None) &&
+                     Node->LegacyFlags & UILayoutNode_IsDraggable)
+                {
+                    Node->ResultX += Event.Delta.X;
+                    Node->ResultY += Event.Delta.Y;
+
+                    Node->Flags |= LayoutNodeFlag::UseFocusedStyle;
+                }
+            } break;
+
+            // BUG:
+            // This needs to check against which pointer captured our node.
+            // Such that we only release when _that_ pointer is released.
+
+            case PointerEvent::Release:
+            {
+               Node->Flags &= ~(LayoutNodeFlag::HasCapturedPointer);
             } break;
 
             default:
@@ -977,21 +1028,19 @@ GeneratePaintBuffer(ui_layout_tree *Tree, ui_cached_style *Cached, memory_arena 
             {
                 Command.Color       = Style.Focused.Color;
                 Command.BorderColor = Style.Focused.BorderColor;
-
-                Node->Flags &= ~(LayoutNodeFlag::UseFocusedStyle);
             } else
             if ((Node->Flags & LayoutNodeFlag::UseHoveredStyle) != LayoutNodeFlag::None)
             {
                 Command.Color       = Style.Hovered.Color;
                 Command.BorderColor = Style.Hovered.BorderColor;
-
-                Node->Flags &= ~(LayoutNodeFlag::UseHoveredStyle);
             }
             else
             {
                 Command.Color       = Style.Default.Color;
                 Command.BorderColor = Style.Default.BorderColor;
             }
+
+            Node->Flags &= ~((LayoutNodeFlag::UseHoveredStyle | LayoutNodeFlag::UseFocusedStyle));
 
             IterateLinkedList(Node, ui_layout_node *, Child)
             {

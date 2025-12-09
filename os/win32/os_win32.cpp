@@ -80,9 +80,14 @@ OSWin32WindowProc(HWND Handle, UINT Message, WPARAM WParam, LPARAM LParam)
 
     case WM_MOUSEMOVE:
     {
-        vec2_float MousePosition = vec2_float(float(GET_X_LPARAM(LParam)), float(GET_Y_LPARAM(LParam)));
-
         input_pointer &Pointer = Inputs->Pointers[0];
+
+        vec2_float MousePosition = vec2_float(float(GET_X_LPARAM(LParam)), float(GET_Y_LPARAM(LParam)));
+        vec2_float MouseDelta    = MousePosition - Pointer.Position;
+
+        // NOTE: Pass old position or new?
+        EnqueuePointerMoveEvent(Pointer.Position, MouseDelta, 0, Inputs->PointerEventList);
+
         Pointer.Delta   += MousePosition - Pointer.Position;
         Pointer.Position = MousePosition;
     } break;
@@ -116,25 +121,38 @@ OSWin32WindowProc(HWND Handle, UINT Message, WPARAM WParam, LPARAM LParam)
 
     case WM_LBUTTONDOWN:
     {
+        LogInfo("Mouse Down\n");
         input_pointer &Pointer = Inputs->Pointers[0];
+
+        EnqueuePointerClickEvent(BUTTON_PRIMARY, Pointer.Position, 0, Inputs->PointerEventList);
+
         Pointer.ButtonMask |= BUTTON_PRIMARY;
     } break;
 
     case WM_LBUTTONUP:
     {
         input_pointer &Pointer = Inputs->Pointers[0];
+
+        EnqueuePointerReleaseEvent(BUTTON_PRIMARY, Pointer.Position, 0, Inputs->PointerEventList);
+
         Pointer.ButtonMask &= ~BUTTON_PRIMARY;
     } break;
 
     case WM_RBUTTONDOWN:
     {
         input_pointer &Pointer = Inputs->Pointers[0];
+
+        EnqueuePointerClickEvent(BUTTON_PRIMARY, Pointer.Position, 0, Inputs->PointerEventList);
+
         Pointer.ButtonMask |= BUTTON_SECONDARY;
     } break;
 
     case WM_RBUTTONUP:
     {
         input_pointer &Pointer = Inputs->Pointers[0];
+
+        EnqueuePointerReleaseEvent(BUTTON_SECONDARY, Pointer.Position, 0, Inputs->PointerEventList);
+
         Pointer.ButtonMask &= ~BUTTON_SECONDARY;
     } break;
 
@@ -278,6 +296,18 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, int ShowCmd
 
             TranslateMessage(&Message);
             DispatchMessage(&Message);
+        }
+
+        // NOTE:
+        // This works. Unsure what we want to do. What if the pointer is captured?
+        // Do we really want to produce that event then? I do not know.
+        // Yeah this is shit, because it bleeds to other events. I then need to
+        // check if the button mask is 0. This works really well. And it is super
+        // easy for the UI to do something. Just need some cleanups.
+
+        if(OSWin32State.Inputs.Pointers[0].ButtonMask == BUTTON_NONE)
+        {
+            EnqueuePointerHoverEvent(OSWin32State.Inputs.Pointers[0].Position, 0, OSWin32State.Inputs.PointerEventList);
         }
 
         vec2_int ClientSize = OSWin32GetClientSize(OSWin32State.HWindow);
@@ -472,4 +502,4 @@ OSGetTimerFrequency(void)
     LARGE_INTEGER Freq;
     QueryPerformanceFrequency(&Freq);
     return Freq.QuadPart;
-}
+    }

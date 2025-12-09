@@ -78,6 +78,15 @@ enum class PointerSource
     Controller = 4,
 };
 
+enum class PointerEvent
+{
+    None    = 0,
+    Move    = 1,
+    Click   = 2,
+    Release = 3,
+    Hover   = 4,
+};
+
 constexpr uint32_t BUTTON_NONE      = 0;
 constexpr uint32_t BUTTON_PRIMARY   = 1u << 0;
 constexpr uint32_t BUTTON_SECONDARY = 1u << 1;
@@ -88,18 +97,49 @@ struct input_pointer
     PointerSource Source;
     vec2_float    Position;
     vec2_float    Delta;
-    bool          IsCaptured;
     uint32_t      ButtonMask;
     uint32_t      LastButtonMask;
 };
+
+struct pointer_event
+{
+    PointerEvent Type;
+    uint32_t     PointerId;
+    vec2_float   Position;
+    vec2_float   Delta;
+    uint32_t     ButtonMask;
+};
+
+struct pointer_event_node
+{
+    pointer_event_node *Prev;
+    pointer_event_node *Next;
+    pointer_event       Value;
+};
+
+struct pointer_event_list
+{
+    pointer_event_node *First;
+    pointer_event_node *Last;
+    uint32_t            Count;
+};
+
+static void EnqueuePointerMoveEvent     (vec2_float Position, vec2_float Delta, memory_arena *Arena, pointer_event_list &List);
+static void EnqueuePointerClickEvent    (uint32_t Button, vec2_float Position, memory_arena *Arena, pointer_event_list &List);
+static void EnqueuePointerReleaseEvent  (uint32_t Button, vec2_float Position, memory_arena *Arena, pointer_event_list &List);
+
+static void EnqueuePointerHoverEvent    (vec2_float Position, memory_arena *Arena, pointer_event_list &List);
+
+// ------------------------------------------------------------------------------------
 
 // NOTE:
 // We force the pointer array to size 1 for now. We simply want to test with the mouse
 
 struct os_inputs
 {
-    os_button_state KeyboardButtons[OS_KeyboardButtonCount];
-    input_pointer   Pointers[1];
+    os_button_state    KeyboardButtons[OS_KeyboardButtonCount];
+    input_pointer      Pointers[1];
+    pointer_event_list PointerEventList;
 
     // Mouse
     float ScrollDeltaInLines;
@@ -146,13 +186,13 @@ static os_inputs      * OSGetInputs      (void);
 // [Memory]
 
 static void *OSReserveMemory  (uint64_t Size);
-static bool   OSCommitMemory   (void *Memory, uint64_t Size);
+static bool  OSCommitMemory   (void *Memory, uint64_t Size);
 static void  OSRelease        (void *Memory);
 
 // [Misc]
 
 static void  OSAbort              (int ExitCode);
-static bool   OSIsValidHandle      (os_handle Handle);
+static bool  OSIsValidHandle      (os_handle Handle);
 static void  OSSetCursor          (OSCursor_Type Type);
 
 static uint64_t OSReadTimer          (void);

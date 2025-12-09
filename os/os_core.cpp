@@ -1,4 +1,107 @@
 // -----------------------------------------------------------------------------------
+// @Internal: Pointer Events Helpers
+
+static pointer_event_node *
+EnqueuePointerEvent(PointerEvent Type, memory_arena *Arena, pointer_event_list &List)
+{
+    VOID_ASSERT(Type != PointerEvent::None);  // Internal Corruption
+    // VOID_ASSERT(Arena);                       // Intennal Corruption
+
+    auto *Node = static_cast<pointer_event_node *>(malloc(sizeof(pointer_event_node)));
+    if(Node)
+    {
+        Node->Next             = 0;
+        Node->Value.Type       = Type;
+
+        AppendToDoublyLinkedList((&List), Node, List.Count);
+    }
+
+    return Node;
+}
+
+// -----------------------------------------------------------------------------------
+// @Private: Pointer Events Helpers
+
+static void
+ConsumePointerEvent(pointer_event_node *Node, pointer_event_list *List)
+{
+    VOID_ASSERT(Node);            // Internal Corruption
+    VOID_ASSERT(List);            // Internal Corruption
+    VOID_ASSERT(List->Count > 0); // Internal Corruption
+
+    pointer_event_node *Prev = Node->Prev;
+    pointer_event_node *Next = Node->Next;
+
+    if(Prev)
+    {
+        Prev->Next = Next;
+    }
+
+    if(Next)
+    {
+        Next->Prev = Prev;
+    }
+
+    if(Node == List->First)
+    {
+        List->First = Next;
+    }
+
+    if(Node == List->Last)
+    {
+        List->Last = Prev;
+    }
+
+    --List->Count;
+
+    Node->Prev = 0;
+    Node->Next = 0;
+}
+
+static void
+EnqueuePointerMoveEvent(vec2_float Position, vec2_float Delta, memory_arena *Arena, pointer_event_list &List)
+{
+    pointer_event_node *Node = EnqueuePointerEvent(PointerEvent::Move, Arena, List);
+    if(Node)
+    {
+        Node->Value.Position = Position;
+        Node->Value.Delta    = Delta;
+    }
+}
+
+static void
+EnqueuePointerClickEvent(uint32_t Button, vec2_float Position, memory_arena *Arena, pointer_event_list &List)
+{
+    pointer_event_node *Node = EnqueuePointerEvent(PointerEvent::Click, Arena, List);
+    if(Node)
+    {
+        Node->Value.ButtonMask = Button;
+        Node->Value.Position   = Position;
+    }
+}
+
+static void
+EnqueuePointerReleaseEvent(uint32_t Button, vec2_float Position, memory_arena *Arena, pointer_event_list &List)
+{
+    pointer_event_node *Node = EnqueuePointerEvent(PointerEvent::Release, Arena, List);
+    if(Node)
+    {
+        Node->Value.ButtonMask = Button;
+        Node->Value.Position   = Position;
+    }
+}
+
+static void
+EnqueuePointerHoverEvent(vec2_float Position, memory_arena *Arena, pointer_event_list &List)
+{
+    pointer_event_node *Node = EnqueuePointerEvent(PointerEvent::Hover, Arena, List);
+    if(Node)
+    {
+        Node->Value.Position   = Position;
+    }
+}
+
+// -----------------------------------------------------------------------------------
 // Inputs Private Implementation
 
 static bool
@@ -51,7 +154,10 @@ OSClearInputs(os_inputs *Inputs)
         Inputs->KeyboardButtons[Idx].HalfTransitionCount = 0;
     }
 
-    // TODO: Pointer clear?
+    Inputs->PointerEventList.First = 0;
+    Inputs->PointerEventList.Last  = 0;
+    Inputs->PointerEventList.Count = 0;
+    Inputs->Pointers[0].Delta      = vec2_float(0.f, 0.f);
 }
 
 // [Agnostic File API]

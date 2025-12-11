@@ -1,5 +1,7 @@
 #include <array>
 
+// WARN: This is not quite right.
+
 constexpr auto MakeWin32InputTable()
 {
     std::array<uint32_t, 256> Table = {};

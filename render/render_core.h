@@ -137,7 +137,7 @@ static render_state RenderState;
 
 const static uint64_t RenderPassDataSizeTable[] =
 {
-    80, // Inputs to UI pass (ui_rect)
+    128, // Inputs to UI pass (ui_rect)
 };
 
 // [Handles]

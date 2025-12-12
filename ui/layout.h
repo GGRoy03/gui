@@ -35,7 +35,11 @@ static bool             PopLayoutParent          (uint32_t Index, ui_layout_tree
 static void             PreOrderMeasureTree      (ui_layout_tree *Tree, memory_arena *Arena);
 static void             PostOrderMeasureTree     (uint32_t NodeIndex , ui_layout_tree *Tree);
 static void             PlaceLayoutTree          (ui_layout_tree *Tree, memory_arena *Arena);
-static void             ConsumePointerEvents     (uint32_t NodeIndex, ui_layout_tree *Tree, pointer_event_list *EventList);
+
+static bool             HandlePointerClick       (vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
+static bool             HandlePointerRelease     (vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
+static bool             HandlePointerHover       (vec2_float Position, uint32_t NodeIndex, ui_layout_tree *Tree);
+static void             HandlePointerMove        (vec2_float Delta, ui_layout_tree *Tree);
 static ui_paint_buffer  GeneratePaintBuffer      (ui_layout_tree *Tree, ui_cached_style *Cached, memory_arena *Arena);
 
 // TODO: Need to find a solution to remove these.

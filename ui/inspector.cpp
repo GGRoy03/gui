@@ -55,7 +55,7 @@ static ui_cached_style InspectorStyleArray[] =
 
         .Focused =
         {
-            .BorderColor = HoverOrange,
+            .BorderColor = Success,
         },
     },
 

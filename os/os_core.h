@@ -84,7 +84,6 @@ enum class PointerEvent
     Move    = 1,
     Click   = 2,
     Release = 3,
-    Hover   = 4,
 };
 
 constexpr uint32_t BUTTON_NONE      = 0;
@@ -127,8 +126,6 @@ struct pointer_event_list
 static void EnqueuePointerMoveEvent     (vec2_float Position, vec2_float Delta, memory_arena *Arena, pointer_event_list &List);
 static void EnqueuePointerClickEvent    (uint32_t Button, vec2_float Position, memory_arena *Arena, pointer_event_list &List);
 static void EnqueuePointerReleaseEvent  (uint32_t Button, vec2_float Position, memory_arena *Arena, pointer_event_list &List);
-
-static void EnqueuePointerHoverEvent    (vec2_float Position, memory_arena *Arena, pointer_event_list &List);
 
 // ------------------------------------------------------------------------------------
 

@@ -81,7 +81,6 @@ struct ui_layout_node
     Constraint Constraint;
 
     // State
-    uint32_t        CaptureButtonMask;
     LayoutNodeFlag  Flags;
 
     // Static Properties
@@ -123,8 +122,11 @@ typedef struct ui_layout_tree
     uint64_t          NodeCount;
     ui_layout_node   *Nodes;
 
-    ui_paint_command *PaintBuffer;
+    // State
     ui_parent_list    ParentList;
+    uint32_t          CapturedNodeIndex;
+
+    ui_paint_command *PaintBuffer;
 } ui_layout_tree;
 
 static bool
@@ -593,12 +595,43 @@ IsMouseInsideBorder(vec2_float MousePosition, ui_layout_node *Node)
     return Distance >= 0.f;
 }
 
-// BUG:
-// Seems like there is a problem when relaeasing and moving the mouse at the
-// same time. Is modifying what we are iterating the problem?
+static bool
+HandlePointerClick(vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree)
+{
+    ui_layout_node *Node = GetLayoutNode(NodeIndex, Tree);
 
-static void
-ConsumePointerEvents(uint32_t NodeIndex, ui_layout_tree *Tree, pointer_event_list *EventList)
+    if(Node)
+    {
+        if(IsMouseInsideOuterBox(Position, Node))
+        {
+            IterateLinkedList(Node, ui_layout_node *, Child)
+            {
+                bool IsHandled = HandlePointerClick(Position, ClickMask, Child->Index, Tree);
+
+                if(IsHandled)
+                {
+                    return true;
+                }
+            }
+
+            Node->Flags |= LayoutNodeFlag::UseFocusedStyle;
+            Node->Flags |= LayoutNodeFlag::HasCapturedPointer;
+
+            Tree->CapturedNodeIndex = NodeIndex;
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// This function is completely wrong. It shouldn't need recursion. Since at this point we should know
+// which node has captured the pointer, either in the pointer state or in the tree state.
+// So this is just wrong.
+
+static bool
+HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint32_t NodeIndex, ui_layout_tree *Tree)
 {
     ui_layout_node *Node = GetLayoutNode(NodeIndex, Tree);
 
@@ -606,78 +639,75 @@ ConsumePointerEvents(uint32_t NodeIndex, ui_layout_tree *Tree, pointer_event_lis
     {
         IterateLinkedList(Node, ui_layout_node *, Child)
         {
-            ConsumePointerEvents(Child->Index, Tree, EventList);
+            if(HandlePointerRelease(Position, ButtonMask, Child->Index, Tree))
+            {
+                return true;
+            }
         }
 
-        IterateLinkedList(EventList, pointer_event_node *, EventNode)
+        // Should we check the pointer id?
+        // Should also check the ButtonMask
+
+        if((Node->Flags & LayoutNodeFlag::HasCapturedPointer) != LayoutNodeFlag::None)
         {
-            pointer_event &Event = EventNode->Value;
+            Node->Flags &= ~(LayoutNodeFlag::HasCapturedPointer | LayoutNodeFlag::UseFocusedStyle);
 
-            bool MouseInsideBox = IsMouseInsideOuterBox(Event.Position, Node);
+            Tree->CapturedNodeIndex = InvalidLayoutNodeIndex;
 
-            switch(Event.Type)
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// This is a dead simple implementation, but it allows us to draw hovered styles.
+// It's is easy to extend this implementation to handle other stuff. But it is sufficient for now.
+// A better way to do this would be to not ask for the node index. Fine for now.
+
+static bool
+HandlePointerHover(vec2_float Position, uint32_t NodeIndex, ui_layout_tree *Tree)
+{
+    ui_layout_node *Node = GetLayoutNode(NodeIndex, Tree);
+
+    if(Node)
+    {
+        if(IsMouseInsideOuterBox(Position, Node))
+        {
+            IterateLinkedList(Node, ui_layout_node *, Child)
             {
-
-            case PointerEvent::Hover:
-            {
-                if(MouseInsideBox)
+                bool IsHandled = HandlePointerHover(Position, Child->Index, Tree);
+                if(IsHandled)
                 {
-                    Node->Flags |= LayoutNodeFlag::UseHoveredStyle;
-
-                    ConsumePointerEvent(EventNode, EventList);
+                    return true;
                 }
-            } break;
-
-            // NOTE:
-            // Need to figure out click policy.
-
-            case PointerEvent::Click:
-            {
-                if(MouseInsideBox)
-                {
-                    Node->Flags             |= (LayoutNodeFlag::HasCapturedPointer | LayoutNodeFlag::UseFocusedStyle);
-                    Node->CaptureButtonMask |= Event.ButtonMask;
-
-                    ConsumePointerEvent(EventNode, EventList);
-                }
-            } break;
-
-            case PointerEvent::Move:
-            {
-                if(((Node->Flags & LayoutNodeFlag::HasCapturedPointer) != LayoutNodeFlag::None) && Node->LegacyFlags & UILayoutNode_IsDraggable)
-                {
-                    Node->ResultX += Event.Delta.X;
-                    Node->ResultY += Event.Delta.Y;
-
-                    ConsumePointerEvent(EventNode, EventList);
-                }
-            } break;
-
-            // TODO:
-            // What is the correct logic here. Does it matter if we are inside
-            // the box or not? I am confused. How do we consume the event.
-            // I guess, one part that is not implemented here is that we must capture
-            // the pointer and provide relative deltas.
-
-            case PointerEvent::Release:
-            {
-                if (MouseInsideBox)
-                {
-                    if (Event.ButtonMask & Node->CaptureButtonMask)
-                    {
-                        Node->CaptureButtonMask &= ~Event.ButtonMask;
-                    }
-                }
-
-                Node->Flags &= ~(LayoutNodeFlag::HasCapturedPointer | LayoutNodeFlag::UseFocusedStyle);
-            } break;
-
-            default:
-            {
-                VOID_ASSERT(!"??");
-            } break;
-
             }
+
+            Node->Flags |= LayoutNodeFlag::UseHoveredStyle;
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// When is this actually called. This is a bit weird. We have to know the captured node.
+// Access it, then if it's draggable apply the delta. Uhm. We can use some sort of state, but we could
+// also iterate the tree and use a node state instead. I think this is easier though. At least, since we do
+// not need to handle multiple focus yet. Perhaps this will change, but it should be trivial to implement.
+
+static void
+HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
+{
+    ui_layout_node *CapturedNode = GetLayoutNode(Tree->CapturedNodeIndex, Tree);
+
+    if(CapturedNode)
+    {
+        if(CapturedNode->LegacyFlags & UILayoutNode_IsDraggable)
+        {
+            CapturedNode->ResultX += Delta.X;
+            CapturedNode->ResultY += Delta.Y;
         }
     }
 }
@@ -1025,11 +1055,11 @@ GeneratePaintBuffer(ui_layout_tree *Tree, ui_cached_style *Cached, memory_arena 
 
             if ((Node->Flags & LayoutNodeFlag::UseFocusedStyle) != LayoutNodeFlag::None)
             {
-                Paint = Cached->Hovered.InheritPaintProperties(Paint);
+                Paint = Cached->Focused.InheritPaintProperties(Paint);
             } else
             if ((Node->Flags & LayoutNodeFlag::UseHoveredStyle) != LayoutNodeFlag::None)
             {
-                Paint = Cached->Focused.InheritPaintProperties(Paint);
+                Paint = Cached->Hovered.InheritPaintProperties(Paint);
 
                 Node->Flags &= ~LayoutNodeFlag::UseHoveredStyle;
             }

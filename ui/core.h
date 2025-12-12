@@ -96,11 +96,14 @@ typedef struct vec4_unit
 // NOTE: Must be padded to 16 bytes alignment.
 typedef struct ui_rect
 {
-    rect_float         RectBounds;
-    rect_float         TextureSource;
-    ui_color         Color;
+    rect_float       RectBounds;
+    rect_float       TextureSource;
+    ui_color         ColorTL;
+    ui_color         ColorBL;
+    ui_color         ColorTR;
+    ui_color         ColorBR;
     ui_corner_radius CornerRadii;
-    float              BorderWidth, Softness, SampleTexture, _P0; // Style Params
+    float            BorderWidth, Softness, SampleTexture, _P0; // Style Params
 } ui_rect;
 
 // ------------------------------------------------------------------------------------
@@ -303,6 +306,7 @@ struct ui_pipeline
     ui_node_table       *NodeTable;
 
     // User State
+    UIPipeline           Type;
     ui_cached_style     *StyleArray;
     uint32_t             StyleIndexMin;
     uint32_t             StyleIndexMax;

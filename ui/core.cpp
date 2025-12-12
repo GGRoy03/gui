@@ -862,17 +862,125 @@ void ui_node::SetId(byte_string Id, ui_pipeline &Pipeline)
 // ----------------------------------------------------------------------------------
 // Context Public API Implementation
 
+struct ui_pointer_state
+{
+    uint32_t   Id;
+    vec2_float Position;
+    vec2_float LastPosition;
+    uint32_t   ButtonMask;
+
+    // Targets?
+    bool       IsCaptured; // This might be, uhhh, a state flag with some other states.
+    UIPipeline PipelineSource;
+
+    // Other Stuff
+};
+
 static void
 UIBeginFrame(vec2_int WindowSize)
 {
     void_context       &Context   = GetVoidContext();
     pointer_event_list &EventList = OSGetInputs()->PointerEventList;
 
-    for(uint32_t Idx = 0; Idx < Context.PipelineCount; ++Idx)
-    {
-        ui_pipeline &Pipeline = Context.PipelineArray[Idx];
+    static ui_pointer_state PointerStates[1];
 
-        ConsumePointerEvents(0, Pipeline.Tree, &EventList);
+    // It seems like processing the pointer events here is the better idea.
+    // But we need some kind of UI side state. Which maps to some pointer.
+    // One bad thing that can probably be fixed with better logic is that
+    // there is a decent amount of shared state.
+
+    IterateLinkedList((&EventList), pointer_event_node *, EventNode)
+    {
+        pointer_event &Event = EventNode->Value;
+
+        switch(Event.Type)
+        {
+
+        case PointerEvent::Move:
+        {
+            ui_pointer_state &State = PointerStates[0];
+
+            State.LastPosition = State.Position;
+            State.Position     = Event.Position;
+
+            if(State.IsCaptured)
+            {
+                // Not great.
+                ui_pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
+
+                HandlePointerMove(Event.Delta, Pipeline.Tree);
+            }
+        } break;
+
+        case PointerEvent::Click:
+        {
+            ui_pointer_state &State = PointerStates[0];
+
+            State.ButtonMask |= Event.ButtonMask;
+
+            for(uint32_t Idx = 0; Idx < Context.PipelineCount; ++Idx)
+            {
+                ui_pipeline &Pipeline = Context.PipelineArray[Idx];
+
+                // So here, we'd call something like: IsMouseOverPipeline
+                if(true)
+                {
+                    State.IsCaptured     = HandlePointerClick(State.Position, State.ButtonMask, 0, Pipeline.Tree);
+                    State.PipelineSource = Pipeline.Type;
+                }
+
+                if(State.IsCaptured)
+                {
+                    break;
+                }
+            }
+        } break;
+
+        case PointerEvent::Release:
+        {
+            ui_pointer_state &State = PointerStates[0];
+
+            State.ButtonMask &= ~Event.ButtonMask;
+
+            if(State.IsCaptured)
+            {
+                // Not great.
+                ui_pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
+
+                HandlePointerRelease(State.Position, State.ButtonMask, 0, Pipeline.Tree);
+
+                State.IsCaptured = false;
+            }
+        } break;
+
+        default:
+        {
+            VOID_ASSERT(!"Unknown Event Type");
+        } break;
+
+        }
+    }
+
+    // If _some_ ButtonMask is 0 then it means the pointer is in a hover state.
+    // We look for that hover target in any of the pipelines.
+
+    for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
+    {
+        ui_pointer_state &State = PointerStates[PointerIdx];
+
+        if(State.ButtonMask == 0)
+        {
+            for(uint32_t Idx = 0; Idx < Context.PipelineCount; ++Idx)
+            {
+                ui_pipeline &Pipeline = Context.PipelineArray[Idx];
+
+                bool Handled = HandlePointerHover(State.Position, 0, Pipeline.Tree);
+                if(Handled)
+                {
+                    break;
+                }
+            }
+        }
     }
 
     Context.WindowSize = WindowSize;
@@ -963,6 +1071,7 @@ UICreatePipeline(const ui_pipeline_params &Params)
 
     // User State
     {
+        Pipeline.Type          = Params.Pipeline;
         Pipeline.StyleArray    = Params.StyleArray;
         Pipeline.StyleIndexMin = Params.StyleIndexMin;
         Pipeline.StyleIndexMax = Params.StyleIndexMax;

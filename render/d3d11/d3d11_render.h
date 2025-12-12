@@ -35,7 +35,7 @@ typedef struct d3d11_rect_uniform_buffer
 typedef struct d3d11_input_layout
 {
     const D3D11_INPUT_ELEMENT_DESC *Desc;
-              uint32_t                       Count;
+    uint32_t                        Count;
 } d3d11_input_layout;
 
 typedef struct d3d11_renderer
@@ -69,6 +69,9 @@ const static D3D11_INPUT_ELEMENT_DESC D3D11RectILayout[] =
     {"POS" , 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
     {"FONT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
     {"COL" , 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+    {"COL" , 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+    {"COL" , 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+    {"COL" , 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
     {"CORR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
     {"STY" , 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
 };
@@ -85,18 +88,21 @@ const static uint8_t D3D11RectShader[] =
 "                                                                                                  \n"
 "struct CPUToVertex                                                                                \n"
 "{                                                                                                 \n"
-"    float4 RectInPixel         : POS;                                                             \n"
-"    float4 AtlasSrcInPixel     : FONT;                                                            \n"
-"    float4 Color               : COL;                                                             \n"
-"    float4 CornderRadiiInPixel : CORR;                                                            \n"
-"    float4 StyleParams         : STY;                                                             \n" // X: BorderWidth, Y: Softness, Z: Sample Atlas
-"    uint   VertexId            : SV_VertexID;                                                     \n"
+"    float4 RectInPixel        : POS;                                                             \n"
+"    float4 AtlasSrcInPixel    : FONT;                                                            \n"
+"    float4 ColorTopLeft       : COL0;                                                            \n"
+"    float4 ColorBotLeft       : COL1;                                                            \n"
+"    float4 ColorTopRight      : COL2;                                                            \n"
+"    float4 ColorBotRight      : COL3;                                                            \n"
+"    float4 CornerRadiiInPixel : CORR;                                                            \n"
+"    float4 StyleParams        : STY;                                                             \n" // X: BorderWidth, Y: Softness, Z: Sample Atlas
+"    uint   VertexId           : SV_VertexID;                                                     \n"
 "};                                                                                                \n"
 "                                                                                                  \n"
 "struct VertexToPixel                                                                              \n"
 "{                                                                                                 \n"
 "   float4 Position            : SV_POSITION;                                                      \n"
-"   float4 Color               : COL;                                                              \n"
+"   float4 Tint                : TINT;                                                             \n"
 "   float2 TexCoordInPercent   : TXP;                                                              \n"
 "   float2 SDFSamplePos        : SDF;                                                              \n"
 "   float  CornerRadiusInPixel : COR;                                                              \n"
@@ -137,12 +143,12 @@ const static uint8_t D3D11RectShader[] =
 "        float2(RectBotRightInPixel.x, RectTopLeftInPixel.y ),                                     \n"
 "    };                                                                                            \n"
 "                                                                                                  \n"
-"    float CornderRadiusInPixel[] =                                                                \n"
+"    float CornerRadiusInPixel[] =                                                                 \n"
 "    {                                                                                             \n"
-"        Input.CornderRadiiInPixel.y,                                                              \n"
-"        Input.CornderRadiiInPixel.x,                                                              \n"
-"        Input.CornderRadiiInPixel.w,                                                              \n"
-"        Input.CornderRadiiInPixel.z,                                                              \n"
+"        Input.CornerRadiiInPixel.y,                                                               \n"
+"        Input.CornerRadiiInPixel.x,                                                               \n"
+"        Input.CornerRadiiInPixel.w,                                                               \n"
+"        Input.CornerRadiiInPixel.z,                                                               \n"
 "    };                                                                                            \n"
 "                                                                                                  \n"
 "    float2 AtlasSourceInPixel[] =                                                                 \n"
@@ -151,6 +157,14 @@ const static uint8_t D3D11RectShader[] =
 "        float2(AtlasTopLeftInPixel.x , AtlasTopLeftInPixel.y ),                                   \n"
 "        float2(AtlasBotRightInPixel.x, AtlasBotRightInPixel.y),                                   \n"
 "        float2(AtlasBotRightInPixel.x, AtlasTopLeftInPixel.y ),                                   \n"
+"    };                                                                                            \n"
+"                                                                                                  \n"
+"    float4 SourceColor[] =                                                                        \n"
+"    {                                                                                             \n"
+"        Input.ColorBotLeft,                                                                       \n"
+"        Input.ColorTopLeft,                                                                       \n"
+"        Input.ColorBotRight,                                                                      \n"
+"        Input.ColorTopRight,                                                                      \n"
 "    };                                                                                            \n"
 "                                                                                                  \n"
 "    float2 CornerAxisPercent;                                                                     \n"
@@ -164,12 +178,12 @@ const static uint8_t D3D11RectShader[] =
 "    Output.Position.xy         = ((2.f * Transformed) / ViewportSizeInPixel) - 1.f;               \n"
 "    Output.Position.z          = 0.f;                                                             \n"
 "    Output.Position.w          = 1.f;                                                             \n"
-"    Output.CornerRadiusInPixel = CornderRadiusInPixel[Input.VertexId];                            \n"
+"    Output.CornerRadiusInPixel = CornerRadiusInPixel[Input.VertexId];                             \n"
 "    Output.BorderWidthInPixel  = Input.StyleParams.x;                                             \n"
 "    Output.SoftnessInPixel     = Input.StyleParams.y;                                             \n"
 "    Output.RectHalfSizeInPixel = RectSizeInPixel / 2.f;                                           \n"
 "    Output.SDFSamplePos        = (2.f * CornerAxisPercent - 1.f) * Output.RectHalfSizeInPixel;    \n"
-"    Output.Color               = Input.Color;                                                     \n"
+"    Output.Tint                = SourceColor[Input.VertexId];                                     \n"
 "    Output.MustSampleAtlas     = Input.StyleParams.z;                                             \n"
 "    Output.TexCoordInPercent   = AtlasSourceInPixel[Input.VertexId] / AtlasSizeInPixel;           \n"
 "                                                                                                  \n"
@@ -212,7 +226,7 @@ const static uint8_t D3D11RectShader[] =
 "    }                                                                                             \n"
 "                                                                                                  \n"
 "    float4 Output = AlbedoSample;                                                                 \n"
-"    Output   *= Input.Color;                                                                      \n"
+"    Output   *= Input.Tint;                                                                       \n"
 "    Output.a *= CornerSDF;                                                                        \n"
 "    Output.a *= BorderSDF;                                                                        \n"
 "                                                                                                  \n"

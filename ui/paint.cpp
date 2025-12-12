@@ -98,12 +98,17 @@ GetPaintBatchList(ui_resource_key TextKey, ui_resource_key ImageKey, memory_aren
     return Result;
 }
 
+// We do not do any gradient stuff right now, but a basic version is implemented.
+
 static void
 PaintUIRect(rect_float Rect, ui_color Color, ui_corner_radius CornerRadii, float BorderWidth, float Softness, render_batch_list *BatchList, memory_arena *Arena)
 {
     ui_rect *UIRect = (ui_rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
-    UIRect->Color         = Color;
+    UIRect->ColorTL       = Color;
+    UIRect->ColorBL       = Color;
+    UIRect->ColorTR       = Color;
+    UIRect->ColorBR       = Color; 
     UIRect->CornerRadii   = CornerRadii;
     UIRect->BorderWidth   = BorderWidth;
     UIRect->Softness      = Softness;
@@ -116,7 +121,10 @@ PaintUIImage(rect_float Rect, rect_float Source, render_batch_list *BatchList, m
 {
     ui_rect *UIRect = (ui_rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
-    UIRect->Color         = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
+    UIRect->ColorTL       = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
+    UIRect->ColorBL       = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
+    UIRect->ColorTR       = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
+    UIRect->ColorBR       = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
     UIRect->CornerRadii   = {.TL = 0, .TR = 0, .BR = 0, .BL = 0};
     UIRect->BorderWidth   = 0;
     UIRect->Softness      = 0;
@@ -129,7 +137,10 @@ PaintUIGlyph(rect_float Rect, ui_color Color, rect_float Source, render_batch_li
 {
     ui_rect *UIRect = (ui_rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
-    UIRect->Color         = Color;
+    UIRect->ColorTL       = Color;
+    UIRect->ColorBL       = Color;
+    UIRect->ColorTR       = Color;
+    UIRect->ColorBR       = Color;
     UIRect->CornerRadii   = {.TL = 0, .TR = 0, .BR = 0, .BL = 0};
     UIRect->BorderWidth   = 0;
     UIRect->Softness      = 0;

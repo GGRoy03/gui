@@ -157,10 +157,10 @@ struct ui_hovered_properties
     {
         ui_paint_properties Result = Default;
 
-        if (Color.IsSet)        Result.Color        = Color;        else Result.Color = Default.Color;
-        if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;  else Result.Color = Default.Color;
-        if (Softness.IsSet)     Result.Softness     = Softness;     else Result.Color = Default.Color;
-        if (CornerRadius.IsSet) Result.CornerRadius = CornerRadius; else Result.Color = Default.Color;
+        if (Color.IsSet)        Result.Color        = Color;        else Result.Color        = Default.Color;
+        if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;  else Result.BorderColor  = Default.BorderColor;
+        if (Softness.IsSet)     Result.Softness     = Softness;     else Result.Softness     = Default.Softness;
+        if (CornerRadius.IsSet) Result.CornerRadius = CornerRadius; else Result.CornerRadius = Default.CornerRadius;
 
         return Result;
     }
@@ -180,15 +180,13 @@ struct ui_focused_properties
     {
         ui_paint_properties Result = Default;
 
-        // Inherit
-        if (Color.IsSet)        Result.Color        = Color;        else Result.Color = Default.Color;
-        if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;  else Result.Color = Default.Color;
-        if (TextColor.IsSet)    Result.TextColor    = TextColor;    else Result.Color = Default.Color;
-        if (CaretColor.IsSet)   Result.CaretColor   = CaretColor;   else Result.Color = Default.Color;
-        if (CaretWidth.IsSet)   Result.CaretWidth   = CaretWidth;   else Result.Color = Default.Color;
-        if (Softness.IsSet)     Result.Softness     = Softness;     else Result.Color = Default.Color;
-        if (CornerRadius.IsSet) Result.CornerRadius = CornerRadius; else Result.Color = Default.Color;
-
+        if (Color.IsSet)        Result.Color        = Color;        else Result.Color        = Default.Color;
+        if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;  else Result.BorderColor  = Default.BorderColor;
+        if (TextColor.IsSet)    Result.TextColor    = TextColor;    else Result.TextColor    = Default.TextColor;
+        if (CaretColor.IsSet)   Result.CaretColor   = CaretColor;   else Result.CaretColor   = Default.CaretColor;
+        if (CaretWidth.IsSet)   Result.CaretWidth   = CaretWidth;   else Result.CaretWidth   = Default.CaretWidth;
+        if (Softness.IsSet)     Result.Softness     = Softness;     else Result.Softness     = Default.Softness;
+        if (CornerRadius.IsSet) Result.CornerRadius = CornerRadius; else Result.CornerRadius = Default.CornerRadius;
         return Result;
     }
 };

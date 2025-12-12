@@ -23,42 +23,6 @@ EnqueuePointerEvent(PointerEvent Type, memory_arena *Arena, pointer_event_list &
 // @Private: Pointer Events Helpers
 
 static void
-ConsumePointerEvent(pointer_event_node *Node, pointer_event_list *List)
-{
-    VOID_ASSERT(Node);            // Internal Corruption
-    VOID_ASSERT(List);            // Internal Corruption
-    VOID_ASSERT(List->Count > 0); // Internal Corruption
-
-    pointer_event_node *Prev = Node->Prev;
-    pointer_event_node *Next = Node->Next;
-
-    if(Prev)
-    {
-        Prev->Next = Next;
-    }
-
-    if(Next)
-    {
-        Next->Prev = Prev;
-    }
-
-    if(Node == List->First)
-    {
-        List->First = Next;
-    }
-
-    if(Node == List->Last)
-    {
-        List->Last = Prev;
-    }
-
-    --List->Count;
-
-    Node->Prev = 0;
-    Node->Next = 0;
-}
-
-static void
 EnqueuePointerMoveEvent(vec2_float Position, vec2_float Delta, memory_arena *Arena, pointer_event_list &List)
 {
     pointer_event_node *Node = EnqueuePointerEvent(PointerEvent::Move, Arena, List);
@@ -87,16 +51,6 @@ EnqueuePointerReleaseEvent(uint32_t Button, vec2_float Position, memory_arena *A
     if(Node)
     {
         Node->Value.ButtonMask = Button;
-        Node->Value.Position   = Position;
-    }
-}
-
-static void
-EnqueuePointerHoverEvent(vec2_float Position, memory_arena *Arena, pointer_event_list &List)
-{
-    pointer_event_node *Node = EnqueuePointerEvent(PointerEvent::Hover, Arena, List);
-    if(Node)
-    {
         Node->Value.Position   = Position;
     }
 }

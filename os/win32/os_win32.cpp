@@ -300,16 +300,6 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, int ShowCmd
             DispatchMessage(&Message);
         }
 
-        // WARN:
-        // This is the only part I dislike. One part of the problem is that this knows
-        // too much about what its trying to solve. The other part is that
-        // it feels like a dirty trick. Uhm.
-
-        if(OSWin32State.Inputs.Pointers[0].ButtonMask == BUTTON_NONE)
-        {
-            EnqueuePointerHoverEvent(OSWin32State.Inputs.Pointers[0].Position, 0, OSWin32State.Inputs.PointerEventList);
-        }
-
         vec2_int ClientSize = OSWin32GetClientSize(OSWin32State.HWindow);
 
         {

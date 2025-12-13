@@ -4,27 +4,27 @@
 typedef struct d3d11_format
 {
     DXGI_FORMAT Native;
-    uint32_t         BytesPerPixel;
+    uint32_t    BytesPerPixel;
 } d3d11_format;
 
 static d3d11_renderer *
 D3D11GetRenderer(render_handle HRenderer)
 {
-    d3d11_renderer *Result = (d3d11_renderer *)HRenderer.uint64_t[0];
+    d3d11_renderer *Result = (d3d11_renderer *)HRenderer.Value[0];
     return Result;
 }
 
 static ID3D11Texture2D *
 D3D11GetTexture2D(render_handle Handle)
 {
-    ID3D11Texture2D *Result = (ID3D11Texture2D *)Handle.uint64_t[0];
+    ID3D11Texture2D *Result = (ID3D11Texture2D *)Handle.Value[0];
     return Result;
 }
 
 static ID3D11ShaderResourceView *
 D3D11GetShaderView(render_handle Handle)
 {
-    ID3D11ShaderResourceView *Result = (ID3D11ShaderResourceView *)Handle.uint64_t[0];
+    ID3D11ShaderResourceView *Result = (ID3D11ShaderResourceView *)Handle.Value[0];
     return Result;
 }
 
@@ -35,6 +35,7 @@ D3D11GetVertexBuffer(uint64_t Size, d3d11_renderer *Renderer)
 
     if(Size > VOID_KILOBYTE(64))
     {
+        VOID_ASSERT(!"Implement");
     }
 
     return Result;
@@ -71,13 +72,13 @@ D3D11Release(d3d11_renderer *Renderer)
 }
 
 static d3d11_format
-D3D11GetFormat(RenderTexture_Type Type)
+D3D11GetFormat(RenderTexture Type)
 {
     d3d11_format Result = {};
 
     switch(Type)
     {
-        case RenderTexture_RGBA:
+        case RenderTexture::RGBA:
         {
             Result.Native        = DXGI_FORMAT_R8G8B8A8_UNORM;
             Result.BytesPerPixel = 4;
@@ -92,18 +93,10 @@ D3D11GetFormat(RenderTexture_Type Type)
     return Result;
 }
 
-static D3D11_TEXTURE_ADDRESS_MODE
-D3D11GetTextureAddressMode(RenderTexture_Wrap Type)
+static bool
+D3D11IsValidFormat(d3d11_format Format)
 {
-    D3D11_TEXTURE_ADDRESS_MODE Result = D3D11_TEXTURE_ADDRESS_CLAMP;
-
-    switch(Type)
-    {
-        case RenderTextureWrap_Clamp:  Result = D3D11_TEXTURE_ADDRESS_CLAMP;  break;
-        case RenderTextureWrap_Repeat: Result = D3D11_TEXTURE_ADDRESS_WRAP;   break;
-        case RenderTextureWrap_Mirror: Result = D3D11_TEXTURE_ADDRESS_MIRROR; break;
-    }
-
+    bool Result = (Format.BytesPerPixel > 0) && (Format.Native != DXGI_FORMAT_UNKNOWN);
     return Result;
 }
 
@@ -358,7 +351,7 @@ InitializeRenderer(void *HWindow, vec2_int Resolution, memory_arena *Arena)
         Renderer->LastResolution = Resolution;
     }
 
-    Result.uint64_t[0] = (uint64_t)Renderer;
+    Result.Value[0] = (uint64_t)Renderer;
     return Result;
 }
 
@@ -665,116 +658,73 @@ TransferGlyph(rect_float Rect, render_handle HRenderer, gpu_font_context *FontCo
 }
 
 // -----------------------------------------------------------------------------------
-// Texture Private Implementation
+// @Public: Texture API
 
-static bool
-D3D11IsValidTexture(render_texture RenderTexture)
+static render_handle
+CreateRenderTexture(uint16_t SizeX, uint16_t SizeY, RenderTexture Type)
 {
-    bool Result = IsValidRenderHandle(RenderTexture.Texture) && IsValidRenderHandle(RenderTexture.View) && !RenderTexture.Size.IsEmpty();
-    return Result;
-}
+    VOID_ASSERT(SizeX > 0 && SizeY > 0);
+    VOID_ASSERT(Type != RenderTexture::None);
 
-// -----------------------------------------------------------------------------------
-// Texture Public Implementation
-
-static render_texture
-CreateRenderTexture(render_texture_params Params)
-{
-    VOID_ASSERT(Params.Width > 0 && Params.Height > 0);
+    render_handle Result = RenderHandle(0);
 
     d3d11_renderer *Backend = D3D11GetRenderer(RenderState.Renderer);
     VOID_ASSERT(Backend);
 
-    d3d11_format Format = D3D11GetFormat(Params.Type);
-
-    D3D11_TEXTURE2D_DESC TextureDesc = {};
-    TextureDesc.Width              = Params.Width;
-    TextureDesc.Height             = Params.Height;
-    TextureDesc.MipLevels          = Params.GenerateMipmaps ? 0 : 1;
-    TextureDesc.ArraySize          = 1;
-    TextureDesc.Format             = Format.Native;
-    TextureDesc.SampleDesc.Count   = 1;
-    TextureDesc.SampleDesc.Quality = 0;
-    TextureDesc.Usage              = D3D11_USAGE_DEFAULT;
-    TextureDesc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
-    TextureDesc.CPUAccessFlags     = 0;
-    TextureDesc.MiscFlags          = Params.GenerateMipmaps ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0;
-
-    D3D11_SUBRESOURCE_DATA  InitData        = {};
-    D3D11_SUBRESOURCE_DATA *InitDataPointer = 0;
-
-    if(Params.InitialData)
+    d3d11_format Format = D3D11GetFormat(Type);
+    if(D3D11IsValidFormat(Format) && Backend)
     {
-        InitData.pSysMem          = Params.InitialData;
-        InitData.SysMemPitch      = Params.Width * Format.BytesPerPixel;
-        InitData.SysMemSlicePitch = 0;
+        D3D11_TEXTURE2D_DESC TextureDesc =
+        {
+            .Width      = SizeX,
+            .Height     = SizeY,
+            .MipLevels  = 1,
+            .ArraySize  = 1,
+            .Format     = Format.Native,
+            .SampleDesc =
+            {
+                .Count   = 1,
+                .Quality = 0,
+            },
+            .Usage      = D3D11_USAGE_DEFAULT,
+            .BindFlags  = D3D11_BIND_SHADER_RESOURCE,
+        };
 
-        InitDataPointer = &InitData;
+        Backend->Device->CreateTexture2D(&TextureDesc, nullptr, reinterpret_cast<ID3D11Texture2D **>(&Result.Value));
     }
-
-    ID3D11Texture2D *Texture = nullptr;
-    HRESULT HR = Backend->Device->CreateTexture2D(&TextureDesc, InitDataPointer, &Texture);
-    VOID_ASSERT(SUCCEEDED(HR));
-
-    D3D11_SHADER_RESOURCE_VIEW_DESC ViewDesc = {};
-    ViewDesc.Format                    = Format.Native;
-    ViewDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
-    ViewDesc.Texture2D.MostDetailedMip = 0;
-    ViewDesc.Texture2D.MipLevels       = Params.GenerateMipmaps ? -1 : 1;
-
-    ID3D11ShaderResourceView *View = nullptr;
-    HR = Backend->Device->CreateShaderResourceView((ID3D11Resource*)Texture, &ViewDesc, &View);
-    VOID_ASSERT(SUCCEEDED(HR));
-
-    if(Params.GenerateMipmaps && Params.InitialData)
-    {
-        Backend->DeviceContext->GenerateMips(View);
-    }
-
-    render_texture Result = {};
-    Result.Texture = RenderHandle((uint64_t)Texture);
-    Result.View    = RenderHandle((uint64_t)View);
-    Result.Size    = vec2_float(Params.Width, Params.Height);
 
     return Result;
 }
 
-static void
-CopyIntoRenderTexture(render_texture RenderTexture, rect_float Source, uint8_t *Pixels, uint32_t Pitch)
+static render_handle
+CreateRenderTextureView(render_handle TextureHandle, RenderTexture Type)
 {
-    VOID_ASSERT(D3D11IsValidTexture(RenderTexture));
-    VOID_ASSERT(Pixels);
+    render_handle Result = {};
 
-    D3D11_BOX Box =
+    d3d11_renderer *Backend = D3D11GetRenderer(RenderState.Renderer);
+    VOID_ASSERT(Backend);
+
+    if(IsValidRenderHandle(TextureHandle) && Backend)
     {
-        .left   = (UINT)Source.Left,
-        .top    = (UINT)Source.Top,
-        .front  = 0,
-        .right  = (UINT)Source.Right,
-        .bottom = (UINT)Source.Bottom,
-        .back   = 1,
-    };
+        ID3D11Texture2D *Texture = D3D11GetTexture2D(TextureHandle);
 
-    d3d11_renderer *Renderer = D3D11GetRenderer(RenderState.Renderer);
-    VOID_ASSERT(Renderer);
+        d3d11_format Format = D3D11GetFormat(Type);
+        if(D3D11IsValidFormat(Format))
+        {
+            D3D11_SHADER_RESOURCE_VIEW_DESC ViewDesc =
+            {
+                .Format        = Format.Native,
+                .ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+                .Texture2D     =
+                {
+                    .MostDetailedMip = 0,
+                    .MipLevels       = 1,
+                },
+            };
 
-    ID3D11Texture2D *Texture = D3D11GetTexture2D(RenderTexture.Texture);
-    VOID_ASSERT(Texture);
+            Backend->Device->CreateShaderResourceView(static_cast<ID3D11Resource *>(Texture), &ViewDesc, reinterpret_cast<ID3D11ShaderResourceView **>(&Result.Value));
+        }
+    }
 
-    Renderer->DeviceContext->UpdateSubresource((ID3D11Resource *)Texture, 0, &Box, Pixels, Pitch, 0);
-}
-
-// ===================================================================================
-// NOTE: I don't know yet.
-
-static byte_string
-GetDefaultVtxShader(void)
-{
-    return byte_string_compile(D3D11RectShader);
-}
-
-static byte_string
-GetDefaultPxlShader(void)
-{
-    return byte_string_compile(D3D11RectShader);
+    return Result;
 }

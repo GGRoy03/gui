@@ -15,7 +15,7 @@ typedef enum RenderPass_Type
 
 typedef struct render_handle
 {
-    uint64_t uint64_t[1];
+    uint64_t Value[1];
 } render_handle;
 
 
@@ -150,7 +150,7 @@ static bool          RenderHandleMatches    (render_handle H1, render_handle H2)
 
 static void        * PushDataInBatchList      (memory_arena *Arena, render_batch_list *BatchList);
 static render_pass * GetRenderPass            (memory_arena *Arena, RenderPass_Type Type);
-static bool           CanMergeRectGroupParams  (rect_group_params *Old, rect_group_params *New);
+static bool          CanMergeRectGroupParams  (rect_group_params *Old, rect_group_params *New);
 
 // [PER-RENDERER API]
 
@@ -158,87 +158,13 @@ static render_handle InitializeRenderer    (void *HWindow, vec2_int Resolution, 
 static void          SubmitRenderCommands  (render_handle HRenderer, vec2_int Resolution, render_pass_list *RenderPassList);
 
 // ------------------------------------------------------------------------------------
-// Textures
+// @Internal : Textures
 
-typedef enum RenderTexture_Type
+enum class RenderTexture
 {
-    RenderTexture_None  = 0,
-    RenderTexture_RGBA  = 1,
-} RenderTexture_Type;
+    None = 0,
+    RGBA = 1,
+};
 
-typedef enum RenderTexture_Filter
-{
-    RenderTextureFilter_Nearest = 0,
-    RenderTextureFilter_Linear  = 1,
-} RenderTexture_Filter;
-
-typedef enum RenderTexture_Wrap
-{
-    RenderTextureWrap_Clamp  = 1,
-    RenderTextureWrap_Repeat = 2,
-    RenderTextureWrap_Mirror = 3,
-} RenderTexture_Wrap;
-
-typedef struct render_texture_params
-{
-    RenderTexture_Type   Type;
-    int                  Width;
-    int                  Height;
-    RenderTexture_Filter MinFilter;
-    RenderTexture_Filter MagFilter;
-    RenderTexture_Wrap   WrapU;
-    RenderTexture_Wrap   WrapV;
-    void                *InitialData;
-    uint32_t             InitialDataSize;
-    bool                 GenerateMipmaps;
-} render_texture_params;
-
-typedef struct render_texture
-{
-    render_handle Texture;
-    render_handle View;
-    vec2_float      Size;
-} render_texture;
-
-static render_texture CreateRenderTexture    (render_texture_params Params);
-static void           CopyIntoRenderTexture  (render_texture Texture, rect_float Source, uint8_t *Pixels, uint32_t Pitch);
-
-// CreateGlyphCache:
-//   Creates the GPU resource used as the persistent glyph cache.
-//   Populates FontContext with the cache-related resources.
-//   Returns 1 on success, 0 on failure.
-//   The caller is responsible for freeing the resources allocated by using ReleaseGlyphCache if this function fails.
-//
-// CreateGlyphTransfer:
-//   Creates the GPU resource used as the transfer/render target for rasterizing glyphs.
-//   Populates FontContext with the transfer-related resources.
-//   Returns 1 on success, 0 on failure.
-//   The caller is responsible for freeing the resources allocated by using ReleaseGlyphTransfer if this function fails.
-//
-// ReleaseGlyphCache:
-//   Releases/cleans any resources associated with the glyph cache stored in FontContext.
-//   Safe to call with NULL. After this call the cache-related fields in FontContext are invalid.
-//
-// ReleaseGlyphTransfer:
-//   Releases/cleans any resources associated with the transfer/render-target in FontContext.
-//   Safe to call with NULL. After this call the transfer-related fields in FontContext are invalid.
-//
-// TransferGlyph:
-//   Copies a rectangular region from the transfer resource into the persistent glyph cache.
-//   Rect describes the area to copy and the destination offset inside the cache.
-//   Typical flow: create transfer resource -> rasterize glyphs into it -> call TransferGlyph to copy into cache.
-//   You may generate the rects however you want, but they must not overlap.
-
-typedef struct gpu_font_context gpu_font_context;
-
-static bool  CreateGlyphCache      (render_handle HRenderer, vec2_float TextureSize, gpu_font_context *FontContext);
-static bool  CreateGlyphTransfer   (render_handle HRenderer, vec2_float TextureSize, gpu_font_context *FontContext);
-static void ReleaseGlyphCache     (gpu_font_context *FontContext);
-static void ReleaseGlyphTransfer  (gpu_font_context *FontContext);
-static void TransferGlyph         (rect_float Rect, render_handle HRenderer, gpu_font_context *FontContext);
-
-// ===================================================================================
-// NOTE: Whole API is kinda garbage right now. It's quite hard to follow.
-
-static byte_string GetDefaultVtxShader  (void);
-static byte_string GetDefaultPxlShader  (void);
+static render_handle CreateRenderTexture      (uint16_t SizeX, uint16_t SizeY, RenderTexture Type);
+static render_handle CreateRenderTextureView  (render_handle TextureHandle, RenderTexture Type);

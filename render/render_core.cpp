@@ -3,21 +3,21 @@
 static render_handle
 RenderHandle(uint64_t Handle)
 {
-    render_handle Result = { Handle };
+    render_handle Result = { .Value = Handle };
     return Result;
 }
 
 static bool
 IsValidRenderHandle(render_handle Handle)
 {
-    bool Result = (Handle.uint64_t[0] != 0);
+    bool Result = (Handle.Value[0] != 0);
     return Result;
 }
 
 static bool 
 RenderHandleMatches(render_handle H1, render_handle H2)
 {
-    bool Result = (H1.uint64_t[0] == H2.uint64_t[0]);
+    bool Result = (H1.Value[0] == H2.Value[0]);
     return Result;
 }
 

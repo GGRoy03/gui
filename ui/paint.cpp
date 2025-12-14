@@ -47,29 +47,22 @@ GetPaintBatchList(ui_resource_key TextKey, ui_resource_key ImageKey, memory_aren
         Params.Transform = Mat3x3Identity();
         Params.Clip      = RectangleClip;
 
-        if(IsValidResourceKey(TextKey))
+        ui_resource_state TextState = FindResourceByKey(TextKey, FindResourceFlag::None, Context.ResourceTable);
+        if(TextState.Resource)
         {
-            ui_resource_state TextResource = FindResourceByKey(TextKey, Context.ResourceTable);
-            if(TextResource.ResourceType == UIResource_Text && TextResource.Resource)
+            auto *Text      = static_cast<ui_text *>(TextState.Resource);
+            auto  FontState = FindResourceByKey(Text->FontKey, FindResourceFlag::None, Context.ResourceTable);
+            
+            if(FontState.Resource)
             {
-                auto *Text = static_cast<ui_text *>(TextResource.Resource);
+                ui_font *Font = static_cast<ui_font *>(FontState.Resource);
 
-                ui_resource_state FontState = FindResourceByKey(Text->FontKey, Context.ResourceTable);
-                if(FontState.Resource)
-                {
-                    ui_font *Font = static_cast<ui_font *>(FontState.Resource);
-
-                    Params.Texture     = Font->TextureView;
-                    Params.TextureSize = Font->TextureSize;
-
-                }
+                Params.Texture     = Font->TextureView;
+                Params.TextureSize = Font->TextureSize;
             }
         }
 
-        if(IsValidResourceKey(ImageKey))
-        {
-            // TODO: Reimplement.
-        }
+        // TODO: Re-Implement Image Check.
     }
 
     bool CanMergeNodes = (Node && CanMergeRectGroupParams(&Node->Params, &Params));

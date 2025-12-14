@@ -7,7 +7,7 @@ UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t Cac
     void_context &Context = GetVoidContext();
 
     ui_resource_key   Key   = MakeFontResourceKey(Name, Size);
-    ui_resource_state State = FindResourceByKey(Key, Context.ResourceTable);
+    ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 
     if(!State.Resource)
     {
@@ -42,29 +42,51 @@ UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t Cac
 // =================================================================
 // @Internal: Static Text Implementation
 
-// TODO:
-// So this should be somewhat trivial. We just have to call FillAtlas using the glyph_generator.
-// And store the relevant data inside our own structure. We also need to give the rasterized list to
-// the renderer.
-
-// TODO:
-// On NText side we probably have to provide some kind of source rect instead of simply returning layout info.
-// We also have to provide a function that pops the arena every frame.
-
 static uint64_t
-GetTextFootprint(uint64_t Size)
+GetTextFootprint(uint64_t TextSize)
 {
-    return 0;
+    uint64_t BufferSize = TextSize * sizeof(ui_shaped_glyph);
+    uint64_t Result     = sizeof(ui_text) + BufferSize;
+
+    return Result;
 }
 
 
 static ui_text *
-PlaceTextInMemory(byte_string String, void *Memory)
+PlaceTextInMemory(byte_string Text, ui_resource_key FontKey, void *Memory)
 {
-    ui_text *Result = 0;
+    ui_text      *Result  = 0;
+    void_context &Context = GetVoidContext();
 
-    if(Memory)
+    if(Memory && Context.ResourceTable)
     {
+        ui_resource_state State = FindResourceByKey(FontKey, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
+        if(State.Resource)
+        {
+            ui_shaped_glyph *Shaped = static_cast<ui_shaped_glyph *>(Memory);
+            Result = reinterpret_cast<ui_text *>(Shaped + Text.Size);
+            Result->Shaped  = Shaped;
+            Result->FontKey = FontKey;
+
+            ui_font *Font = static_cast<ui_font *>(State.Resource);
+
+            ntext::shaped_glyph_run Run = FillAtlas(reinterpret_cast<char *>(Text.String), Text.Size, Font->Generator);
+            Result->ShapedCount = Run.ShapedCount;
+
+            for(uint32_t Idx = 0; Idx < Run.ShapedCount; ++Idx)
+            {
+                Result->Shaped[Idx].OffsetX = Run.Shaped[Idx].Layout.OffsetX;
+                Result->Shaped[Idx].OffsetY = Run.Shaped[Idx].Layout.OffsetY;
+                Result->Shaped[Idx].Advance = Run.Shaped[Idx].Layout.Advance;
+
+                Result->Shaped[Idx].Source = rect_float(Run.Shaped[Idx].Source.Left,
+                                                        Run.Shaped[Idx].Source.Top,
+                                                        Run.Shaped[Idx].Source.Right,
+                                                        Run.Shaped[Idx].Source.Bottom);
+            }
+
+            UpdateGlyphCache(Font->Texture, Run.UpdateList);
+        }
     }
 
     return Result;

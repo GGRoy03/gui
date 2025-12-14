@@ -25,7 +25,7 @@ struct ui_shaped_glyph
 };
 
 // Do we need to store Texture/TextureSize, since we can always get them from the font?
-// And it would also clear up the problem of who owns what (the font owns the texture)
+// And it would also fix the problem of who owns what (the font owns the texture)
 
 struct ui_text
 {
@@ -35,4 +35,4 @@ struct ui_text
 };
 
 static uint64_t  GetTextFootprint   (uint64_t Size);
-static ui_text * PlaceTextInMemory  (byte_string String, void *Memory);
+static ui_text * PlaceTextInMemory  (byte_string Text, ui_resource_key FontKey, void *Memory);

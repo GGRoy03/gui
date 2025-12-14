@@ -168,3 +168,5 @@ enum class RenderTexture
 
 static render_handle CreateRenderTexture      (uint16_t SizeX, uint16_t SizeY, RenderTexture Type);
 static render_handle CreateRenderTextureView  (render_handle TextureHandle, RenderTexture Type);
+
+static void          UpdateGlyphCache         (render_handle TextureHandle, const ntext::rasterized_glyph_list &List);

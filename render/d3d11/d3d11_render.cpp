@@ -519,145 +519,6 @@ SubmitRenderCommands(render_handle HRenderer, vec2_int Resolution, render_pass_l
 }
 
 // -----------------------------------------------------------------------------------
-// Glyph Public Implementation
-
-static bool
-IsValidGPUFontContext(gpu_font_context *Context)
-{
-    bool Result = (Context) && (Context->GlyphCache) && (Context->GlyphCacheView) && (Context->GlyphTransfer) && (Context->GlyphTransferView) && (Context->GlyphTransferSurface);
-    return Result;
-}
-
-static bool
-CreateGlyphCache(render_handle HRenderer, vec2_float TextureSize, gpu_font_context *FontContext)
-{
-    bool Result  = 0;
-
-    if (IsValidRenderHandle(HRenderer))
-    {
-        d3d11_renderer *Renderer = D3D11GetRenderer(HRenderer);
-
-        D3D11_TEXTURE2D_DESC Desc = { 0 };
-        Desc.Width            = (UINT)TextureSize.X;
-        Desc.Height           = (UINT)TextureSize.Y;
-        Desc.MipLevels        = 1;
-        Desc.ArraySize        = 1;
-        Desc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
-        Desc.SampleDesc.Count = 1;
-        Desc.Usage            = D3D11_USAGE_DEFAULT;
-        Desc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
-
-        Renderer->Device->CreateTexture2D(&Desc, 0, &FontContext->GlyphCache);
-        if (FontContext->GlyphCache)
-        {
-            Renderer->Device->CreateShaderResourceView((ID3D11Resource *)FontContext->GlyphCache, 0, &FontContext->GlyphCacheView);
-            Result = (FontContext->GlyphCacheView != 0);
-        }
-    }
-
-    return Result;
-}
-
-static void
-ReleaseGlyphCache(gpu_font_context *FontContext)
-{
-    if (FontContext)
-    {
-        if (FontContext->GlyphCache)
-        {
-            FontContext->GlyphCache->Release();
-            FontContext->GlyphCache = nullptr;
-        }
-
-        if (FontContext->GlyphCacheView)
-        {
-            FontContext->GlyphCacheView->Release();
-            FontContext->GlyphCacheView = nullptr;
-        }
-    }
-}
-
-static bool
-CreateGlyphTransfer(render_handle HRenderer, vec2_float TextureSize, gpu_font_context *FontContext)
-{
-    bool Result  = 0;
-
-    if (IsValidRenderHandle(HRenderer))
-    {
-        d3d11_renderer *Renderer = D3D11GetRenderer(HRenderer);
-
-        D3D11_TEXTURE2D_DESC Desc = {};
-        Desc.Width            = (UINT)TextureSize.X;
-        Desc.Height           = (UINT)TextureSize.Y;
-        Desc.MipLevels        = 1;
-        Desc.ArraySize        = 1;
-        Desc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
-        Desc.SampleDesc.Count = 1;
-        Desc.Usage            = D3D11_USAGE_DEFAULT;
-        Desc.BindFlags        = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-
-        Renderer->Device->CreateTexture2D(&Desc, 0, &FontContext->GlyphTransfer);
-        if (FontContext->GlyphTransfer)
-        {
-            Renderer->Device->CreateShaderResourceView((ID3D11Resource *)FontContext->GlyphTransfer, 0, &FontContext->GlyphTransferView);
-            if (FontContext->GlyphTransferView)
-            {
-                FontContext->GlyphTransfer->QueryInterface(__uuidof(IDXGISurface), (void **)&FontContext->GlyphTransferSurface);
-                Result = (FontContext->GlyphTransferSurface != 0);
-            }
-        }
-    }
-
-    return Result;
-}
-
-static void
-ReleaseGlyphTransfer(gpu_font_context *FontContext)
-{
-    if (FontContext)
-    {
-        if (FontContext->GlyphTransfer)
-        {
-            FontContext->GlyphTransfer->Release();
-            FontContext->GlyphTransfer = nullptr;
-        }
-
-        if (FontContext->GlyphTransferView)
-        {
-            FontContext->GlyphTransferView->Release();
-            FontContext->GlyphTransferView = nullptr;
-        }
-
-        if (FontContext->GlyphTransferSurface)
-        {
-            FontContext->GlyphTransferSurface->Release();
-            FontContext->GlyphTransferSurface = nullptr;
-        }
-    }
-}
-
-static void
-TransferGlyph(rect_float Rect, render_handle HRenderer, gpu_font_context *FontContext)
-{
-    if (IsValidRenderHandle(HRenderer) && IsValidGPUFontContext(FontContext))
-    {
-        d3d11_renderer *Renderer = D3D11GetRenderer(HRenderer);
-
-        D3D11_BOX SourceBox;
-        SourceBox.left   = 0;
-        SourceBox.top    = 0;
-        SourceBox.front  = 0;
-        SourceBox.right  = (UINT)Rect.Right;
-        SourceBox.bottom = (UINT)Rect.Bottom;
-        SourceBox.back   = 1;
-
-        Renderer->DeviceContext->CopySubresourceRegion((ID3D11Resource *)FontContext->GlyphCache,
-                                                      0, (UINT)Rect.Left, (UINT)Rect.Top, 0,
-                                                      (ID3D11Resource *)FontContext->GlyphTransfer, 0, &SourceBox);
-    }
-}
-
-// -----------------------------------------------------------------------------------
 // @Public: Texture API
 
 static render_handle
@@ -676,18 +537,15 @@ CreateRenderTexture(uint16_t SizeX, uint16_t SizeY, RenderTexture Type)
     {
         D3D11_TEXTURE2D_DESC TextureDesc =
         {
-            .Width      = SizeX,
-            .Height     = SizeY,
-            .MipLevels  = 1,
-            .ArraySize  = 1,
-            .Format     = Format.Native,
-            .SampleDesc =
-            {
-                .Count   = 1,
-                .Quality = 0,
-            },
-            .Usage      = D3D11_USAGE_DEFAULT,
-            .BindFlags  = D3D11_BIND_SHADER_RESOURCE,
+            .Width          = SizeX,
+            .Height         = SizeY,
+            .MipLevels      = 1,
+            .ArraySize      = 1,
+            .Format         = Format.Native,
+            .SampleDesc     = {.Count   = 1, .Quality = 0,},
+            .Usage          = D3D11_USAGE_DYNAMIC,
+            .BindFlags      = D3D11_BIND_SHADER_RESOURCE,
+            .CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
         };
 
         Backend->Device->CreateTexture2D(&TextureDesc, nullptr, reinterpret_cast<ID3D11Texture2D **>(&Result.Value));
@@ -727,4 +585,72 @@ CreateRenderTextureView(render_handle TextureHandle, RenderTexture Type)
     }
 
     return Result;
+}
+
+// TODO: Safer code
+
+// I guess the current way that NText works forces a dynamic texture. This is annoying.
+// And potentially bad. I believe dynamic resources are placed in a "worse" region in memory
+// than default textures. Uhmmmm. I guess we could do some sort of packing grouping that allows for
+// single updates. But this will give bad packing. Idk.
+
+static void
+UpdateGlyphCache(render_handle TextureHandle, const ntext::rasterized_glyph_list &List)
+{
+    d3d11_renderer *Backend = D3D11GetRenderer(RenderState.Renderer);
+    VOID_ASSERT(Backend);
+
+    ID3D11Texture2D *Texture = D3D11GetTexture2D(TextureHandle);
+    VOID_ASSERT(Texture);
+
+    D3D11_MAPPED_SUBRESOURCE Mapped = {};
+    HRESULT HR = Backend->DeviceContext->Map(Texture, 0, D3D11_MAP_WRITE_DISCARD, 0, &Mapped);
+    VOID_ASSERT(SUCCEEDED(HR) && Mapped.pData);
+
+    // Atlas is forced to RGBA8 for now.
+    uint32_t AtlasBPP      = 4;
+    uint8_t *AtlasBase     = (uint8_t *)Mapped.pData;
+    uint32_t AtlasRowPitch = (uint32_t)Mapped.RowPitch;
+
+    for (ntext::rasterized_glyph_node *Node = List.First; Node != 0; Node = Node->Next)
+    {
+        ntext::rasterized_glyph  &Glyph  = Node->Value;
+        ntext::rasterized_buffer &Buffer = Glyph.Buffer;
+
+        VOID_ASSERT(Buffer.BytesPerPixel == 1);
+
+        uint32_t DstLeft   = (uint32_t)Glyph.Source.Left;
+        uint32_t DstTop    = (uint32_t)Glyph.Source.Top;
+        uint32_t DstRight  = (uint32_t)Glyph.Source.Right;
+        uint32_t DstBottom = (uint32_t)Glyph.Source.Bottom;
+
+        uint32_t CopyWidth  = (DstRight  > DstLeft) ? (DstRight - DstLeft) : 0;
+        uint32_t CopyHeight = (DstBottom > DstTop)  ? (DstBottom - DstTop) : 0;
+
+        if (CopyWidth == 0 || CopyHeight == 0) continue;
+
+        VOID_ASSERT(AtlasRowPitch >= CopyWidth * AtlasBPP);
+
+        uint8_t *SrcBase   = (uint8_t *)Buffer.Data;
+        uint32_t SrcStride = Buffer.Stride ? Buffer.Stride : CopyWidth;
+
+        for (uint32_t y = 0; y < Buffer.Height; ++y)
+        {
+            uint8_t *SrcRow = SrcBase   + (size_t)y * SrcStride;
+            uint8_t *DstRow = AtlasBase + (size_t)(DstTop + y) * AtlasRowPitch + (size_t)DstLeft * AtlasBPP;
+
+            for (uint32_t x = 0; x < Buffer.Width; ++x)
+            {
+                uint8_t  Alpha    = SrcRow[x];
+                uint8_t *DstPixel = DstRow + (size_t)x * AtlasBPP;
+
+                DstPixel[0] = 0xFF;
+                DstPixel[1] = 0xFF;
+                DstPixel[2] = 0xFF;
+                DstPixel[3] = Alpha;
+            }
+        }
+    }
+
+    Backend->DeviceContext->Unmap(Texture, 0);
 }

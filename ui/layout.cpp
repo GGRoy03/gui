@@ -1064,10 +1064,13 @@ GeneratePaintBuffer(ui_layout_tree *Tree, ui_cached_style *Cached, memory_arena 
                 Node->Flags &= ~LayoutNodeFlag::UseHoveredStyle;
             }
 
+            // Set Geometry
             Command.Rectangle     = GetNodeOuterRect(Node);
             Command.RectangleClip = {};
-            Command.TextKey       = {};
-            Command.ImageKey      = {};
+
+            // Set Resources Keys
+            Command.TextKey       = MakeNodeResourceKey(UIResource_Text , Node->Index, Tree);
+            Command.ImageKey      = MakeNodeResourceKey(UIResource_Image, Node->Index, Tree);
 
             // Set Paint Properties
             Command.CornerRadius  = Paint.CornerRadius.Value;

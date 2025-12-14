@@ -476,26 +476,11 @@ MakeFontResourceKey(byte_string Name, float Size)
     return Key;
 }
 
-// Perhaps this is a bad idea.
 
-static ui_resource_key
-MakeGlobalResourceKey(UIResource_Type Type, byte_string Name)
-{
-    uint64_t Low  = HashByteString(Name);
-    uint64_t High = ((uint64_t)Type << 32);
 
-    ui_resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
-    return Key;
-}
-
-static bool
-IsValidResourceKey(ui_resource_key Key)
-{
-    return true;
-}
 
 static ui_resource_state
-FindResourceByKey(ui_resource_key Key, ui_resource_table *Table)
+FindResourceByKey(ui_resource_key Key, FindResourceFlag Flags, ui_resource_table *Table)
 {
     ui_resource_entry *FoundEntry = 0;
 
@@ -528,7 +513,7 @@ FindResourceByKey(ui_resource_key Key, ui_resource_table *Table)
 
         ++Table->Stats.CacheHitCount;
     }
-    else
+    else if((Flags & FindResourceFlag::AddIfNotFound) != FindResourceFlag::None)
     {
         // If we miss an entry we have to first allocate a new one.
         // If we have some hash slot at X: Hash[X]
@@ -548,23 +533,28 @@ FindResourceByKey(ui_resource_key Key, ui_resource_table *Table)
         ++Table->Stats.CacheMissCount;
     }
 
-    // Every time we access an entry we must assure that this new entry is now
-    // the most recent one in the LRU chain.
-    // What we have: (Sentinel) -> (Entry)    -> (Entry) -> (Entry)
-    // What we want: (Sentinel) -> (NewEntry) -> (Entry) -> (Entry) -> (Entry)
+    if(FoundEntry)
+    {
+        // If we find an entry we must assure that this new entry is now
+        // the most recent one in the LRU chain.
+        // What we have: (Sentinel) -> (Entry)    -> (Entry) -> (Entry)
+        // What we want: (Sentinel) -> (NewEntry) -> (Entry) -> (Entry) -> (Entry)
 
-    ui_resource_entry *Sentinel = GetResourceSentinel(Table);
-    FoundEntry->NextLRU = Sentinel->NextLRU;
-    FoundEntry->PrevLRU = 0;
+        ui_resource_entry *Sentinel = GetResourceSentinel(Table);
+        FoundEntry->NextLRU = Sentinel->NextLRU;
+        FoundEntry->PrevLRU = 0;
+    
+        ui_resource_entry *NextLRU = GetResourceEntry(Sentinel->NextLRU, Table);
+        NextLRU->PrevLRU  = EntryIndex;
+        Sentinel->NextLRU = EntryIndex;
+    }
 
-    ui_resource_entry *NextLRU = GetResourceEntry(Sentinel->NextLRU, Table);
-    NextLRU->PrevLRU  = EntryIndex;
-    Sentinel->NextLRU = EntryIndex;
-
-    ui_resource_state Result = {};
-    Result.Id           = EntryIndex;
-    Result.ResourceType = FoundEntry->ResourceType;
-    Result.Resource     = FoundEntry->Memory;
+    ui_resource_state Result =
+    {
+        .Id           = EntryIndex,
+        .ResourceType = FoundEntry ? FoundEntry->ResourceType : UIResource_None,
+        .Resource     = FoundEntry ? FoundEntry->Memory       : 0,
+    };
 
     return Result;
 }
@@ -589,35 +579,6 @@ UpdateResourceTable(uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_
     VOID_ASSERT(Entry->ResourceType != UIResource_None);
 }
 
-
-static void *
-QueryNodeResource(uint32_t NodeIndex, ui_layout_tree *Tree, UIResource_Type Type, ui_resource_table *Table)
-{
-    ui_resource_key   Key   = MakeNodeResourceKey(Type, NodeIndex, Tree);
-    ui_resource_state State = FindResourceByKey(Key, Table);
-
-    VOID_ASSERT(State.Resource && State.ResourceType == Type);
-
-    void *Result = State.Resource;
-    return Result;
-}
-
-
-static void *
-QueryGlobalResource(byte_string Name, UIResource_Type Type, ui_resource_table *Table)
-{
-    ui_resource_key   Key   = MakeGlobalResourceKey(Type, Name);
-    ui_resource_state State = FindResourceByKey(Key, Table);
-
-    VOID_ASSERT(State.Resource && State.ResourceType == Type);
-
-    void *Result = State.Resource;
-    return Result;
-}
-
-
-// ------------------------------------------------------------
-// @Internal: Image Processing Helpers
 
 // ------------------------------------------------------------
 // @Public: Image Processing API
@@ -664,19 +625,25 @@ void ui_node::Reserve(uint32_t Amount, ui_pipeline &Pipeline)
 // I mean the only problem with this is the amount of allocations this has to do.
 // 2/font 1/text. If we had a proper resource allocator then it wouldn't be a problem.
 
+// We need to mark this as havhing some kind of text resource such that we do layout and whatnot.
+
 void ui_node::SetText(byte_string Text, ui_resource_key FontKey, ui_pipeline &Pipeline)
 {
-    void_context &Context  = GetVoidContext();
+    void_context &Context = GetVoidContext();
 
     ui_resource_key   TextKey   = MakeNodeResourceKey(UIResource_Text, Index, Pipeline.Tree);
-    ui_resource_state TextState = FindResourceByKey(TextKey, Context.ResourceTable);
+    ui_resource_state TextState = FindResourceByKey(TextKey, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 
     if(!TextState.Resource)
     {
-        ui_resource_state FontState = FindResourceByKey(FontKey, Context.ResourceTable);
-        if(FontState.Resource)
+        uint64_t Footprint = GetTextFootprint(Text.Size);
+        void    *Memory    = AllocateUIResource(Footprint, &Context.ResourceTable->Allocator);
+
+        if(Memory)
         {
-            // TODO: Create the text resource.
+            ui_text *TextResource = PlaceTextInMemory(Text, FontKey, Memory);
+
+            UpdateResourceTable(TextState.Id, TextKey, TextResource, Context.ResourceTable);
         }
     }
     else
@@ -696,7 +663,7 @@ void ui_node::SetScroll(float ScrollSpeed, UIAxis_Type Axis, ui_pipeline &Pipeli
     void_context &Context  = GetVoidContext();
 
     ui_resource_key   Key   = MakeNodeResourceKey(UIResource_ScrollRegion, Index, Pipeline.Tree);
-    ui_resource_state State = FindResourceByKey(Key, Context.ResourceTable);
+    ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 
     uint64_t  Size   = GetScrollRegionFootprint();
     void     *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);

@@ -204,29 +204,28 @@ static ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_params
 
 // Keys:
 //   Opaque handles to resources. Use a resource table to retrieve the associated data
-//   MakeNodeResourceKey   is used for node-based resources
-//   MakeGlobalResourceKey is used for node-less  resources
+//   MakeNodeResourceKey is used for general node-based resources
+//   MakeFontResourceKey is used for global  font       resources
 
-static bool            IsValidResourceKey    (ui_resource_key Key);
 static ui_resource_key MakeNodeResourceKey   (UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree);
 static ui_resource_key MakeFontResourceKey   (byte_string Name, float Size);
-static ui_resource_key MakeGlobalResourceKey (UIResource_Type Type, byte_string Name);
 
 // Resources:
 //   Use FindResourceByKey to retrieve some resource with a key created from MakeResourceKey.
 //   If the resource doesn't exist yet, the returned state will contain: .ResourceType = UIResource_None AND .Resource = NULL.
 //   You may update the table using UpdateResourceTable by passing the relevant updated data. The id is retrieved in State.Id.
 
-static ui_resource_state FindResourceByKey     (ui_resource_key Key, ui_resource_table *Table);
+enum class FindResourceFlag
+{
+    None          = 0,
+    AddIfNotFound = 1 << 0,
+};
+
+inline FindResourceFlag operator|(FindResourceFlag A, FindResourceFlag B) {return static_cast<FindResourceFlag>(static_cast<int>(A) | static_cast<int>(B));}
+inline FindResourceFlag operator&(FindResourceFlag A, FindResourceFlag B) {return static_cast<FindResourceFlag>(static_cast<int>(A) & static_cast<int>(B));}
+
+static ui_resource_state FindResourceByKey     (ui_resource_key Key, FindResourceFlag Flags,  ui_resource_table *Table);
 static void              UpdateResourceTable   (uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_table *Table);
-
-// Queries:
-//   Queries both compute a key and retrieve the corresponding resource type.
-//   When querying a resource it is expected that the resource already exists and
-//   is initialized with the requested type. On failure trigger an assertion.
-
-static void * QueryNodeResource    (uint32_t NodeIndex, ui_layout_tree *Tree, UIResource_Type Type, ui_resource_table *Table);
-static void * QueryGlobalResource  (byte_string Name, UIResource_Type Type, ui_resource_table *Table);
 
 // ui_node:
 //  Main representation of a node in the UI (Button, Window, ...)

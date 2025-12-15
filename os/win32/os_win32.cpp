@@ -356,98 +356,6 @@ OSRelease(void *Memory)
     VirtualFree(Memory, 0, MEM_RELEASE);
 }
 
-// [File Implementation - OS Specific]
-
-static os_handle
-OSFindFile(byte_string Path)
-{
-    os_handle Handle = {0};
-
-    if (Path.String)
-    {
-        Handle.uint64_t[0] = (uint64_t) CreateFileA((LPCSTR)Path.String, GENERIC_READ, FILE_SHARE_READ, NULL,
-                                          OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    }
-
-    return Handle;
-}
-
-static uint64_t
-OSFileSize(os_handle Handle)
-{
-    uint64_t Result = 0;
-
-    if (OSIsValidHandle(Handle))
-    {
-        HANDLE FileHandle = OSWin32GetNativeHandle(Handle);
-        if (FileHandle)
-        {
-            LARGE_INTEGER NativeResult = {};
-            bool Success = GetFileSizeEx(FileHandle, &NativeResult);
-            if (Success)
-            {
-                Result = NativeResult.QuadPart;
-            }
-            else
-            {
-            }
-        }
-    }
-
-    return Result;
-}
-
-static os_read_file
-OSReadFile(os_handle Handle, memory_arena *Arena)
-{
-    os_read_file Result     = {};
-    HANDLE       FileHandle = (HANDLE)Handle.uint64_t[0];
-
-    if (FileHandle != INVALID_HANDLE_VALUE)
-    {
-        LARGE_INTEGER FileSizeWin32;
-        if (GetFileSizeEx(FileHandle, &FileSizeWin32))
-        {
-            DWORD Unused       = 0;
-            BOOL  Success      = 1;
-            uint64_t   FileSize     = FileSizeWin32.QuadPart;
-            uint64_t   ToRead       = FileSize;
-            uint32_t   ReadSize     = VOID_KILOBYTE(16);
-            uint8_t   *WritePointer = 0;
-
-            Result.Content.Size   = FileSize;
-            Result.Content.String = (uint8_t *)PushArena(Arena, FileSize, AlignOf(uint8_t));
-
-            while (Success && ToRead > ReadSize)
-            {
-                WritePointer = Result.Content.String + (FileSize - ToRead);
-
-                Success = ReadFile(FileHandle, WritePointer, ReadSize, &Unused, NULL);
-                ToRead -= ReadSize;
-            }
-
-            if (Success)
-            {
-                WritePointer     = Result.Content.String + (FileSize - ToRead);
-                Result.FullyRead = (bool)ReadFile(FileHandle, WritePointer, (uint32_t)ToRead, &Unused, NULL);
-            }
-        }
-
-    }
-
-    return Result;
-}
-
-static void
-OSReleaseFile(os_handle Handle)
-{
-    HANDLE FileHandle = OSWin32GetNativeHandle(Handle);
-    if (FileHandle)
-    {
-        CloseHandle(FileHandle);
-    }
-}
-
 // [Windowing]
 
 
@@ -479,4 +387,4 @@ OSGetTimerFrequency(void)
     LARGE_INTEGER Freq;
     QueryPerformanceFrequency(&Freq);
     return Freq.QuadPart;
-    }
+}

@@ -143,37 +143,11 @@ struct os_inputs
     int   WheelScrollLine;
 };
 
-typedef struct os_read_file
-{
-    byte_string Content;
-    uint64_t    At;
-    bool        FullyRead;
-} os_read_file;
-
-typedef struct os_glyph_info
-{
-    vec2_int   Size;
-    vec2_float Offset;
-    float      AdvanceX;
-} os_glyph_info;
-
 // [Inputs]
 
 static void       ProcessInputMessage  (os_button_state *NewState, bool IsDown);
 static float      OSGetScrollDelta     (void);
 static void       OSClearInputs        (os_inputs *Inputs);
-
-// [Files]
-
-static bool   IsValidFile      (os_read_file *File);
-static uint8_t  * PeekFilePointer  (os_read_file *File);
-static uint8_t    PeekFile         (os_read_file *File, int Offset);
-static void  AdvanceFile      (os_read_file *File, uint32_t Count);
-
-static os_handle    OSFindFile     (byte_string Path);
-static uint64_t          OSFileSize     (os_handle Handle);
-static os_read_file OSReadFile     (os_handle Handle, memory_arena *Arena);
-static void         OSReleaseFile  (os_handle Handle);
 
 // [OS State]
 
@@ -258,34 +232,3 @@ typedef enum OSInputKey_Type
 } OSInputKey_Type;
 
 static bool IsKeyClicked  (OSInputKey_Type Key);
-
-// OSAcquireFontContext:
-//   Acquires the font context for a given font.
-//   Win32: GPUContext must have a valid IDXGISurface * created with DXGI_FORMAT_B8G8R8A8_UNORM (Format) & D3D11_BIND_RENDER_TARGET;
-//   Will always query the system's font collection to find the specified font.
-//   If failure occurs, every field will be cleared to 0s and the context will be invalid.
-// OSReleaseFontContext:
-//   Fully releases the font context and makes it unusable.
-
-typedef struct os_font_context os_font_context;
-typedef struct gpu_font_context gpu_font_context;
-
-bool OSAcquireFontContext  (byte_string FontName, float FontSize, gpu_font_context *GPUContext, os_font_context *OSContext);
-void OSReleaseFontContext  (os_font_context *Context);
-
-// OSGetGlyphInfo:
-//   Make sure that the glyph run is valid UTF-8 string as well as the OSContext is valid.
-//   Will return {0} if the glyph run size is bigger than (126, 126) or any of the arguments is invalid.
-//
-// OSRasterizeGlyph:
-//   Rasterizes a glyph into the transfer texture on success.
-//   Returns 1 on success and 0 on failure.
-//   You may generate the rects however you want, but they must not overlap.
-//   Typical flow: create transfer resource -> rasterize glyphs into it -> call TransferGlyph to copy into cache
-//
-// OSGetLineHeight:
-//   Queries the LineHeight from a fully intialized context. If result == 0, then the context or the font size is invalid.
-
-os_glyph_info  OSGetGlyphInfo    (byte_string UTF8, float FontSize, os_font_context *OSContext);
-bool            OSRasterizeGlyph  (byte_string UTF8, rect_float Rect, os_font_context *OSContext);
-float            OSGetLineHeight   (float FontSize, os_font_context *FontContext);

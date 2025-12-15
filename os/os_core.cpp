@@ -114,41 +114,6 @@ OSClearInputs(os_inputs *Inputs)
     Inputs->Pointers[0].Delta      = vec2_float(0.f, 0.f);
 }
 
-// [Agnostic File API]
-
-static bool 
-IsValidFile(os_read_file *File)
-{
-    bool Result = File->At < File->Content.Size;
-    return Result;
-}
-
-static uint8_t *
-PeekFilePointer(os_read_file *File)
-{
-    uint8_t *Result = &File->Content.String[File->At];
-    return Result;
-}
-
-static uint8_t
-PeekFile(os_read_file *File, int Offset)
-{
-    uint8_t Result = 0;
-
-    if (File->At + Offset < File->Content.Size)
-    {
-        Result = File->Content.String[File->At + Offset];
-    }
-
-    return Result;
-}
-
-static void
-AdvanceFile(os_read_file *File, uint32_t Count)
-{
-    File->At += Count;
-}
-
 // [Misc]
 
 static bool

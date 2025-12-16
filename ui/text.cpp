@@ -43,50 +43,60 @@ UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t Cac
 // @Internal: Static Text Implementation
 
 static uint64_t
-GetTextFootprint(uint64_t TextSize)
+GetTextFootprint(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run)
 {
-    uint64_t BufferSize = TextSize * sizeof(ui_shaped_glyph);
-    uint64_t Result     = sizeof(ui_text) + BufferSize;
+    uint64_t ShapedBufferSize = Analysed.CodepointCount * sizeof(ui_shaped_glyph);
+    uint64_t WordBufferSize   = Analysed.Words.Count    * sizeof(ui_text_word);
+    uint64_t Result           = ShapedBufferSize + WordBufferSize + sizeof(ui_text);
 
     return Result;
 }
 
+// This is a mess. The problem is the allocation. It changes behavior depending
+// on whether or not we have found words in the string. What do I actually need?
 
 static ui_text *
-PlaceTextInMemory(byte_string Text, ui_resource_key FontKey, void *Memory)
+PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui_font *Font, void *Memory)
 {
+    VOID_ASSERT(Font);
+    VOID_ASSERT(Memory);
+
     ui_text      *Result  = 0;
     void_context &Context = GetVoidContext();
 
     if(Memory && Context.ResourceTable)
     {
-        ui_resource_state State = FindResourceByKey(FontKey, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
-        if(State.Resource)
+        auto         *Shaped = static_cast<ui_shaped_glyph *>(Memory);
+        ui_text_word *Words  = 0;
+
+        if(Analysed.Words.Count)
         {
-            ui_shaped_glyph *Shaped = static_cast<ui_shaped_glyph *>(Memory);
-            Result = reinterpret_cast<ui_text *>(Shaped + Text.Size);
-            Result->Shaped  = Shaped;
-            Result->FontKey = FontKey;
-
-            ui_font *Font = static_cast<ui_font *>(State.Resource);
-
-            ntext::shaped_glyph_run Run = FillAtlas(reinterpret_cast<char *>(Text.String), Text.Size, Font->Generator);
-            Result->ShapedCount = Run.ShapedCount;
-
-            for(uint32_t Idx = 0; Idx < Run.ShapedCount; ++Idx)
-            {
-                Result->Shaped[Idx].OffsetX = Run.Shaped[Idx].Layout.OffsetX;
-                Result->Shaped[Idx].OffsetY = Run.Shaped[Idx].Layout.OffsetY;
-                Result->Shaped[Idx].Advance = Run.Shaped[Idx].Layout.Advance;
-
-                Result->Shaped[Idx].Source = rect_float(Run.Shaped[Idx].Source.Left,
-                                                        Run.Shaped[Idx].Source.Top,
-                                                        Run.Shaped[Idx].Source.Right,
-                                                        Run.Shaped[Idx].Source.Bottom);
-            }
-
-            UpdateGlyphCache(Font->Texture, Run.UpdateList);
+            Words  = reinterpret_cast<ui_text_word *>(Shaped + Analysed.CodepointCount);
+            Result = reinterpret_cast<ui_text      *>(Words  + Analysed.Words.Count);
         }
+        else
+        {
+            Result = reinterpret_cast<ui_text      *>(Shaped + Analysed.CodepointCount);
+        }
+
+        VOID_ASSERT(Result);
+
+        Result->Shaped      = Shaped;
+        Result->Words       = Words;
+        Result->FontKey     = MakeFontResourceKey(Font->Name, Font->Size);
+        Result->ShapedCount = Run.ShapedCount;
+
+        for(uint32_t Idx = 0; Idx < Run.ShapedCount; ++Idx)
+        {
+            Result->Shaped[Idx].OffsetX = Run.Shaped[Idx].Layout.OffsetX;
+            Result->Shaped[Idx].OffsetY = Run.Shaped[Idx].Layout.OffsetY;
+            Result->Shaped[Idx].Advance = Run.Shaped[Idx].Layout.Advance;
+
+            Result->Shaped[Idx].Source = rect_float(Run.Shaped[Idx].Source.Left , Run.Shaped[Idx].Source.Top,
+                                                    Run.Shaped[Idx].Source.Right, Run.Shaped[Idx].Source.Bottom);
+        }
+
+        UpdateGlyphCache(Font->Texture, Run.UpdateList);
     }
 
     return Result;

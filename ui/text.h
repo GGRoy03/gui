@@ -24,6 +24,13 @@ struct ui_shaped_glyph
     rect_float Source;    // Currently have no way of getting this from ntext.
 };
 
+struct ui_text_word
+{
+    uint32_t WordStartIndex;
+    uint32_t WordEndIndex;
+    float    LayoutLength;
+};
+
 // Do we need to store Texture/TextureSize, since we can always get them from the font?
 // And it would also fix the problem of who owns what (the font owns the texture)
 
@@ -32,7 +39,9 @@ struct ui_text
     ui_resource_key  FontKey;
     ui_shaped_glyph *Shaped;
     uint32_t         ShapedCount;
+    ui_text_word    *Words;
+    uint32_t         WordCount;
 };
 
-static uint64_t  GetTextFootprint   (uint64_t Size);
-static ui_text * PlaceTextInMemory  (byte_string Text, ui_resource_key FontKey, void *Memory);
+static uint64_t GetTextFootprint    (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run);
+static ui_text * PlaceTextInMemory  (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui_font *Font, void *Memory);

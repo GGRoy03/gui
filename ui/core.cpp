@@ -612,38 +612,50 @@ ui_node ui_node::Find(uint32_t FindIndex, ui_pipeline &Pipeline)
     return Result;
 }
 
+
 void ui_node::Append(ui_node Child, ui_pipeline &Pipeline)
 {
     UITreeAppendChild(Index, Child.Index, Pipeline.Tree);
 }
+
 
 void ui_node::Reserve(uint32_t Amount, ui_pipeline &Pipeline)
 {
     UITreeReserve(Index, Amount, Pipeline.Tree);
 }
 
-// I mean the only problem with this is the amount of allocations this has to do.
-// 2/font 1/text. If we had a proper resource allocator then it wouldn't be a problem.
 
-// We need to mark this as havhing some kind of text resource such that we do layout and whatnot.
+// There are so many indirections. This is unusual.
 
-void ui_node::SetText(byte_string Text, ui_resource_key FontKey, ui_pipeline &Pipeline)
+void ui_node::SetText(byte_string UserText, ui_resource_key FontKey, ui_pipeline &Pipeline)
 {
-    void_context &Context = GetVoidContext();
+    void_context      &Context       = GetVoidContext();
+    ui_resource_table *ResourceTable = Context.ResourceTable;
 
-    ui_resource_key   TextKey   = MakeNodeResourceKey(UIResource_Text, Index, Pipeline.Tree);
-    ui_resource_state TextState = FindResourceByKey(TextKey, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
+    auto  TextKey   = MakeNodeResourceKey(UIResource_Text, Index, Pipeline.Tree);
+    auto  TextState = FindResourceByKey(TextKey, FindResourceFlag::AddIfNotFound, ResourceTable);
+    auto *Text      = static_cast<ui_text *>(TextState.Resource);
 
-    if(!TextState.Resource)
+    if(!Text)
     {
-        uint64_t Footprint = GetTextFootprint(Text.Size);
-        void    *Memory    = AllocateUIResource(Footprint, &Context.ResourceTable->Allocator);
+        auto  State = FindResourceByKey(FontKey, FindResourceFlag::None, Context.ResourceTable);
+        auto *Font  = static_cast<ui_font *>(State.Resource);
 
-        if(Memory)
+        if(Font)
         {
-            ui_text *TextResource = PlaceTextInMemory(Text, FontKey, Memory);
+            ntext::TextAnalysis Flags = ntext::TextAnalysis::GenerateWordSlices;
 
-            UpdateResourceTable(TextState.Id, TextKey, TextResource, Context.ResourceTable);
+            auto Analysed = ntext::AnalyzeText(UserText.String, UserText.Size, Flags, Font->Generator);
+            auto GlyphRun = FillAtlas(Analysed, Font->Generator);
+
+            uint64_t Footprint = GetTextFootprint(Analysed, GlyphRun);
+            void    *Memory    = AllocateUIResource(Footprint, &ResourceTable->Allocator);
+
+            Text = PlaceTextInMemory(Analysed, GlyphRun, Font, Memory);
+            if(Text)
+            {
+                UpdateResourceTable(State.Id, TextKey, Text, Context.ResourceTable);
+            }
         }
     }
     else
@@ -678,11 +690,6 @@ void ui_node::SetScroll(float ScrollSpeed, UIAxis_Type Axis, ui_pipeline &Pipeli
     if(ScrollRegion)
     {
         UpdateResourceTable(State.Id, Key, ScrollRegion, Context.ResourceTable);
-
-        // WARN:
-        // Still don't know how to feel about this.
-        // It's not great, that's for sure. Again this idea of centralizing
-        SetLayoutNodeFlags(Index, UILayoutNode_HasScrollRegion, Pipeline.Tree);
     }
 }
 
@@ -693,16 +700,6 @@ void ui_node::SetImage(byte_string Path, byte_string Group, ui_pipeline &Pipelin
 
 void ui_node::DebugBox(uint32_t Flag, bool Draw, ui_pipeline &Pipeline)
 {
-    VOID_ASSERT(Flag == UILayoutNode_DebugOuterBox || Flag == UILayoutNode_DebugInnerBox || Flag == UILayoutNode_DebugContentBox);
-
-    if(Draw)
-    {
-        SetLayoutNodeFlags(Index, Flag, Pipeline.Tree);
-    }
-    else
-    {
-        ClearLayoutNodeFlags(Index, Flag, Pipeline.Tree);
-    }
 }
 
 void ui_node::SetId(byte_string Id, ui_pipeline &Pipeline)

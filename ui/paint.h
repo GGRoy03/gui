@@ -78,8 +78,8 @@ struct ui_default_properties
     ui_property<ui_size>          MinSize;
     ui_property<ui_size>          MaxSize;
     ui_property<LayoutDirection>  Direction;
-    ui_property<Alignment>        AlignX;
-    ui_property<Alignment>        AlignY;
+    ui_property<Alignment>        XAlign;
+    ui_property<Alignment>        YAlign;
 
     ui_property<ui_padding>       Padding;
     ui_property<float>            Spacing;

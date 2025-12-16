@@ -76,7 +76,7 @@ const static D3D11_INPUT_ELEMENT_DESC D3D11RectILayout[] =
     {"STY" , 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
 };
 
-const static uint8_t D3D11RectShader[] =
+static char D3D11RectShader[] =
 "// [Inputs/Outputs]                                                                               \n"
 "                                                                                                  \n"
 "cbuffer Constants : register(b0)                                                                  \n"
@@ -237,7 +237,7 @@ const static uint8_t D3D11RectShader[] =
 
 const static byte_string D3D11ShaderSourceTable[] =
 {
-    byte_string_compile(D3D11RectShader),
+    str8_comp(D3D11RectShader),
 };
 
 const static d3d11_input_layout D3D11ILayoutTable[] =

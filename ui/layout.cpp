@@ -45,9 +45,12 @@ struct ui_layout_node
     layout_bounds Bounds;
 
     // Inputs
-    vec2_float Size;
-    vec2_float MinSize;
-    vec2_float MaxSize;
+    ui_size    Size;
+    ui_size    MinSize;
+    ui_size    MaxSize;
+    ui_padding Padding;
+    Alignment  XAlign;
+    Alignment  YAlign;
 
     // State
     LayoutNodeFlag Flags;
@@ -177,10 +180,12 @@ SetNodeProperties(uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style
     {
         Node->StyleIndex  = StyleIndex;
 
-        // Trying something simpler.
-        Node->Size    = vec2_float(Cached.Default.Size.Value.Width   , Cached.Default.Size.Value.Width);
-        Node->MinSize = vec2_float(Cached.Default.MinSize.Value.Width, Cached.Default.MinSize.Value.Height);
-        Node->MaxSize = vec2_float(Cached.Default.MaxSize.Value.Width, Cached.Default.MaxSize.Value.Height);
+        Node->Size    = Cached.Default.Size.Value;
+        Node->MinSize = Cached.Default.MinSize.Value;
+        Node->MaxSize = Cached.Default.MaxSize.Value;
+        Node->Padding = Cached.Default.Padding.Value;
+        Node->XAlign  = Cached.Default.XAlign.Value;
+        Node->YAlign  = Cached.Default.YAlign.Value;
     }
 }
 
@@ -651,6 +656,11 @@ WrapText(ui_text *Text, ui_layout_node *Node)
 }
 
 
+// So I think in the long run we don't want to use recursion. Just iterative and small helpers simply
+// because there is too much data to pass down. But fine for now. We probably want to place only when
+// the layout is stable right? This sounds correct. Because placing does depend on sizing but it doesn't
+// affect sizing right? In no cases. This sounds correct. Uhm. Well. Yeah.
+
 static void
 ComputeLayout(ui_layout_node *Node, layout_bounds ParentBounds, bool &Changed)
 {
@@ -660,8 +670,8 @@ ComputeLayout(ui_layout_node *Node, layout_bounds ParentBounds, bool &Changed)
     {
         .X      = ParentBounds.X,
         .Y      = ParentBounds.Y,
-        .Width  = Max(Node->MinSize.X, Min(Node->Size.X, Node->MaxSize.X)),
-        .Height = Max(Node->MinSize.Y, Min(Node->Size.Y, Node->MaxSize.Y)),
+        .Width  = Max(Node->MinSize.Width , Min(Node->Size.Width , Node->MaxSize.Width )),
+        .Height = Max(Node->MinSize.Height, Min(Node->Size.Height, Node->MaxSize.Height)),
     };
 
     if(Node->Bounds != LastBounds)
@@ -669,9 +679,18 @@ ComputeLayout(ui_layout_node *Node, layout_bounds ParentBounds, bool &Changed)
         Changed = true;
     }
 
+    // TODO: We need to 0 this if it becomes an invalid rectangle. (Padding.X/Y > Space.X/Y)
+    layout_bounds ContentBounds = 
+    {
+        .X      = Node->Bounds.X      + Node->Padding.Left,
+        .Y      = Node->Bounds.Y      + Node->Padding.Top,
+        .Width  = Node->Bounds.Width  - Node->Padding.Right,
+        .Height = Node->Bounds.Height - Node->Padding.Bot,
+    };
+
     IterateLinkedList(Node, ui_layout_node *, Child)
     {
-        ComputeLayout(Child, Node->Bounds, Changed);
+        ComputeLayout(Child, ContentBounds, Changed);
     }
 }
 

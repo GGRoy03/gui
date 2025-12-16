@@ -9,7 +9,7 @@ struct byte_string
 // Helper Macros
 
 #define str8_lit(String)  ByteString(String, sizeof(String) - 1)
-#define str8_comp(String) {static_cast<char *>(String), sizeof(String) - 1}
+#define str8_comp(String) {(char *)(String), sizeof(String) - 1}
 
 // [Constructors]
 

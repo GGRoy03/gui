@@ -30,13 +30,12 @@ static ui_cached_style InspectorStyleArray[] =
     {
         .Default =
         {
-            .SizingX     = ui_fixed_sizing(500.f),
-            .SizingY     = ui_fixed_sizing(500.f),
+            .Size        = ui_size(500.f, 500.f),
             .MinSize     = ui_size(400.f, 400.f),
             .MaxSize     = ui_size(600.f, 600.f),
             .Direction   = LayoutDirection::Vertical,
-            .AlignX      = Alignment::Center,
-            .AlignY      = Alignment::Center,
+            .XAlign      = Alignment::Center,
+            .YAlign      = Alignment::Center,
 
             .Padding     = ui_padding(10.f, 10.f, 10.f, 10.f),
 
@@ -59,20 +58,19 @@ static ui_cached_style InspectorStyleArray[] =
         },
     },
 
-    // Something
+    // Dummies
     {
         .Default =
         {
-            .SizingX      = ui_fixed_sizing(300.f),
-            .SizingY      = ui_fixed_sizing(300.f),
-            .MinSize      = ui_size(150.f, 150.f),
-            .MaxSize      = ui_size(300.f, 300.f),
+            .Size        = ui_size(300.f, 300.f),
+            .MinSize     = ui_size(150.f, 150.f),
+            .MaxSize     = ui_size(300.f, 300.f),
             .Direction    = LayoutDirection::Vertical,
-            .AlignX       = Alignment::Center,
-            .AlignY       = Alignment::Center,
+            .XAlign       = Alignment::Center,
+            .YAlign       = Alignment::Center,
             .Shrink       = 1.f,
 
-            .Color        = SurfaceBackground,
+            .Color        = Background,
             .BorderColor  = BorderOrDivider,
 
             .BorderWidth  = 2.f,
@@ -116,7 +114,7 @@ InitializeInspector(inspector_ui &Inspector)
 
     // UI Resource
     {
-        Inspector.Font = UILoadSystemFont(str8_lit("Consolas"), 16.f, 1024, 1024);
+        Inspector.Font = UILoadSystemFont(str8_comp("Consolas"), 16.f, 1024, 1024);
     }
 
     // Base Layout
@@ -127,16 +125,10 @@ InitializeInspector(inspector_ui &Inspector)
         {
             ui_node Dummy0 = UIDummy(static_cast<uint32_t>(InspectorStyle::Something), Pipeline);
             {
+                Dummy0.SetText(str8_comp("Hello, World!"), Inspector.Font, Pipeline);
+
                 UIEndDummy(Dummy0, Pipeline);
             }
-
-            ui_node Dummy1 = UIDummy(static_cast<uint32_t>(InspectorStyle::Something), Pipeline);
-            {
-                Dummy1.SetText(str8_lit("Hello, World!"), Inspector.Font, Pipeline);
-
-                UIEndDummy(Dummy1, Pipeline);
-            }
-
         }
         UIEndWindow(Window, Pipeline);
 

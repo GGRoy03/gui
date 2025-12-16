@@ -52,8 +52,8 @@ GetTextFootprint(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run)
     return Result;
 }
 
-// This is a mess. The problem is the allocation. It changes behavior depending
-// on whether or not we have found words in the string. What do I actually need?
+// This is very bad. It's quite complex for something so simple.
+// How can I reduce complexity here?
 
 static ui_text *
 PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui_font *Font, void *Memory)
@@ -95,6 +95,15 @@ PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui
             Result->Shaped[Idx].Source = rect_float(Run.Shaped[Idx].Source.Left , Run.Shaped[Idx].Source.Top,
                                                     Run.Shaped[Idx].Source.Right, Run.Shaped[Idx].Source.Bottom);
         }
+
+        ntext::word_glyph_cursor Cursor  = {.Glyphs = Run.Shaped, .GlyphCount = Run.ShapedCount, .GlyphAt = 0};
+        uint32_t                 WordIdx = 0;
+
+        for(ntext::word_slice_node *Node = Analysed.Words.First; Node != 0; Node = Node->Next)
+        {
+            Result->Words[WordIdx++].Advance = ntext::AdvanceWord(Cursor, Node->Value);
+        }
+        Result->WordCount = Analysed.Words.Count;
 
         UpdateGlyphCache(Font->Texture, Run.UpdateList);
     }

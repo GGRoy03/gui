@@ -26,9 +26,7 @@ struct ui_shaped_glyph
 
 struct ui_text_word
 {
-    uint32_t WordStartIndex;
-    uint32_t WordEndIndex;
-    float    LayoutLength;
+    float Advance;
 };
 
 // Do we need to store Texture/TextureSize, since we can always get them from the font?

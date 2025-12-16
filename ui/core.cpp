@@ -677,8 +677,8 @@ void ui_node::SetScroll(float ScrollSpeed, UIAxis_Type Axis, ui_pipeline &Pipeli
     ui_resource_key   Key   = MakeNodeResourceKey(UIResource_ScrollRegion, Index, Pipeline.Tree);
     ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 
-    uint64_t  Size   = GetScrollRegionFootprint();
-    void     *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);
+    uint64_t Size   = GetScrollRegionFootprint();
+    void    *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);
 
     scroll_region_params Params =
     {
@@ -962,11 +962,7 @@ UIUnbindPipeline(UIPipeline UserPipeline)
 
     if(Pipeline.Bound)
     {
-        PreOrderMeasureTree   (Pipeline.Tree, Pipeline.FrameArena);
-        PostOrderMeasureTree  (0            , Pipeline.Tree);          // WARN: Passing 0 is not always correct.
-        PlaceLayoutTree       (Pipeline.Tree, Pipeline.FrameArena);
-
-        // NOTE: Not a fan of this flow. But it does seem to be better than what we had.
+        ComputeTreeLayout(Pipeline.Tree);
 
         ui_paint_buffer Buffer = GeneratePaintBuffer(Pipeline.Tree, Pipeline.StyleArray, Pipeline.FrameArena);
         if(Buffer.Commands && Buffer.Size)

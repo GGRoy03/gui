@@ -32,19 +32,13 @@ static ui_layout_tree * PlaceLayoutTreeInMemory  (uint64_t NodeCount, void *Memo
 static uint32_t         AllocateLayoutNode       (uint32_t Flags, ui_layout_tree *Tree);
 static bool             PushLayoutParent         (uint32_t Index, ui_layout_tree *Tree, memory_arena *Arena);
 static bool             PopLayoutParent          (uint32_t Index, ui_layout_tree *Tree);
-static void             PreOrderMeasureTree      (ui_layout_tree *Tree, memory_arena *Arena);
-static void             PostOrderMeasureTree     (uint32_t NodeIndex , ui_layout_tree *Tree);
-static void             PlaceLayoutTree          (ui_layout_tree *Tree, memory_arena *Arena);
+static void             ComputeTreeLayout        (ui_layout_tree *Tree);
 
 static bool             HandlePointerClick       (vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
 static bool             HandlePointerRelease     (vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
 static bool             HandlePointerHover       (vec2_float Position, uint32_t NodeIndex, ui_layout_tree *Tree);
 static void             HandlePointerMove        (vec2_float Delta, ui_layout_tree *Tree);
 static ui_paint_buffer  GeneratePaintBuffer      (ui_layout_tree *Tree, ui_cached_style *Cached, memory_arena *Arena);
-
-// TODO: Need to find a solution to remove these.
-static void SetLayoutNodeFlags    (uint32_t NodeIndex, uint32_t Flags, ui_layout_tree *Tree);
-static void ClearLayoutNodeFlags  (uint32_t NodeIndex, uint32_t Flags, ui_layout_tree *Tree);
 
 // -----------------------------------------------------------------------------------
 // @internal: Node Queries

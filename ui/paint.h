@@ -1,12 +1,5 @@
 #pragma once
 
-// ===================================================================================
-// @Public: Helper Macros
-
-#define UISize(Width, Height)      {Width, Height}
-
-// [CORE TYPES]
-
 enum class Alignment
 {
     None   = 0,
@@ -22,30 +15,10 @@ enum class LayoutDirection
     Vertical   = 2,
 };
 
-enum class Sizing
-{
-    None    = 0,
-    Fit     = 1,
-    Grow    = 2,
-    Percent = 3,
-    Fixed   = 4,
-    Stretch = 5,
-};
-
 struct ui_size
 {
     float Width;
     float Height;
-};
-
-struct ui_sizing_axis
-{
-    Sizing Type;
-    union
-    {
-        float Fixed;
-        float Percent;
-    };
 };
 
 // TODO: Can we be smarter about what a command really is?
@@ -85,11 +58,6 @@ struct ui_property
     ui_property& operator=(const T& Value_) { Value = Value_; IsSet = true; return *this; }
 };
 
-constexpr ui_property<ui_sizing_axis> ui_fixed_sizing(float Size)
-{
-    return ui_property<ui_sizing_axis>{ ui_sizing_axis{Sizing::Fixed, {Size}}, true};
-}
-
 struct ui_paint_properties
 {
     ui_property<ui_color>         Color;
@@ -106,8 +74,7 @@ struct ui_paint_properties
 
 struct ui_default_properties
 {
-    ui_property<ui_sizing_axis>   SizingX;
-    ui_property<ui_sizing_axis>   SizingY;
+    ui_property<ui_size>          Size;
     ui_property<ui_size>          MinSize;
     ui_property<ui_size>          MaxSize;
     ui_property<LayoutDirection>  Direction;
@@ -131,7 +98,6 @@ struct ui_default_properties
     {
         ui_paint_properties Result = {};
 
-        // Defaults
         Result.Color        = Color;
         Result.BorderColor  = BorderColor;
         Result.TextColor    = TextColor;
@@ -154,10 +120,10 @@ struct ui_hovered_properties
     {
         ui_paint_properties Result = Default;
 
-        if (Color.IsSet)        Result.Color        = Color;        else Result.Color        = Default.Color;
-        if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;  else Result.BorderColor  = Default.BorderColor;
-        if (Softness.IsSet)     Result.Softness     = Softness;     else Result.Softness     = Default.Softness;
-        if (CornerRadius.IsSet) Result.CornerRadius = CornerRadius; else Result.CornerRadius = Default.CornerRadius;
+        if (Color.IsSet)        Result.Color        = Color;
+        if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;
+        if (Softness.IsSet)     Result.Softness     = Softness;
+        if (CornerRadius.IsSet) Result.CornerRadius = CornerRadius;
 
         return Result;
     }
@@ -177,13 +143,14 @@ struct ui_focused_properties
     {
         ui_paint_properties Result = Default;
 
-        if (Color.IsSet)        Result.Color        = Color;        else Result.Color        = Default.Color;
-        if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;  else Result.BorderColor  = Default.BorderColor;
-        if (TextColor.IsSet)    Result.TextColor    = TextColor;    else Result.TextColor    = Default.TextColor;
-        if (CaretColor.IsSet)   Result.CaretColor   = CaretColor;   else Result.CaretColor   = Default.CaretColor;
-        if (CaretWidth.IsSet)   Result.CaretWidth   = CaretWidth;   else Result.CaretWidth   = Default.CaretWidth;
-        if (Softness.IsSet)     Result.Softness     = Softness;     else Result.Softness     = Default.Softness;
-        if (CornerRadius.IsSet) Result.CornerRadius = CornerRadius; else Result.CornerRadius = Default.CornerRadius;
+        if (Color.IsSet)        Result.Color        = Color;
+        if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;
+        if (TextColor.IsSet)    Result.TextColor    = TextColor;
+        if (CaretColor.IsSet)   Result.CaretColor   = CaretColor;
+        if (CaretWidth.IsSet)   Result.CaretWidth   = CaretWidth;
+        if (Softness.IsSet)     Result.Softness     = Softness;
+        if (CornerRadius.IsSet) Result.CornerRadius = CornerRadius;
+
         return Result;
     }
 };

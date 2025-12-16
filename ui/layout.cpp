@@ -178,7 +178,7 @@ SetNodeProperties(uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style
         Node->StyleIndex  = StyleIndex;
 
         // Trying something simpler.
-        Node->Size    = vec2_float(Cached.Default.SizingX.Value.Fixed, Cached.Default.SizingY.Value.Fixed );
+        Node->Size    = vec2_float(Cached.Default.Size.Value.Width   , Cached.Default.Size.Value.Width);
         Node->MinSize = vec2_float(Cached.Default.MinSize.Value.Width, Cached.Default.MinSize.Value.Height);
         Node->MaxSize = vec2_float(Cached.Default.MaxSize.Value.Width, Cached.Default.MaxSize.Value.Height);
     }
@@ -629,48 +629,10 @@ HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
 }
 
 // ----------------------------------------------------------------------------------
-// @Internal: Layout Pass Helpers
-
-static float
-GetCursorOffsetFromAlignment(float FreeSpace, Alignment Alignment)
-{
-    float Offset = 0.f;
-
-    if(Alignment == Alignment::Start)
-    {
-        Offset = 0.f;
-    } else
-    if(Alignment == Alignment::Center)
-    {
-        Offset = 0.5f * FreeSpace;
-    } else
-    if(Alignment == Alignment::End)
-    {
-        VOID_ASSERT(!"Idk");
-        Offset = 0.f;
-    }
-
-    return Offset;
-}
-
-static float
-GetConstrainedSize(float ParentSize, float MinSize, float MaxSize, ui_sizing_axis Axis)
-{
-    float Result = Axis.Fixed;
-
-    if(Axis.Type == Sizing::Percent)
-    {
-        Result = Axis.Percent * ParentSize;
-    }
-
-    Result = min(max(Result, MinSize), MaxSize);
-
-    return Result;
-}
-
-// ----------------------------------------------------------------------------------
 // @Public: Layout Pass
 
+
+// (WIP)
  
 static void
 WrapText(ui_text *Text, ui_layout_node *Node)

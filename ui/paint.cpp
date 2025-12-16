@@ -61,8 +61,6 @@ GetPaintBatchList(ui_resource_key TextKey, ui_resource_key ImageKey, memory_aren
                 Params.TextureSize = Font->TextureSize;
             }
         }
-
-        // TODO: Re-Implement Image Check.
     }
 
     bool CanMergeNodes = (Node && CanMergeRectGroupParams(&Node->Params, &Params));
@@ -88,7 +86,6 @@ GetPaintBatchList(ui_resource_key TextKey, ui_resource_key ImageKey, memory_aren
     return Result;
 }
 
-// We do not do any gradient stuff right now, but a basic version is implemented.
 
 static void
 PaintUIRect(rect_float Rect, ui_color Color, ui_corner_radius CornerRadii, float BorderWidth, float Softness, render_batch_list *BatchList, memory_arena *Arena)

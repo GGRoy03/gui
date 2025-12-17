@@ -477,8 +477,6 @@ MakeFontResourceKey(byte_string Name, float Size)
 }
 
 
-
-
 static ui_resource_state
 FindResourceByKey(ui_resource_key Key, FindResourceFlag Flags, ui_resource_table *Table)
 {
@@ -638,8 +636,8 @@ void ui_node::SetText(byte_string UserText, ui_resource_key FontKey, ui_pipeline
 
     if(!Text)
     {
-        auto  State = FindResourceByKey(FontKey, FindResourceFlag::None, Context.ResourceTable);
-        auto *Font  = static_cast<ui_font *>(State.Resource);
+        auto  FontState = FindResourceByKey(FontKey, FindResourceFlag::None, Context.ResourceTable);
+        auto *Font      = static_cast<ui_font *>(FontState.Resource);
 
         if(Font)
         {
@@ -654,7 +652,7 @@ void ui_node::SetText(byte_string UserText, ui_resource_key FontKey, ui_pipeline
             Text = PlaceTextInMemory(Analysed, GlyphRun, Font, Memory);
             if(Text)
             {
-                UpdateResourceTable(State.Id, TextKey, Text, Context.ResourceTable);
+                UpdateResourceTable(TextState.Id, TextKey, Text, Context.ResourceTable);
             }
         }
     }

@@ -32,7 +32,7 @@ NormalizeColor(ui_color Color)
 // and can already be inferred from the context.
 
 static render_batch_list *
-GetPaintBatchList(ui_resource_key TextKey, ui_resource_key ImageKey, memory_arena *Arena, rect_float RectangleClip)
+GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
 {
     VOID_ASSERT(Arena); // Internal Corruption
 
@@ -47,12 +47,9 @@ GetPaintBatchList(ui_resource_key TextKey, ui_resource_key ImageKey, memory_aren
         Params.Transform = Mat3x3Identity();
         Params.Clip      = RectangleClip;
 
-        ui_resource_state TextState = FindResourceByKey(TextKey, FindResourceFlag::None, Context.ResourceTable);
-        if(TextState.Resource)
+        if(Text)
         {
-            auto *Text      = static_cast<ui_text *>(TextState.Resource);
-            auto  FontState = FindResourceByKey(Text->FontKey, FindResourceFlag::None, Context.ResourceTable);
-            
+            auto FontState = FindResourceByKey(Text->FontKey, FindResourceFlag::None, Context.ResourceTable);
             if(FontState.Resource)
             {
                 ui_font *Font = static_cast<ui_font *>(FontState.Resource);
@@ -144,6 +141,8 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
     VOID_ASSERT(Buffer.Commands);  // Internal Corruption
     VOID_ASSERT(Arena);            // Internal Corruption
 
+    void_context &Context = GetVoidContext();
+
     for(uint32_t Idx = 0; Idx < Buffer.Size; ++Idx)
     {
         ui_paint_command &Command = Buffer.Commands[Idx];
@@ -153,8 +152,11 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
         ui_corner_radius Radius   = Command.CornerRadius;
         float            Softness = Command.Softness;
 
+        ui_resource_state TextState = FindResourceByKey(Command.TextKey , FindResourceFlag::None, Context.ResourceTable);
+        auto             *Text      = static_cast<ui_text  *>(TextState.Resource);
+
         // TODO: Can this return NULL?
-        render_batch_list *BatchList = GetPaintBatchList(Command.TextKey, Command.ImageKey, Arena, Command.RectangleClip);
+        render_batch_list *BatchList = GetPaintBatchList(Text, Arena, Command.RectangleClip);
 
         if(Color.A > 0.f)
         {
@@ -169,6 +171,17 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
             PaintUIRect(Rect, BorderColor, Radius, BorderWidth, Softness, BatchList, Arena);
         }
 
+        if(Text)
+        {
+            ui_color TextColor = Command.TextColor;
+
+            for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
+            {
+                const ui_shaped_glyph &Glyph = Text->Shaped[Idx];
+
+                PaintUIGlyph(Glyph.Position, TextColor, Glyph.Source, BatchList, Arena);
+            }
+        }
 
         // TODO: RE-IMPLEMENT TEXT & TEXT-INPUT & IMAGE DRAWING (TRIVIAL, JUST READ RESOURCE KEY?)
         // TODO: RE-IMPLEMENT CLIPPING AND WHATNOT

@@ -21,7 +21,9 @@ struct ui_shaped_glyph
     float      OffsetX;
     float      OffsetY;
     float      Advance;
-    rect_float Source;    // Currently have no way of getting this from ntext.
+    rect_float Source;
+    rect_float Position;
+    bool       BreakLine;
 };
 
 struct ui_text_word

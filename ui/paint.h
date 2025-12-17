@@ -34,6 +34,7 @@ struct ui_paint_command
 
     ui_color         Color;
     ui_color         BorderColor;
+    ui_color         TextColor;
     ui_corner_radius CornerRadius;
     float            Softness;
     float            BorderWidth;

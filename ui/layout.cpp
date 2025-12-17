@@ -35,10 +35,11 @@ struct ui_layout_node
     ui_size         Size;
     ui_size         MinSize;
     ui_size         MaxSize;
-    ui_padding      Padding;
     Alignment       XAlign;
     Alignment       YAlign;
     LayoutDirection Direction;
+    ui_padding      Padding;
+    float           Spacing;
 
     // State
     LayoutNodeFlag Flags;
@@ -171,10 +172,11 @@ SetNodeProperties(uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style
         Node->Size      = Cached.Default.Size.Value;
         Node->MinSize   = Cached.Default.MinSize.Value;
         Node->MaxSize   = Cached.Default.MaxSize.Value;
-        Node->Padding   = Cached.Default.Padding.Value;
+        Node->Direction = Cached.Default.Direction.Value;
         Node->XAlign    = Cached.Default.XAlign.Value;
         Node->YAlign    = Cached.Default.YAlign.Value;
-        Node->Direction = Cached.Default.Direction.Value;
+        Node->Padding   = Cached.Default.Padding.Value;
+        Node->Spacing   = Cached.Default.Spacing.Value;
     }
 }
 
@@ -623,82 +625,7 @@ HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
 }
 
 // ----------------------------------------------------------------------------------
-// @Public: Layout Pass
-
-
-// (WIP)
- 
-static void
-WrapText(ui_text *Text, ui_layout_node *Node)
-{
-    float LineWidth = 0.f;
-
-    for(uint32_t WordIdx = 0; WordIdx < Text->WordCount; ++WordIdx)
-    {
-        LineWidth += Text->Words[WordIdx].Advance;
-
-        if(LineWidth)
-        {
-            break;
-        }
-    }
-}
-
-
-// So I think in the long run we don't want to use recursion. Just iterative and small helpers simply
-// because there is too much data to pass down. But fine for now. We probably want to place only when
-// the layout is stable right? This sounds correct. Because placing does depend on sizing but it doesn't
-// affect sizing right? In no cases. This sounds correct. Uhm. Well. Yeah.
-
-// So, I think we shouldn't use some sort of special rect. Since this shouldn't even
-// write/read X/Y since it has no incidence on the layout.
-
-static void
-ComputeLayout(ui_layout_node *Node, ui_size ParentBounds, bool &Changed)
-{
-    // Clear State
-    Node->OutputChildSize = {};
-
-    ui_size LastSize = Node->OutputSize;
-
-    Node->OutputSize =
-    {
-        .Width  = Max(Node->MinSize.Width , Min(Node->Size.Width , Node->MaxSize.Width )),
-        .Height = Max(Node->MinSize.Height, Min(Node->Size.Height, Node->MaxSize.Height)),
-    };
-
-    if((Node->OutputSize.Width != LastSize.Width || Node->OutputSize.Height != LastSize.Height))
-    {
-        Changed = true;
-    }
-
-    ui_size ContentBounds = 
-    {
-        .Width  = Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right),
-        .Height = Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot),
-    };
-    VOID_ASSERT(ContentBounds.Width >= 0 && ContentBounds.Height >= 0);
-
-    IterateLinkedList(Node, ui_layout_node *, Child)
-    {
-        ComputeLayout(Child, ContentBounds, Changed);
-
-        Node->OutputChildSize.Width  += Child->OutputSize.Width;
-        Node->OutputChildSize.Height += Child->OutputSize.Height;
-    }
-
-    // BUG: We do not have access to the spacing. If it's a single value we thus need to check
-    // which direction the layout is in.
-
-    if(Node->ChildCount)
-    {
-        // Node->OutputChildSize += (Node->ChildCount - 1) * 0; 
-    }
-}
-
-
-// TODO:
-// Move this above.
+// @Internal: Layout Pass Helpers
 
 static float
 GetAlignmentOffset(Alignment AlignmentType, float FreeSpace)
@@ -737,10 +664,74 @@ GetAlignmentOffset(Alignment AlignmentType, float FreeSpace)
 }
 
 
-// So much branching. Uhm.
+// ----------------------------------------------------------------------------------
+// @Public: Layout Pass
+
 
 static void
-PlaceLayout(ui_layout_node *Node)
+WrapText(ui_text *Text, ui_layout_node *Node)
+{
+    float LineWidth = 0.f;
+
+    for(uint32_t WordIdx = 0; WordIdx < Text->WordCount; ++WordIdx)
+    {
+        float Advance = Text->Words[WordIdx].Advance;
+
+        LineWidth += Advance;
+
+        if(LineWidth + Advance > Node->OutputSize.Width)
+        {
+            // This means it has overflow.
+            break;
+        }
+    }
+}
+
+
+static void
+ComputeLayout(ui_layout_node *Node, ui_size ParentBounds, bool &Changed)
+{
+    // Clear State
+    Node->OutputChildSize = {};
+
+    ui_size LastSize = Node->OutputSize;
+
+    Node->OutputSize =
+    {
+        .Width  = Max(Node->MinSize.Width , Min(Node->Size.Width , Node->MaxSize.Width )),
+        .Height = Max(Node->MinSize.Height, Min(Node->Size.Height, Node->MaxSize.Height)),
+    };
+
+    if((Node->OutputSize.Width != LastSize.Width || Node->OutputSize.Height != LastSize.Height))
+    {
+        Changed = true;
+    }
+
+    ui_size ContentBounds = 
+    {
+        .Width  = Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right),
+        .Height = Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot),
+    };
+    VOID_ASSERT(ContentBounds.Width >= 0 && ContentBounds.Height >= 0);
+
+    IterateLinkedList(Node, ui_layout_node *, Child)
+    {
+        ComputeLayout(Child, ContentBounds, Changed);
+
+        Node->OutputChildSize.Width  += Child->OutputSize.Width;
+        Node->OutputChildSize.Height += Child->OutputSize.Height;
+    }
+
+    if(Node->ChildCount > 0)
+    {
+        Node->OutputChildSize.Width  += Node->Spacing * (Node->ChildCount - 1); 
+        Node->OutputChildSize.Height += Node->Spacing * (Node->ChildCount - 1); 
+    }
+}
+
+
+static void
+PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_resource_table *ResourceTable)
 {
     vec2_float Cursor =
     {
@@ -775,17 +766,49 @@ PlaceLayout(ui_layout_node *Node)
         if(IsXMajor)
         {
             Child->OutputPosition.Y += MinorOffset;
-            Cursor.X                += Child->OutputSize.Width;
+            Cursor.X                += Child->OutputSize.Width  + Node->Spacing;
         }
         else
         {
             Child->OutputPosition.X += MinorOffset;
-            Cursor.Y                += Child->OutputSize.Height;
+            Cursor.Y                += Child->OutputSize.Height + Node->Spacing;
         }
 
-        // TODO: Spacing stuff.
+        PlaceLayout(Child, Tree, ResourceTable);
+    }
 
-        PlaceLayout(Child);
+    ui_resource_key   TextKey   = MakeNodeResourceKey(UIResource_Text, Node->Index, Tree);
+    ui_resource_state TextState = FindResourceByKey(TextKey , FindResourceFlag::None, ResourceTable);
+    auto             *Text      = static_cast<ui_text  *>(TextState.Resource);
+    if(Text)
+    {
+        VOID_ASSERT(Node->ChildCount == 0);
+
+        // So the cursor is misplaced? I think it's because we can't really read the "real"
+        // cursor. We need to start at the top left. Uhmm. Should we account for the border width as well
+        // as the padding since the borders grow inwards?
+        
+        // Quite ugly code, but it does work and seems to be stable. Now we can wrap easily. If the text wrap
+        // code is correct, this should be trivial. We have to text wrap in the sizer, because it affects the
+        // height of the container. We simply react to what the wrapper tells us.
+
+        vec2_float TextCursor   = vec2_float(Node->OutputPosition.X + Node->Padding.Left, Node->OutputPosition.Y + Node->Padding.Top);
+        float      CursorStartX = TextCursor.X;
+
+        for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
+        {
+            ui_shaped_glyph &Glyph = Text->Shaped[Idx];
+
+            Glyph.Position = rect_float::FromXYWH(TextCursor.X + Glyph.OffsetX, TextCursor.Y + Glyph.OffsetY, (Glyph.Source.Right - Glyph.Source.Left), (Glyph.Source.Bottom - Glyph.Source.Top));
+
+            TextCursor.X += Glyph.Advance;
+
+            if(Glyph.BreakLine)
+            {
+                TextCursor.X  = CursorStartX;
+                TextCursor.Y += 14.f;        // This should be line height or whatever.
+            }
+        }
     }
 }
 
@@ -793,7 +816,8 @@ PlaceLayout(ui_layout_node *Node)
 static void
 ComputeTreeLayout(ui_layout_tree *Tree)
 {
-    ui_layout_node *Root = GetLayoutRoot(Tree);
+    void_context   &Context = GetVoidContext();
+    ui_layout_node *Root    = GetLayoutRoot(Tree);
 
     while(true)
     {
@@ -807,7 +831,7 @@ ComputeTreeLayout(ui_layout_tree *Tree)
         }
     }
 
-    PlaceLayout(Root);
+    PlaceLayout(Root, Tree, Context.ResourceTable);
 }
 
 // TODO: For some reasons, I really dislike how this is implemented.
@@ -857,6 +881,7 @@ GeneratePaintBuffer(ui_layout_tree *Tree, ui_cached_style *CachedBuffer, memory_
             Command.BorderWidth   = Paint.BorderWidth.Value;
             Command.Color         = Paint.Color.Value;
             Command.BorderColor   = Paint.BorderColor.Value;
+            Command.TextColor     = Paint.TextColor.Value;
 
             IterateLinkedList(Node, ui_layout_node *, Child)
             {

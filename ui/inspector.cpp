@@ -38,6 +38,7 @@ static ui_cached_style InspectorStyleArray[] =
             .YAlign      = Alignment::Center,
 
             .Padding     = ui_padding(10.f, 10.f, 10.f, 10.f),
+            .Spacing     = 5.f,
 
             .Color       = Background,
             .BorderColor = BorderOrDivider,
@@ -62,16 +63,19 @@ static ui_cached_style InspectorStyleArray[] =
     {
         .Default =
         {
-            .Size        = ui_size(200.f, 200.f),
-            .MinSize     = ui_size(150.f, 150.f),
-            .MaxSize     = ui_size(300.f, 300.f),
+            .Size         = ui_size(200.f, 200.f),
+            .MinSize      = ui_size(150.f, 150.f),
+            .MaxSize      = ui_size(300.f, 300.f),
             .Direction    = LayoutDirection::Vertical,
             .XAlign       = Alignment::Center,
             .YAlign       = Alignment::Center,
+
+            .Padding      = ui_padding(10.f, 10.f, 10.f, 10.f),
             .Shrink       = 1.f,
 
             .Color        = Background,
             .BorderColor  = BorderOrDivider,
+            .TextColor    = Success,
 
             .BorderWidth  = 2.f,
             .Softness     = 2.f,
@@ -137,7 +141,11 @@ InitializeInspector(inspector_ui &Inspector)
         }
         UIEndWindow(Window, Pipeline);
 
-        UIUnbindPipeline(UIPipeline::Default);
+        // Removing this seems like the only way to stop the bug from happening. I do not quite get what
+        // is wrong with the code though. We should fix the bug and use some sort of flag based approach
+        // here so that we do not draw/place multiple times per frame when the user doesn't want.
+
+        // UIUnbindPipeline(UIPipeline::Default); 
     }
 
 

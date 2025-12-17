@@ -62,7 +62,7 @@ static ui_cached_style InspectorStyleArray[] =
     {
         .Default =
         {
-            .Size        = ui_size(300.f, 300.f),
+            .Size        = ui_size(200.f, 200.f),
             .MinSize     = ui_size(150.f, 150.f),
             .MaxSize     = ui_size(300.f, 300.f),
             .Direction    = LayoutDirection::Vertical,
@@ -128,6 +128,11 @@ InitializeInspector(inspector_ui &Inspector)
                 Dummy0.SetText(str8_comp("Hello, World!"), Inspector.Font, Pipeline);
 
                 UIEndDummy(Dummy0, Pipeline);
+            }
+
+            ui_node Dummy1 = UIDummy(static_cast<uint32_t>(InspectorStyle::Something), Pipeline);
+            {
+                UIEndDummy(Dummy1, Pipeline);
             }
         }
         UIEndWindow(Window, Pipeline);

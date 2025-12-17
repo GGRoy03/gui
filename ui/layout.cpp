@@ -17,21 +17,6 @@ inline LayoutNodeFlag operator|=(LayoutNodeFlag& A, LayoutNodeFlag B) {return A 
 inline LayoutNodeFlag operator&=(LayoutNodeFlag& A, LayoutNodeFlag B) {return A = A & B;}
 inline LayoutNodeFlag operator~(LayoutNodeFlag A)                     {return static_cast<LayoutNodeFlag>(~static_cast<int>(A));}
 
-struct layout_bounds
-{
-    float X;
-    float Y;
-    float Width;
-    float Height;
-
-    constexpr bool operator!=(const layout_bounds &Other) noexcept
-    {
-        bool Result = (this->X     != Other.X     || this->Y      != Other.Y     ) ||
-                      (this->Width != Other.Width || this->Height != Other.Height);
-        return Result;
-    }
-};
-
 struct ui_layout_node
 {
     // Hierarchy
@@ -42,15 +27,18 @@ struct ui_layout_node
     ui_layout_node *Prev;
 
     // Outputs
-    layout_bounds Bounds;
+    vec2_float OutputPosition;
+    ui_size    OutputSize;
+    ui_size    OutputChildSize;
 
     // Inputs
-    ui_size    Size;
-    ui_size    MinSize;
-    ui_size    MaxSize;
-    ui_padding Padding;
-    Alignment  XAlign;
-    Alignment  YAlign;
+    ui_size         Size;
+    ui_size         MinSize;
+    ui_size         MaxSize;
+    ui_padding      Padding;
+    Alignment       XAlign;
+    Alignment       YAlign;
+    LayoutDirection Direction;
 
     // State
     LayoutNodeFlag Flags;
@@ -148,8 +136,8 @@ GetFreeLayoutNode(ui_layout_tree *Tree)
 static rect_float
 GetNodeOuterRect(ui_layout_node *Node)
 {
-    vec2_float Screen = vec2_float(Node->Bounds.X, Node->Bounds.Y) + Node->ScrollOffset;
-    rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->Bounds.Width, Node->Bounds.Height);
+    vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
+    rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
 
     return Result;
 }
@@ -157,8 +145,8 @@ GetNodeOuterRect(ui_layout_node *Node)
 static rect_float
 GetNodeInnerRect(ui_layout_node *Node)
 {
-    vec2_float Screen = vec2_float(Node->Bounds.X, Node->Bounds.Y) + Node->ScrollOffset;
-    rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->Bounds.Width, Node->Bounds.Height);
+    vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
+    rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
 
     return Result;
 }
@@ -166,8 +154,8 @@ GetNodeInnerRect(ui_layout_node *Node)
 static rect_float
 GetNodeContentRect(ui_layout_node *Node)
 {
-    vec2_float Screen = vec2_float(Node->Bounds.X, Node->Bounds.Y) + Node->ScrollOffset;
-    rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->Bounds.Width, Node->Bounds.Height);
+    vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
+    rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
 
     return Result;
 }
@@ -180,12 +168,13 @@ SetNodeProperties(uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style
     {
         Node->StyleIndex  = StyleIndex;
 
-        Node->Size    = Cached.Default.Size.Value;
-        Node->MinSize = Cached.Default.MinSize.Value;
-        Node->MaxSize = Cached.Default.MaxSize.Value;
-        Node->Padding = Cached.Default.Padding.Value;
-        Node->XAlign  = Cached.Default.XAlign.Value;
-        Node->YAlign  = Cached.Default.YAlign.Value;
+        Node->Size      = Cached.Default.Size.Value;
+        Node->MinSize   = Cached.Default.MinSize.Value;
+        Node->MaxSize   = Cached.Default.MaxSize.Value;
+        Node->Padding   = Cached.Default.Padding.Value;
+        Node->XAlign    = Cached.Default.XAlign.Value;
+        Node->YAlign    = Cached.Default.YAlign.Value;
+        Node->Direction = Cached.Default.Direction.Value;
     }
 }
 
@@ -433,7 +422,7 @@ static void
 UpdateScrollNode(float ScrolledLines, ui_layout_node *Node, ui_layout_tree *Tree, ui_scroll_region *Region)
 {
     float      ScrolledPixels = ScrolledLines * Region->PixelPerLine;
-    vec2_float WindowSize     = vec2_float(Node->Bounds.Width, Node->Bounds.Height);
+    vec2_float WindowSize     = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height);
 
     float ScrollLimit = 0.f;
     if (Region->Axis == UIAxis_X)
@@ -463,7 +452,7 @@ UpdateScrollNode(float ScrolledLines, ui_layout_node *Node, ui_layout_tree *Tree
     {
         Child->ScrollOffset = vec2_float(-ScrollDelta.X, -ScrollDelta.Y);
 
-        vec2_float FixedContentSize = vec2_float(Child->Bounds.Width, Child->Bounds.Height);
+        vec2_float FixedContentSize = vec2_float(Child->OutputSize.Width, Child->OutputSize.Height);
         rect_float ChildContent     = GetNodeOuterRect(Child);
 
         if (FixedContentSize.X > 0.0f && FixedContentSize.Y > 0.0f) 
@@ -485,8 +474,8 @@ IsMouseInsideOuterBox(vec2_float MousePosition, ui_layout_node *Node)
 {
     VOID_ASSERT(Node); // Internal Corruption
 
-    vec2_float OuterSize  = vec2_float(Node->Bounds.Width, Node->Bounds.Height);
-    vec2_float OuterPos   = vec2_float(Node->Bounds.X    , Node->Bounds.Y     ) + Node->ScrollOffset;
+    vec2_float OuterSize  = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height);
+    vec2_float OuterPos   = vec2_float(Node->OutputPosition.X    , Node->OutputPosition.Y     ) + Node->ScrollOffset;
     vec2_float OuterHalf  = vec2_float(OuterSize.X * 0.5f, OuterSize.Y * 0.5f);
     vec2_float Center     = OuterPos + OuterHalf;
     vec2_float LocalMouse = MousePosition - Center;
@@ -505,8 +494,8 @@ IsMouseInsideOuterBox(vec2_float MousePosition, ui_layout_node *Node)
 static bool
 IsMouseInsideBorder(vec2_float MousePosition, ui_layout_node *Node)
 {
-    vec2_float InnerSize   = vec2_float(Node->Bounds.Width, Node->Bounds.Height) - vec2_float(0.f, 0.f);
-    vec2_float InnerPos    = vec2_float(Node->Bounds.X    , Node->Bounds.Y     ) - vec2_float(0.f, 0.f) + Node->ScrollOffset;
+    vec2_float InnerSize   = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height) - vec2_float(0.f, 0.f);
+    vec2_float InnerPos    = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y ) - vec2_float(0.f, 0.f) + Node->ScrollOffset;
     vec2_float InnerHalf   = vec2_float(InnerSize.X * 0.5f, InnerSize.Y * 0.5f);
     vec2_float InnerCenter = InnerPos + InnerHalf;
 
@@ -627,8 +616,8 @@ HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
     {
         if(CapturedNode->LegacyFlags & UILayoutNode_IsDraggable)
         {
-            CapturedNode->Bounds.X += Delta.X;
-            CapturedNode->Bounds.Y += Delta.Y;
+            CapturedNode->OutputPosition.X += Delta.X;
+            CapturedNode->OutputPosition.Y += Delta.Y;
         }
     }
 }
@@ -661,36 +650,142 @@ WrapText(ui_text *Text, ui_layout_node *Node)
 // the layout is stable right? This sounds correct. Because placing does depend on sizing but it doesn't
 // affect sizing right? In no cases. This sounds correct. Uhm. Well. Yeah.
 
-static void
-ComputeLayout(ui_layout_node *Node, layout_bounds ParentBounds, bool &Changed)
-{
-    layout_bounds LastBounds = Node->Bounds;
+// So, I think we shouldn't use some sort of special rect. Since this shouldn't even
+// write/read X/Y since it has no incidence on the layout.
 
-    Node->Bounds =
+static void
+ComputeLayout(ui_layout_node *Node, ui_size ParentBounds, bool &Changed)
+{
+    // Clear State
+    Node->OutputChildSize = {};
+
+    ui_size LastSize = Node->OutputSize;
+
+    Node->OutputSize =
     {
-        .X      = ParentBounds.X,
-        .Y      = ParentBounds.Y,
         .Width  = Max(Node->MinSize.Width , Min(Node->Size.Width , Node->MaxSize.Width )),
         .Height = Max(Node->MinSize.Height, Min(Node->Size.Height, Node->MaxSize.Height)),
     };
 
-    if(Node->Bounds != LastBounds)
+    if((Node->OutputSize.Width != LastSize.Width || Node->OutputSize.Height != LastSize.Height))
     {
         Changed = true;
     }
 
-    // TODO: We need to 0 this if it becomes an invalid rectangle. (Padding.X/Y > Space.X/Y)
-    layout_bounds ContentBounds = 
+    ui_size ContentBounds = 
     {
-        .X      = Node->Bounds.X      + Node->Padding.Left,
-        .Y      = Node->Bounds.Y      + Node->Padding.Top,
-        .Width  = Node->Bounds.Width  - Node->Padding.Right,
-        .Height = Node->Bounds.Height - Node->Padding.Bot,
+        .Width  = Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right),
+        .Height = Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot),
     };
+    VOID_ASSERT(ContentBounds.Width >= 0 && ContentBounds.Height >= 0);
 
     IterateLinkedList(Node, ui_layout_node *, Child)
     {
         ComputeLayout(Child, ContentBounds, Changed);
+
+        Node->OutputChildSize.Width  += Child->OutputSize.Width;
+        Node->OutputChildSize.Height += Child->OutputSize.Height;
+    }
+
+    // BUG: We do not have access to the spacing. If it's a single value we thus need to check
+    // which direction the layout is in.
+
+    if(Node->ChildCount)
+    {
+        // Node->OutputChildSize += (Node->ChildCount - 1) * 0; 
+    }
+}
+
+
+// TODO:
+// Move this above.
+
+static float
+GetAlignmentOffset(Alignment AlignmentType, float FreeSpace)
+{
+    float Result = 0.f;
+
+    if(FreeSpace > 0)
+    {
+        switch(AlignmentType)
+        {
+    
+        case Alignment::None:
+        {
+            VOID_ASSERT(!"Impossible");
+        } break;
+    
+        case Alignment::Start:
+        {
+            // No-Op
+        } break;
+    
+        case Alignment::Center:
+        {
+            Result = 0.5f * FreeSpace;
+        } break;
+    
+        case Alignment::End:
+        {
+            VOID_ASSERT(!"Please Implement :)");
+        } break;
+                
+        }
+    }
+
+    return Result;
+}
+
+
+// So much branching. Uhm.
+
+static void
+PlaceLayout(ui_layout_node *Node)
+{
+    vec2_float Cursor =
+    {
+        Node->OutputPosition.X + Node->Padding.Left,
+        Node->OutputPosition.Y + Node->Padding.Top ,
+    };
+
+    bool IsXMajor = Node->Direction == LayoutDirection::Horizontal ? true : false;
+
+    auto MajorSize = IsXMajor ? Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right) : Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot  );
+    auto MinorSize = IsXMajor ? Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot  ) : Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right);
+
+    auto MajorAlignment    = IsXMajor ? Node->XAlign                : Node->YAlign;
+    auto MajorChildrenSize = IsXMajor ? Node->OutputChildSize.Width : Node->OutputChildSize.Height;
+    auto MajorOffset       = GetAlignmentOffset(MajorAlignment, (MajorSize - MajorChildrenSize));
+
+    if(IsXMajor)
+    {
+        Cursor.X += MajorOffset;
+    }
+    else
+    {
+        Cursor.Y += MajorOffset;
+    }
+
+    IterateLinkedList(Node, ui_layout_node *, Child)
+    {
+        Child->OutputPosition = Cursor;
+
+        float MinorOffset = GetAlignmentOffset(IsXMajor ? Child->XAlign : Child->YAlign, IsXMajor ? (MinorSize - Child->OutputSize.Height) : (MinorSize - Child->OutputSize.Width));
+
+        if(IsXMajor)
+        {
+            Child->OutputPosition.Y += MinorOffset;
+            Cursor.X                += Child->OutputSize.Width;
+        }
+        else
+        {
+            Child->OutputPosition.X += MinorOffset;
+            Cursor.Y                += Child->OutputSize.Height;
+        }
+
+        // TODO: Spacing stuff.
+
+        PlaceLayout(Child);
     }
 }
 
@@ -704,13 +799,15 @@ ComputeTreeLayout(ui_layout_tree *Tree)
     {
         bool Changed = false;
 
-        ComputeLayout(Root, Root->Bounds, Changed);
+        ComputeLayout(Root, Root->OutputSize, Changed);
 
         if (!Changed)
         {
             break;
         }
     }
+
+    PlaceLayout(Root);
 }
 
 // TODO: For some reasons, I really dislike how this is implemented.

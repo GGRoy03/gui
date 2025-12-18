@@ -227,6 +227,8 @@ inline FindResourceFlag operator&(FindResourceFlag A, FindResourceFlag B) {retur
 static ui_resource_state FindResourceByKey     (ui_resource_key Key, FindResourceFlag Flags,  ui_resource_table *Table);
 static void              UpdateResourceTable   (uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_table *Table);
 
+static void * QueryNodeResource  (UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree, ui_resource_table *Table);
+
 // ui_node:
 //  Main representation of a node in the UI (Button, Window, ...)
 //  A node can be anything you want. Nodes are only valid for a single frame, do

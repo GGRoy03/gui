@@ -421,7 +421,7 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
 
     if(Memory)
     {
-        uint32_t               *HashTable = (uint32_t *)Memory;
+        uint32_t          *HashTable = (uint32_t *)Memory;
         ui_resource_entry *Entries   = (ui_resource_entry *)(HashTable + Params.HashSlotCount);
 
         Result = (ui_resource_table *)(Entries + Params.EntryCount);
@@ -578,6 +578,17 @@ UpdateResourceTable(uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_
 }
 
 
+static void *
+QueryNodeResource(UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree, ui_resource_table *Table)
+{
+    ui_resource_key   Key   = MakeNodeResourceKey(Type, NodeIndex, Tree);
+    ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::None, Table);
+
+    void *Result = State.Resource;
+    return Result;
+}
+
+
 // ------------------------------------------------------------
 // @Public: Image Processing API
 
@@ -644,7 +655,7 @@ void ui_node::SetText(byte_string UserText, ui_resource_key FontKey, ui_pipeline
             ntext::TextAnalysis Flags = ntext::TextAnalysis::GenerateWordSlices;
 
             auto Analysed = ntext::AnalyzeText(UserText.String, UserText.Size, Flags, Font->Generator);
-            auto GlyphRun = FillAtlas(Analysed, Font->Generator);
+            auto GlyphRun = ntext::FillAtlas(Analysed, Font->Generator);
 
             uint64_t Footprint = GetTextFootprint(Analysed, GlyphRun);
             void    *Memory    = AllocateUIResource(Footprint, &ResourceTable->Allocator);

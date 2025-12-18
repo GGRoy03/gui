@@ -664,32 +664,73 @@ GetAlignmentOffset(Alignment AlignmentType, float FreeSpace)
 }
 
 
+static uint32_t
+WrapText(ui_text *Text, ui_layout_node *Node)
+{
+    VOID_ASSERT(Text);
+    VOID_ASSERT(Node);
+
+    uint32_t LineCount = 1;
+    float    LineWidth = 0.f;
+
+    for(uint32_t WordIdx = 0; WordIdx < Text->WordCount; ++WordIdx)
+    {
+        ui_text_word Word     = Text->Words[WordIdx];
+        float        Required = Word.Advance + Word.LeadingWhitespaceAdvance;
+
+        if(LineWidth + Required > Node->OutputSize.Width)
+        {
+            // This part is still a work in progress.
+
+            if(WordIdx > 0)
+            {
+                // BUG:
+                // LastGlyph is not a shaped index. It's a codepoint index. Which is only correct in our
+                // case, because we only handle simple ASCII text.
+                // Probably a simple change? Some sort of reverse mapping, I need to look at internal code.
+
+                ui_text_word LastWord = Text->Words[WordIdx - 1];
+
+                Text->Shaped[LastWord.LastGlyph].BreakLine = true;
+
+                // One idea is that we have: Word.LeadingWhiteSpace? Yeah and the we iterate the shaped and until the whitespace length > 0
+                // we keep on pruning. So we set no values such that it doesn't get drawn I guess? This is complex.
+                float    Remaining = Word.LeadingWhitespaceAdvance;
+                uint64_t SpaceIdx  = LastWord.LastGlyph + 1;             // Also wrong, because of the first bug we noted.
+
+                // I guess this would work though? Maybe placer has a better clue on what to do in this case. This doesn't really relate to wrapping so maybe we move it?
+                // Though, the placer doesn't really handle words, it handles glyphs.
+
+                while (Remaining)
+                {
+                    Text->Shaped[SpaceIdx].Skip = true;
+                    Remaining -= Text->Shaped[SpaceIdx++].Advance;
+                }
+            }
+            else
+            {
+                VOID_ASSERT(!"Unsure");
+            }
+
+            LineWidth  = Word.Advance; // Ignore leading whitespaces when wrapping.
+            LineCount += 1;
+        }
+        else
+        {
+            LineWidth += Required;
+        }
+    }
+
+    return LineCount;
+}
+
+
 // ----------------------------------------------------------------------------------
 // @Public: Layout Pass
 
 
 static void
-WrapText(ui_text *Text, ui_layout_node *Node)
-{
-    float LineWidth = 0.f;
-
-    for(uint32_t WordIdx = 0; WordIdx < Text->WordCount; ++WordIdx)
-    {
-        float Advance = Text->Words[WordIdx].Advance;
-
-        LineWidth += Advance;
-
-        if(LineWidth + Advance > Node->OutputSize.Width)
-        {
-            // This means it has overflow.
-            break;
-        }
-    }
-}
-
-
-static void
-ComputeLayout(ui_layout_node *Node, ui_size ParentBounds, bool &Changed)
+ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_size ParentBounds, ui_resource_table *ResourceTable, bool &Changed)
 {
     // Clear State
     Node->OutputChildSize = {};
@@ -716,7 +757,7 @@ ComputeLayout(ui_layout_node *Node, ui_size ParentBounds, bool &Changed)
 
     IterateLinkedList(Node, ui_layout_node *, Child)
     {
-        ComputeLayout(Child, ContentBounds, Changed);
+        ComputeLayout(Child, Tree, ContentBounds, ResourceTable, Changed);
 
         Node->OutputChildSize.Width  += Child->OutputSize.Width;
         Node->OutputChildSize.Height += Child->OutputSize.Height;
@@ -726,6 +767,22 @@ ComputeLayout(ui_layout_node *Node, ui_size ParentBounds, bool &Changed)
     {
         Node->OutputChildSize.Width  += Node->Spacing * (Node->ChildCount - 1); 
         Node->OutputChildSize.Height += Node->Spacing * (Node->ChildCount - 1); 
+    }
+
+    // TODO: Move this before we iterate children ? Does it matter? Do we allow text nodes to have children?
+
+    ui_text *Text = static_cast<ui_text *>(QueryNodeResource(UIResource_Text, Node->Index, Tree, ResourceTable));
+    if(Text)
+    {
+        uint32_t LineCount = WrapText(Text, Node);
+
+        // TODO: Handle Growing/Shrinking depending on node's policy.
+
+        if(LineCount)
+        {
+            return;
+        }
+
     }
 }
 
@@ -777,20 +834,18 @@ PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_resource_table *Resou
         PlaceLayout(Child, Tree, ResourceTable);
     }
 
-    ui_resource_key   TextKey   = MakeNodeResourceKey(UIResource_Text, Node->Index, Tree);
-    ui_resource_state TextState = FindResourceByKey(TextKey , FindResourceFlag::None, ResourceTable);
-    auto             *Text      = static_cast<ui_text  *>(TextState.Resource);
+    auto *Text = static_cast<ui_text *>(QueryNodeResource(UIResource_Text, Node->Index, Tree, ResourceTable));
     if(Text)
     {
         VOID_ASSERT(Node->ChildCount == 0);
 
-        // So the cursor is misplaced? I think it's because we can't really read the "real"
-        // cursor. We need to start at the top left. Uhmm. Should we account for the border width as well
-        // as the padding since the borders grow inwards?
-        
         // Quite ugly code, but it does work and seems to be stable. Now we can wrap easily. If the text wrap
         // code is correct, this should be trivial. We have to text wrap in the sizer, because it affects the
         // height of the container. We simply react to what the wrapper tells us.
+
+        // This is bugged. It simply cannot do things like skipping leading whitespaces right? Perhaps the wrapper
+        // needs to signal to skip certain glyphs when placing? This could work, and it would allow things like
+        // hiding overflowing text and whatnot.
 
         vec2_float TextCursor   = vec2_float(Node->OutputPosition.X + Node->Padding.Left, Node->OutputPosition.Y + Node->Padding.Top);
         float      CursorStartX = TextCursor.X;
@@ -799,14 +854,19 @@ PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_resource_table *Resou
         {
             ui_shaped_glyph &Glyph = Text->Shaped[Idx];
 
-            Glyph.Position = rect_float::FromXYWH(TextCursor.X + Glyph.OffsetX, TextCursor.Y + Glyph.OffsetY, (Glyph.Source.Right - Glyph.Source.Left), (Glyph.Source.Bottom - Glyph.Source.Top));
+            // Yeah I mean this works, but is it good?
 
-            TextCursor.X += Glyph.Advance;
-
-            if(Glyph.BreakLine)
+            if (!Glyph.Skip)
             {
-                TextCursor.X  = CursorStartX;
-                TextCursor.Y += 14.f;        // This should be line height or whatever.
+                Glyph.Position = rect_float::FromXYWH(TextCursor.X + Glyph.OffsetX, TextCursor.Y + Glyph.OffsetY, (Glyph.Source.Right - Glyph.Source.Left), (Glyph.Source.Bottom - Glyph.Source.Top));
+
+                TextCursor.X += Glyph.Advance;
+
+                if (Glyph.BreakLine)
+                {
+                    TextCursor.X = CursorStartX;
+                    TextCursor.Y += 14.f;        // This should be line height or whatever.
+                }
             }
         }
     }
@@ -823,7 +883,7 @@ ComputeTreeLayout(ui_layout_tree *Tree)
     {
         bool Changed = false;
 
-        ComputeLayout(Root, Root->OutputSize, Changed);
+        ComputeLayout(Root, Tree, Root->OutputSize, Context.ResourceTable, Changed);
 
         if (!Changed)
         {

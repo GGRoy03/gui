@@ -12,7 +12,7 @@ UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t Cac
     if(!State.Resource)
     {
         uint64_t  Footprint = sizeof(ui_font);
-        ui_font  *Font      = static_cast<ui_font *>(malloc(Footprint));
+        ui_font  *Font      = static_cast<ui_font *>(malloc(Footprint)); // Do we really malloc?
 
         if(Font)
         {
@@ -45,8 +45,8 @@ UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t Cac
 static uint64_t
 GetTextFootprint(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run)
 {
-    uint64_t ShapedBufferSize = Analysed.CodepointCount * sizeof(ui_shaped_glyph);
-    uint64_t WordBufferSize   = Analysed.Words.Count    * sizeof(ui_text_word);
+    uint64_t ShapedBufferSize = Run.ShapedCount      * sizeof(ui_shaped_glyph);
+    uint64_t WordBufferSize   = Analysed.Words.Count * sizeof(ui_text_word);
     uint64_t Result           = ShapedBufferSize + WordBufferSize + sizeof(ui_text);
 
     return Result;
@@ -71,12 +71,12 @@ PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui
 
         if(Analysed.Words.Count)
         {
-            Words  = reinterpret_cast<ui_text_word *>(Shaped + Analysed.CodepointCount);
+            Words  = reinterpret_cast<ui_text_word *>(Shaped + Run.ShapedCount);
             Result = reinterpret_cast<ui_text      *>(Words  + Analysed.Words.Count);
         }
         else
         {
-            Result = reinterpret_cast<ui_text      *>(Shaped + Analysed.CodepointCount);
+            Result = reinterpret_cast<ui_text      *>(Shaped + Run.ShapedCount);
         }
 
         VOID_ASSERT(Result);
@@ -88,9 +88,10 @@ PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui
 
         for(uint32_t Idx = 0; Idx < Run.ShapedCount; ++Idx)
         {
-            Result->Shaped[Idx].OffsetX = Run.Shaped[Idx].Layout.OffsetX;
-            Result->Shaped[Idx].OffsetY = Run.Shaped[Idx].Layout.OffsetY;
-            Result->Shaped[Idx].Advance = Run.Shaped[Idx].Layout.Advance;
+            Result->Shaped[Idx].OffsetX   = Run.Shaped[Idx].Layout.OffsetX;
+            Result->Shaped[Idx].OffsetY   = Run.Shaped[Idx].Layout.OffsetY;
+            Result->Shaped[Idx].Advance   = Run.Shaped[Idx].Layout.Advance;
+            Result->Shaped[Idx].BreakLine = false;
 
             Result->Shaped[Idx].Source = rect_float(Run.Shaped[Idx].Source.Left , Run.Shaped[Idx].Source.Top,
                                                     Run.Shaped[Idx].Source.Right, Run.Shaped[Idx].Source.Bottom);
@@ -101,7 +102,13 @@ PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui
 
         for(ntext::word_slice_node *Node = Analysed.Words.First; Node != 0; Node = Node->Next)
         {
-            Result->Words[WordIdx++].Advance = ntext::AdvanceWord(Cursor, Node->Value);
+            ntext::word_advance WordAdvance = ntext::AdvanceWord(Cursor, Node->Value);
+
+            Result->Words[WordIdx].Advance                  = WordAdvance.Advance;
+            Result->Words[WordIdx].LeadingWhitespaceAdvance = WordAdvance.LeadingWhitespaceAdvance;
+            Result->Words[WordIdx].LastGlyph                = Node->Value.Start + Node->Value.Length - 1; // Kind of awkard.
+
+            ++WordIdx;
         }
         Result->WordCount = Analysed.Words.Count;
 

@@ -113,6 +113,10 @@ PushArena(memory_arena *Arena, uint64_t Size, uint64_t Alignment)
         Arena->Position = PostPosition;
         Result = ((uint8_t *)Arena + PrePosition);
     }
+    else
+    {
+        NTEXT_ASSERT(!"Not Implemented");
+    }
 
     return Result;
 }
@@ -429,10 +433,10 @@ backend_context::RasterizeGlyphToAlphaTexture(uint16_t GlyphIndex, float Advance
                 }
             }
 
-             static int Counter = 0;
-             wchar_t OutPath[64];
-             swprintf(OutPath, 64, L"glyph_alpha_%d.bmp", Counter++);
-             WriteGrayscaleBMP(OutPath, TextureWidth, TextureHeight, Buffer);
+             // static int Counter = 0;
+             // wchar_t OutPath[64];
+             // swprintf(OutPath, 64, L"glyph_alpha_%d.bmp", Counter++);
+             // WriteGrayscaleBMP(OutPath, TextureWidth, TextureHeight, Buffer);
         }
 
         RunAnalysis->Release();
@@ -1481,8 +1485,8 @@ struct word_glyph_cursor
 
 struct word_advance
 {
-    float    Value;
-    uint64_t End;
+    float Advance;
+    float LeadingWhitespaceAdvance;
 };
 
 
@@ -1493,8 +1497,6 @@ FillAtlas(analysed_text Analysed, glyph_generator &Generator)
 {
     shaped_glyph_run Run = {};
     Run.Shaped = PushArray<shaped_glyph>(Generator.Arena, Analysed.CodepointCount);
-
-    // Wait this is the fast path.
 
     if(!Analysed.IsComplex)
     {
@@ -1590,10 +1592,11 @@ FillAtlas(analysed_text Analysed, glyph_generator &Generator)
     return Run;
 }
 
-static float
+
+static word_advance
 AdvanceWord(word_glyph_cursor &Cursor, const word_slice &Slice)
 {
-    float Advance = {};
+    word_advance Result = {};
 
     uint64_t WordStart = Slice.Start;
     uint64_t WordEnd   = Slice.Start + Slice.Length;
@@ -1605,6 +1608,7 @@ AdvanceWord(word_glyph_cursor &Cursor, const word_slice &Slice)
 
         if(GlyphEnd <= WordStart)
         {
+            Result.LeadingWhitespaceAdvance += Cursor.Glyphs[Idx].Layout.Advance;
             continue;
         }
 
@@ -1614,11 +1618,12 @@ AdvanceWord(word_glyph_cursor &Cursor, const word_slice &Slice)
             break;
         }
 
-        Advance       += Cursor.Glyphs[Idx].Layout.Advance;
-        Cursor.GlyphAt = Idx + 1;
+        Result.Advance += Cursor.Glyphs[Idx].Layout.Advance;
+        Cursor.GlyphAt  = Idx + 1;
     }
 
-    return Advance;
+    return Result;
 }
+
 
 } // namespace ntext

@@ -24,11 +24,15 @@ struct ui_shaped_glyph
     rect_float Source;
     rect_float Position;
     bool       BreakLine;
+    bool       Skip;
 };
 
 struct ui_text_word
 {
-    float Advance;
+    float    LeadingWhitespaceAdvance;
+    float    Advance;
+    uint64_t FirstGlyph;
+    uint64_t LastGlyph;
 };
 
 // Do we need to store Texture/TextureSize, since we can always get them from the font?
@@ -43,5 +47,5 @@ struct ui_text
     uint32_t         WordCount;
 };
 
-static uint64_t GetTextFootprint    (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run);
+static uint64_t  GetTextFootprint   (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run);
 static ui_text * PlaceTextInMemory  (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui_font *Font, void *Memory);

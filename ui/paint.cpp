@@ -175,11 +175,23 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
         {
             ui_color TextColor = Command.TextColor;
 
+            //LogInfo("Text rendering: ShapedCount=%u, TextColor=(%f,%f,%f,%f)",
+            //    Text->ShapedCount, TextColor.R, TextColor.G, TextColor.B, TextColor.A);
+
             for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
             {
                 const ui_shaped_glyph &Glyph = Text->Shaped[Idx];
 
+                //LogInfo("Glyph[%u]: Pos=(%f,%f,%f,%f) Src=(%f,%f,%f,%f) Color=(%f,%f,%f,%f)",
+                //    Idx,
+                //    Glyph.Position.Left, Glyph.Position.Top, Glyph.Position.Right, Glyph.Position.Bottom,
+                //    Glyph.Source.Left, Glyph.Source.Top, Glyph.Source.Right, Glyph.Source.Bottom,
+                //    TextColor.R, TextColor.G, TextColor.B, TextColor.A);
+
                 PaintUIGlyph(Glyph.Position, TextColor, Glyph.Source, BatchList, Arena);
+
+                VOID_ASSERT(Glyph.Source.Left <= Glyph.Source.Right );
+                VOID_ASSERT(Glyph.Source.Top  <= Glyph.Source.Bottom);
             }
         }
 

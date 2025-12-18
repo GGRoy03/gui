@@ -33,7 +33,7 @@ PushDataInBatchList(memory_arena *Arena, render_batch_list *BatchList)
     {
         Node = PushArray(Arena, render_batch_node, 1);
         Node->Value.ByteCount    = 0;
-        Node->Value.ByteCapacity = VOID_KILOBYTE(5); // WARN: This works, but would be better if we could infer it?
+        Node->Value.ByteCapacity = VOID_KILOBYTE(10); // WARN: This works, but would be better if we could infer it?
         Node->Value.Memory       = PushArrayNoZero(Arena, uint8_t, Node->Value.ByteCapacity);
 
         if (!BatchList->Last)

@@ -112,7 +112,7 @@ InitializeRenderer(void *HWindow, vec2_int Resolution, memory_arena *Arena)
     {
         UINT CreateFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
         #ifndef NDEBUG
-        CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
+        // CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
         #endif
         D3D_FEATURE_LEVEL Levels[] = { D3D_FEATURE_LEVEL_11_0 };
         Error = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
@@ -467,7 +467,7 @@ SubmitRenderCommands(render_handle HRenderer, vec2_int Resolution, render_pass_l
 
                 // Scissor
                 {
-                    rect_float   Clip = NodeParams.Clip;
+                    rect_float Clip = NodeParams.Clip;
                     D3D11_RECT Rect = {};
 
                     if (Clip.Left == 0 && Clip.Top == 0 && Clip.Right == 0 && Clip.Bottom == 0)
@@ -510,6 +510,7 @@ SubmitRenderCommands(render_handle HRenderer, vec2_int Resolution, render_pass_l
     HRESULT Error = SwapChain->Present(0, 0);
     if (FAILED(Error))
     {
+        VOID_ASSERT(!"Failed I guess");
     }
     DeviceContext->ClearState();
 

@@ -1,35 +1,24 @@
-#define InvalidLayoutNodeIndex 0xFFFFFFFF
+constexpr uint32_t InvalidLayoutNodeIndex = 0xFFFFFFFF;
 
-struct pointer_event_list;
-
-// TODO: Remove some of these flags or separate them into two categories.
-
-typedef enum UILayoutNode_Flag
+enum class LayoutNodeFlags
 {
-    // Painting
-    UILayoutNode_DoNotPaint      = 1 << 1,
-    UILayoutNode_HasClip         = 1 << 2,
+    None = 0,
 
-    // State
-    UILayoutNode_IsDraggable     = 1 << 4,
-    UILayoutNode_IsResizable     = 1 << 5,
+    IsDraggable = 1 << 0,
+    IsResizable = 1 << 1,
 
-    // Resources
-    UILayoutNode_HasText         = 1 << 7,
-    UILayoutNode_HasTextInput    = 1 << 8,
-    UILayoutNode_HasScrollRegion = 1 << 9,
-    UILayoutNode_HasImage        = 1 << 10,
+    IsImmediate = 1 << 2, 
 
-    // Debug
-    UILayoutNode_DebugOuterBox   = 1 << 11,
-    UILayoutNode_DebugInnerBox   = 1 << 12,
-    UILayoutNode_DebugContentBox = 1 << 13,
-} UILayoutNode_Flag;
+    ClipContent = 1 << 3,
+};
+
+template<>
+struct enable_bitmask_operators<LayoutNodeFlags> : std::true_type {};
 
 static uint64_t         GetLayoutTreeAlignment   (void);
 static uint64_t         GetLayoutTreeFootprint   (uint64_t NodeCount);
 static ui_layout_tree * PlaceLayoutTreeInMemory  (uint64_t NodeCount, void *Memory);
-static uint32_t         AllocateLayoutNode       (uint32_t Flags, ui_layout_tree *Tree);
+static uint32_t         AllocateLayoutNode       (LayoutNodeFlags Flags, ui_layout_tree *Tree);
 static bool             PushLayoutParent         (uint32_t Index, ui_layout_tree *Tree, memory_arena *Arena);
 static bool             PopLayoutParent          (uint32_t Index, ui_layout_tree *Tree);
 static void             ComputeTreeLayout        (ui_layout_tree *Tree);
@@ -39,16 +28,7 @@ static bool             HandlePointerRelease     (vec2_float Position, uint32_t 
 static bool             HandlePointerHover       (vec2_float Position, uint32_t NodeIndex, ui_layout_tree *Tree);
 static void             HandlePointerMove        (vec2_float Delta, ui_layout_tree *Tree);
 static ui_paint_buffer  GeneratePaintBuffer      (ui_layout_tree *Tree, ui_cached_style *Cached, memory_arena *Arena);
-
-// -----------------------------------------------------------------------------------
-// @internal: Node Queries
-
-// NOTE: Should we ask for a layout node?
-
-static rect_float GetNodeOuterRect    (ui_layout_node *Node);
-static rect_float GetNodeInnerRect    (ui_layout_node *Node);
-static rect_float GetNodeContentRect  (ui_layout_node *Node);
-static void       SetNodeProperties   (uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style &Cached, ui_layout_tree *Tree);
+static void             SetNodeProperties        (uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style &Cached, ui_layout_tree *Tree);
 
 // ------------------------------------------------------------------------------------
 // @internal: Tree Queries

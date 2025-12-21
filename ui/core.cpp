@@ -28,7 +28,7 @@ typedef struct ui_node_table
 } ui_node_table;
 
 static bool
-IsValidNodeIdTable(ui_node_table *Table)
+IsValidNodeTable(ui_node_table *Table)
 {
     bool Result = (Table && Table->MetaData && Table->Buckets && Table->GroupCount);
     return Result;
@@ -171,7 +171,7 @@ InsertNodeId(ui_node_id_hash Hash, uint32_t NodeIndex, ui_node_table *Table)
 static void
 SetNodeId(byte_string Id, uint32_t NodeIndex, ui_node_table *Table)
 {
-    if(!IsValidNodeIdTable(Table))
+    if(!IsValidNodeTable(Table))
     {
         return;
     }
@@ -189,7 +189,7 @@ SetNodeId(byte_string Id, uint32_t NodeIndex, ui_node_table *Table)
 }
 
 static uint64_t
-GetNodeIdTableFootprint(ui_node_table_params Params)
+GetNodeTableFootprint(ui_node_table_params Params)
 {
     uint64_t GroupTotal = Params.GroupSize * Params.GroupCount;
 
@@ -200,8 +200,10 @@ GetNodeIdTableFootprint(ui_node_table_params Params)
     return Result;
 }
 
+// There could be alignment issues again.
+
 static ui_node_table *
-PlaceNodeIdTableInMemory(ui_node_table_params Params, void *Memory)
+PlaceNodeTableInMemory(ui_node_table_params Params, void *Memory)
 {
     VOID_ASSERT(Params.GroupSize == 16);
     VOID_ASSERT(Params.GroupCount > 0 && VOID_ISPOWEROFTWO(Params.GroupCount));
@@ -212,7 +214,7 @@ PlaceNodeIdTableInMemory(ui_node_table_params Params, void *Memory)
     {
         uint64_t GroupTotal = Params.GroupSize * Params.GroupCount;
 
-        uint8_t *              MetaData = (uint8_t *)Memory;
+        uint8_t *         MetaData = (uint8_t *)Memory;
         ui_node_id_entry *Entries  = (ui_node_id_entry *)(MetaData + GroupTotal);
 
         Result = (ui_node_table *)(Entries + GroupTotal);
@@ -236,14 +238,14 @@ UIFindNodeById(byte_string Id, ui_node_table *Table)
 {
     ui_node Result = {InvalidLayoutNodeIndex};
 
-    if(IsValidByteString(Id) && IsValidNodeIdTable(Table))
+    if(IsValidByteString(Id) && IsValidNodeTable(Table))
     {
         ui_node_id_hash   Hash  = ComputeNodeIdHash(Id);
         ui_node_id_entry *Entry = FindNodeIdEntry(Hash, Table);
 
         if(Entry)
         {
-            Result = {Entry->NodeIndex};
+            Result = {.Index = Entry->NodeIndex};
         }
         else
         {
@@ -256,34 +258,15 @@ UIFindNodeById(byte_string Id, ui_node_table *Table)
     return Result;
 }
 
-// ----------------------------------------------------------------------------
-
-static vec2_unit
-Vec2Unit(ui_unit U0, ui_unit U1)
-{
-    vec2_unit Result = { .X = U0, .Y = U1 };
-    return Result;
-}
-
-static bool
-IsNormalizedColor(ui_color Color)
-{
-    bool Result = (Color.R >= 0.f && Color.R <= 1.f) &&
-                 (Color.G >= 0.f && Color.G <= 1.f) &&
-                 (Color.B >= 0.f && Color.B <= 1.f) &&
-                 (Color.A >= 0.f && Color.A <= 1.f);
-
-    return Result;
-}
 
 // ----------------------------------------------------------------------------------
 // UI Resource Cache Private Implementation
 
-typedef struct ui_resource_allocator
+struct ui_resource_allocator
 {
     uint64_t AllocatedCount;
     uint64_t AllocatedBytes;
-} ui_resource_allocator;
+};
 
 typedef struct ui_resource_entry
 {
@@ -711,11 +694,15 @@ void ui_node::DebugBox(uint32_t Flag, bool Draw, ui_pipeline &Pipeline)
 {
 }
 
-void ui_node::SetId(byte_string Id, ui_pipeline &Pipeline)
+void ui_node::SetId(byte_string Id, ui_node_table *NodeTable)
 {
-    VOID_ASSERT(IsValidByteString(Id)); // Makes no sense.
+    VOID_ASSERT(IsValidByteString(Id));
+    VOID_ASSERT(IsValidNodeTable(NodeTable));
 
-    SetNodeId(Id, Index, Pipeline.NodeTable);
+    if(IsValidByteString(Id) && IsValidNodeTable(NodeTable))
+    {
+        SetNodeId(Id, Index, NodeTable);
+    }
 }
 
 // ----------------------------------------------------------------------------------
@@ -895,14 +882,17 @@ CreateVoidContext(void)
 static uint64_t
 GetPipelineStateFootprint(const ui_pipeline_params &Params)
 {
-    uint64_t TreeSize = GetLayoutTreeFootprint(Params.NodeCount);
-    uint64_t Result   = TreeSize;
+    uint64_t TreeSize      = GetLayoutTreeFootprint(Params.NodeCount);
+    uint64_t NodeTableSize = GetNodeTableFootprint(Params.NodeTable);
+    uint64_t Result        = TreeSize + NodeTableSize;
 
     return Result;
 }
 
 // ==================================================================================
 // @Public : Pipeline API
+
+// TODO: Error check.
 
 static void
 UICreatePipeline(const ui_pipeline_params &Params)
@@ -920,10 +910,18 @@ UICreatePipeline(const ui_pipeline_params &Params)
 
     // UI State
     {
-        uint64_t  TreeFootprint = GetLayoutTreeFootprint(Params.NodeCount);
-        void     *TreeMemory    = PushArena(Pipeline.StateArena, TreeFootprint, GetLayoutTreeAlignment());
+        uint64_t TreeFootprint = GetLayoutTreeFootprint(Params.NodeCount);
+        void    *TreeMemory    = PushArena(Pipeline.StateArena, TreeFootprint, GetLayoutTreeAlignment());
 
         Pipeline.Tree = PlaceLayoutTreeInMemory(Params.NodeCount, TreeMemory);
+
+        if(Params.NodeTable.GroupSize != 0 && Params.NodeTable.GroupCount != 0)
+        {
+            uint64_t NodeTableFootprint = GetNodeTableFootprint(Params.NodeTable);
+            void    *NodeTableMemory    = PushArena(Pipeline.StateArena, NodeTableFootprint, AlignOf(16));
+
+            Pipeline.NodeTable = PlaceNodeTableInMemory(Params.NodeTable, NodeTableMemory);
+        }
 
         VOID_ASSERT(Pipeline.Tree);
     }
@@ -938,14 +936,9 @@ UICreatePipeline(const ui_pipeline_params &Params)
         VOID_ASSERT(Pipeline.StyleArray && Pipeline.StyleIndexMin <= Pipeline.StyleIndexMax);
     }
 
-    // Render State
-    {
-        // NOTE:
-        // Unsure how/if I want this yet, but don't need it right now.
-    }
-
     ++Context.PipelineCount;
 }
+
 
 static ui_pipeline &
 UIBindPipeline(UIPipeline UserPipeline)
@@ -955,13 +948,17 @@ UIBindPipeline(UIPipeline UserPipeline)
 
     if(!Pipeline.Bound)
     {
-        PopArenaTo(Pipeline.FrameArena, 0);
+        if(Pipeline.FrameArena)
+        {
+            PopArenaTo(Pipeline.FrameArena, 0);
+        }
 
         Pipeline.Bound = true;
     }
 
     return Pipeline;
 }
+
 
 static void
 UIUnbindPipeline(UIPipeline UserPipeline)
@@ -982,6 +979,7 @@ UIUnbindPipeline(UIPipeline UserPipeline)
         Pipeline.Bound = false;
     }
 }
+
 
 static ui_pipeline_params
 UIGetDefaultPipelineParams(void)

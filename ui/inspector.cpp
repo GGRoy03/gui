@@ -4,7 +4,8 @@ namespace Inspector
 enum class InspectorStyle : uint32_t
 {
     Window    = 0,
-    Something = 1,
+    TreePanel = 1,
+    TreeNode  = 2,
 };
 
 constexpr ui_color MainOrange        = ui_color(0.9765f, 0.4510f, 0.0863f, 1.0f);
@@ -30,18 +31,16 @@ static ui_cached_style InspectorStyleArray[] =
     {
         .Default =
         {
-            .Size        = ui_size(500.f, 500.f),
-            .MinSize     = ui_size(400.f, 400.f),
-            .MaxSize     = ui_size(600.f, 600.f),
-            .Direction   = LayoutDirection::Vertical,
-            .XAlign      = Alignment::Center,
-            .YAlign      = Alignment::Center,
+            .Size         = ui_size({1000.f, LayoutSizing::Fixed}, {1000.f, LayoutSizing::Fixed}),
+            .Direction    = LayoutDirection::Horizontal,
+            .XAlign       = Alignment::Start,
+            .YAlign       = Alignment::Center,
 
-            .Padding     = ui_padding(10.f, 10.f, 10.f, 10.f),
-            .Spacing     = 5.f,
+            .Padding      = ui_padding(10.f, 10.f, 10.f, 10.f),
+            .Spacing      = 3.f,
 
-            .Color       = Background,
-            .BorderColor = BorderOrDivider,
+            .Color        = Background,
+            .BorderColor  = BorderOrDivider,
 
             .BorderWidth  = 2.f,
             .Softness     = 2.f,
@@ -59,32 +58,18 @@ static ui_cached_style InspectorStyleArray[] =
         },
     },
 
-    // Dummies
+    // Tree Panel
     {
         .Default =
         {
-            .Size         = ui_size(75.f , 75.f),
-            .MinSize      = ui_size(50.f , 50.f),
-            .MaxSize      = ui_size(300.f, 300.f),
-            .Direction    = LayoutDirection::Vertical,
-            .XAlign       = Alignment::Center,
-            .YAlign       = Alignment::Center,
+            .Size         = ui_size({50.f, LayoutSizing::Percent}, {100.f, LayoutSizing::Percent}),
 
-            .Padding      = ui_padding(10.f, 10.f, 10.f, 10.f),
-            .Shrink       = 1.f,
-
-            .Color        = Background,
+            .Color        = SurfaceBackground,
             .BorderColor  = BorderOrDivider,
-            .TextColor    = Success,
 
             .BorderWidth  = 2.f,
             .Softness     = 2.f,
             .CornerRadius = ui_corner_radius(4.f, 4.f, 4.f, 4.f),
-        },
-
-        .Hovered =
-        {
-            .BorderColor = HoverOrange,
         },
     },
 };
@@ -92,6 +77,9 @@ static ui_cached_style InspectorStyleArray[] =
 struct inspector_ui
 {
     bool IsInitialized;
+
+    // UI State
+    ui_layout_tree *CurrentTree; // Lazy!
 
     // UI Resources
     ui_resource_key Font;
@@ -101,7 +89,7 @@ struct inspector_ui
 // @Private : Inspector Helpers
 
 static bool
-InitializeInspector(inspector_ui &Inspector)
+InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
 {
     // UI Pipeline
     {
@@ -109,9 +97,13 @@ InitializeInspector(inspector_ui &Inspector)
         Params.NodeCount     = 64;
         Params.Pipeline      = UIPipeline::Default;
         Params.StyleArray    = InspectorStyleArray;
-        Params.StyleIndexMin = static_cast<uint32_t>(InspectorStyle::Window);
-        Params.StyleIndexMax = static_cast<uint32_t>(InspectorStyle::Something);
+        Params.StyleIndexMin = static_cast<uint32_t>(InspectorStyle::Window  );
+        Params.StyleIndexMax = static_cast<uint32_t>(InspectorStyle::TreeNode);
         Params.FrameBudget   = VOID_KILOBYTE(50);
+
+        // (QUITE BAD)
+        Params.NodeTable.GroupSize  = NodeIdTable_128Bits;
+        Params.NodeTable.GroupCount = 4;
 
         UICreatePipeline(Params);
     }
@@ -123,35 +115,50 @@ InitializeInspector(inspector_ui &Inspector)
 
     // Base Layout
     {
-        ui_pipeline &Pipeline = UIBindPipeline(UIPipeline::Default);
-
         ui_node Window = UIWindow(static_cast<uint32_t>(InspectorStyle::Window), Pipeline);
         {
-            ui_node Dummy0 = UIDummy(static_cast<uint32_t>(InspectorStyle::Something), Pipeline);
+            ui_node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
             {
-                Dummy0.SetText(str8_comp("Hello, World! Hello, World!"), Inspector.Font, Pipeline);
+                TreePanel.SetId(str8_comp("Node_TreePanel"), Pipeline.NodeTable);
 
-                UIEndDummy(Dummy0, Pipeline);
-            }
-
-            ui_node Dummy1 = UIDummy(static_cast<uint32_t>(InspectorStyle::Something), Pipeline);
-            {
-                Dummy1.SetText(str8_comp("Hello, World! Hello, World!"), Inspector.Font, Pipeline);
-
-                UIEndDummy(Dummy1, Pipeline);
+                UIEndDummy(TreePanel, Pipeline);
             }
         }
         UIEndWindow(Window, Pipeline);
-
-        // Removing this seems like the only way to stop the bug from happening. I do not quite get what
-        // is wrong with the code though. We should fix the bug and use some sort of flag based approach
-        // here so that we do not draw/place multiple times per frame when the user doesn't want.
-
-        // UIUnbindPipeline(UIPipeline::Default); 
     }
 
-
     return true;
+}
+
+// ------------------------------------------------------------------------------------
+// @Private : Inspector Helper Components
+
+
+static ui_node
+TreeNode(ui_pipeline &Pipeline)
+{
+    LayoutNodeFlags Flags = LayoutNodeFlags::IsImmediate;
+
+    ui_node Node = {.Index = AllocateLayoutNode(Flags, Pipeline.Tree)}; // Think we rename to UIGetLayoutNode
+
+    if(Node.Index != InvalidLayoutNodeIndex)
+    {
+        bool Pushed = PushLayoutParent(Node.Index, Pipeline.Tree, Pipeline.FrameArena);
+        if(Pushed)
+        {
+            Node.SetStyle(static_cast<uint32_t>(InspectorStyle::TreeNode), Pipeline);
+        }
+    }
+
+    return Node;
+}
+
+static void
+EndTreeNode(ui_node Node, ui_pipeline &Pipeline)
+{
+    VOID_ASSERT(Node.Index != InvalidLayoutNodeIndex);
+
+    PopLayoutParent(Node.Index, Pipeline.Tree);
 }
 
 // ------------------------------------------------------------------------------------
@@ -162,17 +169,26 @@ ShowUI(void)
 {
     static inspector_ui Inspector;
 
+    // It is weird that we allow binding before it's even created. Perhaps we rename these functions?
+    
+    ui_pipeline &Pipeline = UIBindPipeline(UIPipeline::Default);
+
     if(!Inspector.IsInitialized)
     {
-        Inspector.IsInitialized = InitializeInspector(Inspector);
+        Inspector.IsInitialized = InitializeInspector(Inspector, Pipeline);
+
+        Inspector.CurrentTree = Pipeline.Tree; // Lazy!
     }
 
     if(Inspector.IsInitialized)
     {
-        UIBindPipeline(UIPipeline::Default);
-
-        UIUnbindPipeline(UIPipeline::Default);
+        if(Inspector.CurrentTree)
+        {
+            // TODO: Walk the tree and create immediates nodes. Let's just display a stack of boxes for now.
+        }
     }
+
+    UIUnbindPipeline(UIPipeline::Default);
 }
 
 }

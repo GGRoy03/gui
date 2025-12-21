@@ -1,7 +1,7 @@
 // -----------------------------------------------
 // Tree/Node internal implementation (Helpers/Types)
 
-enum class LayoutNodeFlag
+enum class LayoutNodeState
 {
     None                = 0,
 
@@ -11,11 +11,15 @@ enum class LayoutNodeFlag
     HasCapturedPointer = 1 << 2,
 };
 
-inline LayoutNodeFlag operator|(LayoutNodeFlag A, LayoutNodeFlag B)   {return static_cast<LayoutNodeFlag>(static_cast<int>(A) | static_cast<int>(B));}
-inline LayoutNodeFlag operator&(LayoutNodeFlag A, LayoutNodeFlag B)   {return static_cast<LayoutNodeFlag>(static_cast<int>(A) & static_cast<int>(B));}
-inline LayoutNodeFlag operator|=(LayoutNodeFlag& A, LayoutNodeFlag B) {return A = A | B;}
-inline LayoutNodeFlag operator&=(LayoutNodeFlag& A, LayoutNodeFlag B) {return A = A & B;}
-inline LayoutNodeFlag operator~(LayoutNodeFlag A)                     {return static_cast<LayoutNodeFlag>(~static_cast<int>(A));}
+template<>
+struct enable_bitmask_operators<LayoutNodeState> : std::true_type {};
+
+
+struct ui_axes
+{
+    float Width;
+    float Height;
+};
 
 struct ui_layout_node
 {
@@ -28,8 +32,8 @@ struct ui_layout_node
 
     // Outputs
     vec2_float OutputPosition;
-    ui_size    OutputSize;
-    ui_size    OutputChildSize;
+    ui_axes    OutputSize;
+    ui_axes    OutputChildSize;
 
     // Inputs
     ui_size         Size;
@@ -42,15 +46,15 @@ struct ui_layout_node
     float           Spacing;
 
     // State
-    LayoutNodeFlag Flags;
-    vec2_float     ScrollOffset;
-    vec2_float     DragOffset;
+    LayoutNodeState State;
+    LayoutNodeFlags Flags;
+    vec2_float      ScrollOffset;
+    vec2_float      DragOffset;
 
     // Extra Info
     uint32_t Index;
     uint32_t StyleIndex;
     uint32_t ChildCount;
-    uint32_t LegacyFlags;
 };
 
 struct ui_parent_node
@@ -177,6 +181,16 @@ SetNodeProperties(uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style
         Node->YAlign    = Cached.Default.YAlign.Value;
         Node->Padding   = Cached.Default.Padding.Value;
         Node->Spacing   = Cached.Default.Spacing.Value;
+
+        if(!Cached.Default.MinSize.IsSet)
+        {
+            Node->MinSize = Node->Size;
+        }
+
+        if(!Cached.Default.MaxSize.IsSet)
+        {
+            Node->MaxSize = Node->Size;
+        }
     }
 }
 
@@ -223,7 +237,7 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
 }
 
 static uint32_t
-AllocateLayoutNode(uint32_t Flags, ui_layout_tree *Tree)
+AllocateLayoutNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
 {
     VOID_ASSERT(Tree); // Internal Corruption
 
@@ -232,10 +246,10 @@ AllocateLayoutNode(uint32_t Flags, ui_layout_tree *Tree)
     ui_layout_node *Node = GetFreeLayoutNode(Tree);
     if(Node)
     {
-        Node->LegacyFlags = Flags;
-        Node->Last        = 0;
-        Node->Next        = 0;
-        Node->First       = 0;
+        Node->Flags = Flags;
+        Node->Last  = 0;
+        Node->Next  = 0;
+        Node->First = 0;
 
         if(Tree->ParentList.Last)
         {
@@ -461,11 +475,9 @@ UpdateScrollNode(float ScrolledLines, ui_layout_node *Node, ui_layout_tree *Tree
         {
             if (WindowContent.IsIntersecting(ChildContent))
             {
-                Child->LegacyFlags &= ~UILayoutNode_DoNotPaint;
             }
             else
             {
-                Child->LegacyFlags |= UILayoutNode_DoNotPaint;
             }
         }
     }
@@ -529,8 +541,8 @@ HandlePointerClick(vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, 
                 }
             }
 
-            Node->Flags |= LayoutNodeFlag::UseFocusedStyle;
-            Node->Flags |= LayoutNodeFlag::HasCapturedPointer;
+            Node->State |= LayoutNodeState::UseFocusedStyle;
+            Node->State |= LayoutNodeState::HasCapturedPointer;
 
             Tree->CapturedNodeIndex = NodeIndex;
 
@@ -560,9 +572,9 @@ HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint32_t NodeInde
         // Should we check the pointer id?
         // Should also check the ButtonMask
 
-        if((Node->Flags & LayoutNodeFlag::HasCapturedPointer) != LayoutNodeFlag::None)
+        if((Node->State & LayoutNodeState::HasCapturedPointer) != LayoutNodeState::None)
         {
-            Node->Flags &= ~(LayoutNodeFlag::HasCapturedPointer | LayoutNodeFlag::UseFocusedStyle);
+            Node->State &= ~(LayoutNodeState::HasCapturedPointer | LayoutNodeState::UseFocusedStyle);
 
             Tree->CapturedNodeIndex = InvalidLayoutNodeIndex;
 
@@ -595,7 +607,7 @@ HandlePointerHover(vec2_float Position, uint32_t NodeIndex, ui_layout_tree *Tree
                 }
             }
 
-            Node->Flags |= LayoutNodeFlag::UseHoveredStyle;
+            Node->State |= LayoutNodeState::UseHoveredStyle;
 
             return true;
         }
@@ -616,7 +628,7 @@ HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
 
     if(CapturedNode)
     {
-        if(CapturedNode->LegacyFlags & UILayoutNode_IsDraggable)
+        if((CapturedNode->Flags & LayoutNodeFlags::IsDraggable) != LayoutNodeFlags::None)
         {
             CapturedNode->OutputPosition.X += Delta.X;
             CapturedNode->OutputPosition.Y += Delta.Y;
@@ -637,11 +649,7 @@ GetAlignmentOffset(Alignment AlignmentType, float FreeSpace)
         switch(AlignmentType)
         {
     
-        case Alignment::None:
-        {
-            VOID_ASSERT(!"Impossible");
-        } break;
-    
+        case Alignment::None:   
         case Alignment::Start:
         {
             // No-Op
@@ -725,22 +733,65 @@ WrapText(ui_text *Text, ui_layout_node *Node)
 }
 
 
+static float
+ComputeNodeSize(ui_sizing Sizing, float ParentSize)
+{
+    float Result = 0.f;
+
+    switch(Sizing.Type)
+    {
+
+    case LayoutSizing::None:
+    {
+        VOID_ASSERT(!"Impossible!");
+    } break;
+
+    case LayoutSizing::Fixed:
+    {
+        Result = Sizing.Value;
+    } break;
+
+    case LayoutSizing::Percent:
+    {
+        VOID_ASSERT(Sizing.Value >= 0.f && Sizing.Value <= 100.f);
+
+        Result = (Sizing.Value / 100.f) * ParentSize;
+    } break;
+
+    case LayoutSizing::Fit:
+    {
+        VOID_ASSERT(!"Implement :)");
+    } break;
+
+    }
+
+    return Result;
+}
+
+
 // ----------------------------------------------------------------------------------
 // @Public: Layout Pass
 
 
 static void
-ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_size ParentBounds, ui_resource_table *ResourceTable, bool &Changed)
+ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_axes ParentBounds, ui_resource_table *ResourceTable, bool &Changed)
 {
-    // Clear State
+    // Clear State (Unsure)
     Node->OutputChildSize = {};
 
-    ui_size LastSize = Node->OutputSize;
+    ui_axes LastSize = Node->OutputSize;
+
+    float Width     = ComputeNodeSize(Node->Size.Width    , ParentBounds.Width);
+    float MinWidth  = ComputeNodeSize(Node->MinSize.Width , ParentBounds.Width);
+    float MaxWidth  = ComputeNodeSize(Node->MaxSize.Width , ParentBounds.Width);
+    float Height    = ComputeNodeSize(Node->Size.Height   , ParentBounds.Height);
+    float MinHeight = ComputeNodeSize(Node->MinSize.Height, ParentBounds.Height);
+    float MaxHeight = ComputeNodeSize(Node->MaxSize.Height, ParentBounds.Height);
 
     Node->OutputSize =
     {
-        .Width  = Max(Node->MinSize.Width , Min(Node->Size.Width , Node->MaxSize.Width )),
-        .Height = Max(Node->MinSize.Height, Min(Node->Size.Height, Node->MaxSize.Height)),
+        .Width  = Max(MinWidth , Min(Width , MaxWidth )),
+        .Height = Max(MinHeight, Min(Height, MaxHeight)),
     };
 
     if((Node->OutputSize.Width != LastSize.Width || Node->OutputSize.Height != LastSize.Height))
@@ -748,10 +799,10 @@ ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_size ParentBounds, 
         Changed = true;
     }
 
-    ui_size ContentBounds = 
+    ui_axes ContentBounds = 
     {
         .Width  = Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right),
-        .Height = Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot),
+        .Height = Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot  ),
     };
     VOID_ASSERT(ContentBounds.Width >= 0 && ContentBounds.Height >= 0);
 
@@ -818,7 +869,7 @@ PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_resource_table *Resou
     {
         Child->OutputPosition = Cursor;
 
-        float MinorOffset = GetAlignmentOffset(IsXMajor ? Child->XAlign : Child->YAlign, IsXMajor ? (MinorSize - Child->OutputSize.Height) : (MinorSize - Child->OutputSize.Width));
+        float MinorOffset = GetAlignmentOffset(IsXMajor ? Node->XAlign : Node->YAlign, IsXMajor ? (MinorSize - Child->OutputSize.Height) : (MinorSize - Child->OutputSize.Width));
 
         if(IsXMajor)
         {
@@ -916,15 +967,15 @@ GeneratePaintBuffer(ui_layout_tree *Tree, ui_cached_style *CachedBuffer, memory_
             ui_cached_style    *Cached  = CachedBuffer + Node->StyleIndex;       // WARN: Dangerous!
             ui_paint_properties Paint   = Cached->Default.MakePaintProperties();
 
-            if ((Node->Flags & LayoutNodeFlag::UseFocusedStyle) != LayoutNodeFlag::None)
+            if ((Node->State & LayoutNodeState::UseFocusedStyle) != LayoutNodeState::None)
             {
                 Paint = Cached->Focused.InheritPaintProperties(Paint);
             } else
-            if ((Node->Flags & LayoutNodeFlag::UseHoveredStyle) != LayoutNodeFlag::None)
+            if ((Node->State & LayoutNodeState::UseHoveredStyle) != LayoutNodeState::None)
             {
                 Paint = Cached->Hovered.InheritPaintProperties(Paint);
 
-                Node->Flags &= ~LayoutNodeFlag::UseHoveredStyle;
+                Node->State &= ~LayoutNodeState::UseHoveredStyle;
             }
 
             // Set Geometry

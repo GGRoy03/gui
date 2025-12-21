@@ -1,18 +1,3 @@
-typedef enum UIUnit_Type
-{
-    UIUnit_None    = 0,
-    UIUnit_Float32 = 1,
-    UIUnit_Percent = 2,
-    UIUnit_Auto    = 3,
-} UIUnit_Type;
-
-typedef enum UIDisplay_Type
-{
-    UIDisplay_Normal = 0,
-    UIDisplay_None   = 1,
-    UIDisplay_Flex   = 2,
-} UIDisplay_Type;
-
 typedef enum UIAxis_Type
 {
     UIAxis_None = 0,
@@ -20,24 +5,6 @@ typedef enum UIAxis_Type
     UIAxis_Y    = 2,
     UIAxis_XY   = 3,
 } UIAxis_Type;
-
-typedef enum UIAlign_Type
-{
-    UIAlign_Start   = 0,
-    UIAlign_Center  = 1,
-    UIAlign_End     = 2,
-    UIAlign_Stretch = 3,
-    UIAlign_None    = 4,
-} UIAlign_Type;
-
-// [FORWARD DECLARATIONS]
-
-typedef struct ui_layout_node   ui_layout_node;
-typedef struct ui_layout_tree   ui_layout_tree;
-typedef struct ui_node_table ui_node_id_table;
-typedef struct ui_pipeline      ui_pipeline;
-
-typedef void ui_click_callback(ui_layout_node *Node, ui_pipeline *Pipeline);
 
 // [CORE TYPES]
 
@@ -49,49 +16,22 @@ struct ui_color
     float A;
 };
 
-typedef struct ui_corner_radius
+struct ui_corner_radius
 {
     float TL;
     float TR;
     float BR;
     float BL;
-} ui_corner_radius;
+};
 
-typedef struct ui_padding
+struct ui_padding
 {
     float Left;
     float Top;
     float Right;
     float Bot;
-} ui_padding;
+};
 
-typedef struct ui_unit
-{
-    UIUnit_Type Type;
-    union
-    {
-        float Float32;
-        float Percent;
-    };
-} ui_unit;
-
-typedef struct vec2_unit
-{
-    union
-    {
-        struct { ui_unit X; ui_unit Y; };
-        ui_unit Values[2];
-    };
-} vec2_unit;
-
-typedef struct vec4_unit
-{
-    union
-    {
-        struct { ui_unit X; ui_unit Y; ui_unit Z; ui_unit W; };
-        ui_unit Values[4];
-    };
-} vec4_unit;
 
 // NOTE: Must be padded to 16 bytes alignment.
 typedef struct ui_rect
@@ -146,23 +86,31 @@ static void UICreateImageGroup  (byte_string Name, int Width, int Height);
 //   to the placed ui_node_table. Does NOT allocate memory. If Memory == NULL the function
 //   returns NULL, thus caller must only check that the returned memory is non-null.
 //   Caller owns the memory and is responsible for managing it.
-// -----------------------------------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------
+
 
 typedef enum NodeIdTable_Size
 {
     NodeIdTable_128Bits = 16,
 } NodeIdTable_Size;
 
-typedef struct ui_node_table_params
+
+struct ui_node_table_params
 {
     NodeIdTable_Size GroupSize;
     uint64_t         GroupCount;
-} ui_node_table_params;
+};
+
+
+struct ui_node_table;
+
+
+static uint64_t        GetNodeTableFootprint   (ui_node_table_params Params);
+static ui_node_table * PlaceNodeTableInMemory  (ui_node_table_params Params, void *Memory);
+
+// ------------------------------------------------------------------------------------
 
 #include <immintrin.h>
-
-typedef struct ui_resource_table ui_resource_table;
-typedef struct ui_text ui_text;
 
 typedef enum UIResource_Type
 {
@@ -175,29 +123,32 @@ typedef enum UIResource_Type
     UIResource_Font         = 6,
 } UIResource_Type;
 
-typedef struct ui_resource_key
+struct ui_resource_key
 {
     __m128i Value;
-} ui_resource_key;
+};
 
-typedef struct ui_resource_stats
+struct ui_resource_stats
 {
     uint64_t CacheHitCount;
     uint64_t CacheMissCount;
-} ui_resource_stats;
+};
 
-typedef struct ui_resource_table_params
+struct ui_resource_table_params
 {
     uint32_t HashSlotCount;
     uint32_t EntryCount;
-} ui_resource_table_params;
+};
 
-typedef struct ui_resource_state
+struct ui_resource_state
 {
     uint32_t        Id;
     UIResource_Type ResourceType;
     void           *Resource;
-} ui_resource_state;
+};
+
+
+struct ui_resource_table;
 
 static uint64_t            GetResourceTableFootprint   (ui_resource_table_params Params);
 static ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_params Params, void *Memory);
@@ -206,6 +157,8 @@ static ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_params
 //   Opaque handles to resources. Use a resource table to retrieve the associated data
 //   MakeNodeResourceKey is used for general node-based resources
 //   MakeFontResourceKey is used for global  font       resources
+
+struct ui_layout_tree;
 
 static ui_resource_key MakeNodeResourceKey   (UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree);
 static ui_resource_key MakeFontResourceKey   (byte_string Name, float Size);
@@ -221,6 +174,8 @@ enum class FindResourceFlag
     AddIfNotFound = 1 << 0,
 };
 
+// Template this for convenience.
+
 inline FindResourceFlag operator|(FindResourceFlag A, FindResourceFlag B) {return static_cast<FindResourceFlag>(static_cast<int>(A) | static_cast<int>(B));}
 inline FindResourceFlag operator&(FindResourceFlag A, FindResourceFlag B) {return static_cast<FindResourceFlag>(static_cast<int>(A) & static_cast<int>(B));}
 
@@ -229,10 +184,8 @@ static void              UpdateResourceTable   (uint32_t Id, ui_resource_key Key
 
 static void * QueryNodeResource  (UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree, ui_resource_table *Table);
 
-// ui_node:
-//  Main representation of a node in the UI (Button, Window, ...)
-//  A node can be anything you want. Nodes are only valid for a single frame, do
-//  not keep them in memory.
+
+struct ui_pipeline;
 
 struct ui_node
 {
@@ -256,7 +209,7 @@ struct ui_node
     void     DebugBox         (uint32_t Flag, bool Draw, ui_pipeline &Pipeline);
 
     // Misc
-    void     SetId            (byte_string Id, ui_pipeline &Pipeline);
+    void     SetId            (byte_string Id, ui_node_table *NodeTable);
 };
 
 // -----------------------------------------------------------------------------------
@@ -282,24 +235,24 @@ constexpr uint32_t PipelineCount = static_cast<uint32_t>(UIPipeline::Count);
 
 struct ui_pipeline_params
 {
-    byte_string      VtxShaderByteCode;
-    byte_string      PxlShaderByteCode;
+    byte_string          VtxShaderByteCode;
+    byte_string          PxlShaderByteCode;
 
-    uint64_t         NodeCount;
-    uint64_t         FrameBudget;
+    uint64_t             NodeCount;
+    uint64_t             FrameBudget;
 
-    UIPipeline       Pipeline;
-    ui_cached_style *StyleArray;
-    uint32_t         StyleIndexMin;
-    uint32_t         StyleIndexMax;
+    UIPipeline           Pipeline;
+    ui_cached_style     *StyleArray;
+    uint32_t             StyleIndexMin;
+    uint32_t             StyleIndexMax;
+
+    ui_node_table_params NodeTable;
 };
+
+struct ui_node_table;
 
 struct ui_pipeline
 {
-    // Render State
-    render_handle        VtxShader;
-    render_handle        PxlShader;
-
     // UI State
     ui_layout_tree      *Tree;
     ui_node_table       *NodeTable;
@@ -315,7 +268,6 @@ struct ui_pipeline
     memory_arena *FrameArena;
 
     // Misc
-    uint32_t ZIndex;
     bool     Bound;
     uint64_t NodeCount;
 };
@@ -359,5 +311,4 @@ struct void_context
 static void_context GlobalVoidContext;
 
 static void_context & GetVoidContext     (void);
-static ui_pipeline  & GetBoundPipeline   (void);
 static void           CreateVoidContext  (void);

@@ -66,48 +66,6 @@ typedef UIEvent_State (*ui_text_input_onkey)   (OSInputKey_Type Key, void *UserD
 
 static void UICreateImageGroup  (byte_string Name, int Width, int Height);
 
-// -----------------------------------------------------------------------------------
-// NodeIdTable_Size:
-//  NodeIdTable_128Bits is the default size for this table which uses 128 SIMD to find/insert in the table
-//
-// ui_node_table_params
-//  GroupSize : How many values per "groups" this must be one of NodeIDTableSize
-//  GroupCount: How many groups the table contains, this must be a power of two (VOID_ASSERTed in PlaceNodeIdTableInMemory)
-//  This table never resizes and the amount of slots must acount for the worst case scenario.
-//  Number of slots is computed by GroupSize * GroupCount.
-//
-// GetNodeIdTableFootprint:
-//   Return the number of bytes required to store a node-id table for `Params`.
-//   The caller must allocate at least this many bytes (aligned for ui_node_id_entry/ui_node_table)
-//   before calling PlaceNodeIdTableInMemory.
-//
-// PlaceNodeIdTableInMemory:
-//   Initialize a ui_node_table inside the caller-supplied Memory block and return a pointer
-//   to the placed ui_node_table. Does NOT allocate memory. If Memory == NULL the function
-//   returns NULL, thus caller must only check that the returned memory is non-null.
-//   Caller owns the memory and is responsible for managing it.
-// ------------------------------------------------------------------------------------
-
-
-typedef enum NodeIdTable_Size
-{
-    NodeIdTable_128Bits = 16,
-} NodeIdTable_Size;
-
-
-struct ui_node_table_params
-{
-    NodeIdTable_Size GroupSize;
-    uint64_t         GroupCount;
-};
-
-
-struct ui_node_table;
-
-
-static uint64_t        GetNodeTableFootprint   (ui_node_table_params Params);
-static ui_node_table * PlaceNodeTableInMemory  (ui_node_table_params Params, void *Memory);
-
 // ------------------------------------------------------------------------------------
 
 #include <immintrin.h>
@@ -207,9 +165,6 @@ struct ui_node
 
     // Debug
     void     DebugBox         (uint32_t Flag, bool Draw, ui_pipeline &Pipeline);
-
-    // Misc
-    void     SetId            (byte_string Id, ui_node_table *NodeTable);
 };
 
 // -----------------------------------------------------------------------------------
@@ -245,8 +200,6 @@ struct ui_pipeline_params
     ui_cached_style     *StyleArray;
     uint32_t             StyleIndexMin;
     uint32_t             StyleIndexMax;
-
-    ui_node_table_params NodeTable;
 };
 
 struct ui_node_table;

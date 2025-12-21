@@ -4,12 +4,13 @@ enum class LayoutNodeFlags
 {
     None = 0,
 
-    IsDraggable = 1 << 0,
-    IsResizable = 1 << 1,
+    IsDraggable    = 1 << 0,
+    IsResizable    = 1 << 1,
 
-    IsImmediate = 1 << 2, 
+    IsImmediate    = 1 << 2, 
 
-    ClipContent = 1 << 3,
+    ClipContent    = 1 << 3,
+    Indestructible = 1 << 4,
 };
 
 template<>

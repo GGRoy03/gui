@@ -1,264 +1,3 @@
-// ------------------------------------------------------------------------------
-// Node Id Map Implementation
-
-#define NodeIdTable_EmptyMask  1 << 0       // 1st bit
-#define NodeIdTable_DeadMask   1 << 1       // 2nd bit
-#define NodeIdTable_TagMask    0xFF & ~0x03 // High 6 bits
-
-typedef struct ui_node_id_hash
-{
-    uint64_t Value;
-} ui_node_id_hash;
-
-typedef struct ui_node_id_entry
-{
-    ui_node_id_hash Hash;
-    uint32_t        NodeIndex;
-} ui_node_id_entry;
-
-typedef struct ui_node_table
-{
-    uint8_t          *MetaData;
-    ui_node_id_entry *Buckets;
-
-    uint64_t          GroupSize;
-    uint64_t          GroupCount;
-
-    uint64_t          HashMask;
-} ui_node_table;
-
-static bool
-IsValidNodeTable(ui_node_table *Table)
-{
-    bool Result = (Table && Table->MetaData && Table->Buckets && Table->GroupCount);
-    return Result;
-}
-
-static uint32_t
-GetNodeIdGroupIndexFromHash(ui_node_id_hash Hash, ui_node_table *Table)
-{
-    uint32_t Result = Hash.Value & Table->HashMask;
-    return Result;
-}
-
-static uint8_t
-GetNodeIdTagFromHash(ui_node_id_hash Hash)
-{
-    uint8_t Result = Hash.Value & NodeIdTable_TagMask;
-    return Result;
-}
-
-static ui_node_id_hash
-ComputeNodeIdHash(byte_string Id)
-{
-    // WARN: Again, unsure if this hash is strong enough since hash-collisions
-    // are fatal. Fatal in the sense that they will return invalid data.
-
-    ui_node_id_hash Result = {HashByteString(Id)};
-    return Result;
-}
-
-static ui_node_id_entry *
-FindNodeIdEntry(ui_node_id_hash Hash, ui_node_table *Table)
-{
-    uint32_t ProbeCount = 0;
-    uint32_t GroupIndex = GetNodeIdGroupIndexFromHash(Hash, Table);
-
-    while(1)
-    {
-        uint8_t *Meta = Table->MetaData + (GroupIndex * Table->GroupSize);
-        uint8_t  Tag  = GetNodeIdTagFromHash(Hash);
-
-        __m128i MetaVector = _mm_loadu_si128((__m128i *)Meta);
-        __m128i TagVector  = _mm_set1_epi8(Tag);
-
-        // Uses a 6 bit tags to search a matching tag thorugh the meta-data
-        // using vectors of bytes instead of comparing full hashes directly.
-
-        int TagMask = _mm_movemask_epi8(_mm_cmpeq_epi8(MetaVector, TagVector));
-        while(TagMask)
-        {
-            uint32_t Lane  = FindFirstBit(TagMask);
-            uint32_t Index = Lane + (GroupIndex * Table->GroupSize);
-
-            ui_node_id_entry *Entry = Table->Buckets + Index;
-            if(Hash.Value == Entry->Hash.Value)
-            {
-                return Entry;
-            }
-
-            TagMask &= TagMask - 1;
-        }
-
-        // Check for slots that have never been used. If we find any it means that
-        // our value has never been inserted in the map, since, otherwise, it would
-        // have been inserted in that free slot. Keep proving if no never-used slot
-        // have been found.
-
-        __m128i EmptyVector = _mm_set1_epi8(NodeIdTable_EmptyMask);
-        int     EmptyMask   = _mm_movemask_epi8(_mm_cmpeq_epi8(MetaVector, EmptyVector));
-
-        if(!EmptyMask)
-        {
-            ProbeCount++;
-            GroupIndex = (GroupIndex + (ProbeCount * ProbeCount)) & (Table->GroupCount - 1);
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    return 0;
-}
-
-static void
-InsertNodeId(ui_node_id_hash Hash, uint32_t NodeIndex, ui_node_table *Table)
-{
-    uint32_t ProbeCount = 0;
-    uint32_t GroupIndex = GetNodeIdGroupIndexFromHash(Hash, Table);
-
-    while(1)
-    {
-        uint8_t     *Meta       = Table->MetaData + (GroupIndex * Table->GroupSize);
-        __m128i MetaVector = _mm_loadu_si128((__m128i *)Meta);
-
-        // First check for empty entries (never-used), if one is found insert it and
-        // set the meta-data to the tag (which will clear all state bits)
-
-        __m128i EmptyVector = _mm_set1_epi8(NodeIdTable_EmptyMask);
-        int     EmptyMask   = _mm_movemask_epi8(_mm_cmpeq_epi8(MetaVector, EmptyVector));
-
-        if(EmptyMask)
-        {
-            uint32_t Lane  = FindFirstBit(EmptyMask);
-            uint32_t Index = Lane + (GroupIndex * Table->GroupSize);
-
-            ui_node_id_entry *Entry = Table->Buckets + Index;
-            Entry->Hash      = Hash;
-            Entry->NodeIndex = NodeIndex;
-
-            Meta[Lane] = GetNodeIdTagFromHash(Hash);
-
-            break;
-        }
-
-        // Then check for dead entries in the meta-vector, if one is found insert it and
-        // set the meta-data to the tag which will clear all state bits
-
-        __m128i DeadVector = _mm_set1_epi8(NodeIdTable_DeadMask);
-        int     DeadMask   = _mm_movemask_epi8(_mm_cmpeq_epi8(MetaVector, DeadVector));
-
-        if(DeadMask)
-        {
-            uint32_t Lane  = FindFirstBit(DeadMask);
-            uint32_t Index = Lane + (GroupIndex * Table->GroupSize);
-
-            ui_node_id_entry *Entry = Table->Buckets + Index;
-            Entry->Hash      = Hash;
-            Entry->NodeIndex = NodeIndex;
-
-            Meta[Lane] = GetNodeIdTagFromHash(Hash);
-
-            break;
-        }
-
-        ProbeCount++;
-        GroupIndex = (GroupIndex + (ProbeCount * ProbeCount)) & (Table->GroupCount - 1);
-    }
-}
-
-static void
-SetNodeId(byte_string Id, uint32_t NodeIndex, ui_node_table *Table)
-{
-    if(!IsValidNodeTable(Table))
-    {
-        return;
-    }
-
-    ui_node_id_hash   Hash  = ComputeNodeIdHash(Id);
-    ui_node_id_entry *Entry = FindNodeIdEntry(Hash, Table);
-
-    if(!Entry)
-    {
-        InsertNodeId(Hash, NodeIndex, Table);
-    }
-    else
-    {
-    }
-}
-
-static uint64_t
-GetNodeTableFootprint(ui_node_table_params Params)
-{
-    uint64_t GroupTotal = Params.GroupSize * Params.GroupCount;
-
-    uint64_t MetaDataSize = GroupTotal * sizeof(uint8_t);
-    uint64_t BucketsSize  = GroupTotal * sizeof(ui_node_id_entry);
-    uint64_t Result       = sizeof(ui_node_table) + MetaDataSize + BucketsSize;
-
-    return Result;
-}
-
-// There could be alignment issues again.
-
-static ui_node_table *
-PlaceNodeTableInMemory(ui_node_table_params Params, void *Memory)
-{
-    VOID_ASSERT(Params.GroupSize == 16);
-    VOID_ASSERT(Params.GroupCount > 0 && VOID_ISPOWEROFTWO(Params.GroupCount));
-
-    ui_node_table *Result = 0;
-
-    if(Memory)
-    {
-        uint64_t GroupTotal = Params.GroupSize * Params.GroupCount;
-
-        uint8_t *         MetaData = (uint8_t *)Memory;
-        ui_node_id_entry *Entries  = (ui_node_id_entry *)(MetaData + GroupTotal);
-
-        Result = (ui_node_table *)(Entries + GroupTotal);
-        Result->MetaData   = MetaData;
-        Result->Buckets    = Entries;
-        Result->GroupSize  = Params.GroupSize;
-        Result->GroupCount = Params.GroupCount;
-        Result->HashMask   = Params.GroupCount - 1;
-
-        for(uint32_t Idx = 0; Idx < GroupTotal; ++Idx)
-        {
-            Result->MetaData[Idx] = NodeIdTable_EmptyMask;
-        }
-    }
-
-    return Result;
-}
-
-static ui_node
-UIFindNodeById(byte_string Id, ui_node_table *Table)
-{
-    ui_node Result = {InvalidLayoutNodeIndex};
-
-    if(IsValidByteString(Id) && IsValidNodeTable(Table))
-    {
-        ui_node_id_hash   Hash  = ComputeNodeIdHash(Id);
-        ui_node_id_entry *Entry = FindNodeIdEntry(Hash, Table);
-
-        if(Entry)
-        {
-            Result = {.Index = Entry->NodeIndex};
-        }
-        else
-        {
-        }
-    }
-    else
-    {
-    }
-
-    return Result;
-}
-
-
 // ----------------------------------------------------------------------------------
 // UI Resource Cache Private Implementation
 
@@ -268,7 +7,7 @@ struct ui_resource_allocator
     uint64_t AllocatedBytes;
 };
 
-typedef struct ui_resource_entry
+struct ui_resource_entry
 {
     ui_resource_key Key;
 
@@ -278,9 +17,9 @@ typedef struct ui_resource_entry
 
     UIResource_Type ResourceType;
     void           *Memory;
-} ui_resource_entry;
+};
 
-typedef struct ui_resource_table
+struct ui_resource_table
 {
     ui_resource_stats     Stats;
     ui_resource_allocator Allocator;
@@ -291,7 +30,7 @@ typedef struct ui_resource_table
 
     uint32_t             *HashTable;
     ui_resource_entry    *Entries;
-} ui_resource_table;
+};
 
 static ui_resource_entry *
 GetResourceSentinel(ui_resource_table *Table)
@@ -694,17 +433,6 @@ void ui_node::DebugBox(uint32_t Flag, bool Draw, ui_pipeline &Pipeline)
 {
 }
 
-void ui_node::SetId(byte_string Id, ui_node_table *NodeTable)
-{
-    VOID_ASSERT(IsValidByteString(Id));
-    VOID_ASSERT(IsValidNodeTable(NodeTable));
-
-    if(IsValidByteString(Id) && IsValidNodeTable(NodeTable))
-    {
-        SetNodeId(Id, Index, NodeTable);
-    }
-}
-
 // ----------------------------------------------------------------------------------
 // Context Public API Implementation
 
@@ -882,9 +610,8 @@ CreateVoidContext(void)
 static uint64_t
 GetPipelineStateFootprint(const ui_pipeline_params &Params)
 {
-    uint64_t TreeSize      = GetLayoutTreeFootprint(Params.NodeCount);
-    uint64_t NodeTableSize = GetNodeTableFootprint(Params.NodeTable);
-    uint64_t Result        = TreeSize + NodeTableSize;
+    uint64_t TreeSize = GetLayoutTreeFootprint(Params.NodeCount);
+    uint64_t Result   = TreeSize;
 
     return Result;
 }
@@ -914,14 +641,6 @@ UICreatePipeline(const ui_pipeline_params &Params)
         void    *TreeMemory    = PushArena(Pipeline.StateArena, TreeFootprint, GetLayoutTreeAlignment());
 
         Pipeline.Tree = PlaceLayoutTreeInMemory(Params.NodeCount, TreeMemory);
-
-        if(Params.NodeTable.GroupSize != 0 && Params.NodeTable.GroupCount != 0)
-        {
-            uint64_t NodeTableFootprint = GetNodeTableFootprint(Params.NodeTable);
-            void    *NodeTableMemory    = PushArena(Pipeline.StateArena, NodeTableFootprint, AlignOf(16));
-
-            Pipeline.NodeTable = PlaceNodeTableInMemory(Params.NodeTable, NodeTableMemory);
-        }
 
         VOID_ASSERT(Pipeline.Tree);
     }

@@ -101,10 +101,6 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
         Params.StyleIndexMax = static_cast<uint32_t>(InspectorStyle::TreeNode);
         Params.FrameBudget   = VOID_KILOBYTE(50);
 
-        // (QUITE BAD)
-        Params.NodeTable.GroupSize  = NodeIdTable_128Bits;
-        Params.NodeTable.GroupCount = 4;
-
         UICreatePipeline(Params);
     }
 
@@ -119,8 +115,6 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
         {
             ui_node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
             {
-                TreePanel.SetId(str8_comp("Node_TreePanel"), Pipeline.NodeTable);
-
                 UIEndDummy(TreePanel, Pipeline);
             }
         }
@@ -152,6 +146,7 @@ TreeNode(ui_pipeline &Pipeline)
 
     return Node;
 }
+
 
 static void
 EndTreeNode(ui_node Node, ui_pipeline &Pipeline)

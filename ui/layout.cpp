@@ -88,6 +88,7 @@ struct ui_layout_tree
     ui_paint_command *PaintBuffer;
 
     // Helpers
+
     static bool IsValid(const ui_layout_tree *Tree)
     {
         return Tree && Tree->Nodes && Tree->NodeCount <= Tree->NodeCapacity && Tree->PaintBuffer;
@@ -101,7 +102,7 @@ struct ui_layout_tree
 
     ui_layout_node * GetNode(uint32_t Index)
     {
-        ui_layout_node *Result = GetSentinel();
+        ui_layout_node *Result = 0;
 
         if(Index < NodeCapacity)
         {
@@ -114,7 +115,7 @@ struct ui_layout_tree
     ui_layout_node *GetFreeNode()
     {
         ui_layout_node *Sentinel = GetSentinel();
-        ui_layout_node *Result   = Sentinel;
+        ui_layout_node *Result   = 0;
 
         if (Sentinel->Next != InvalidLayoutNodeIndex)
         {
@@ -141,20 +142,49 @@ struct ui_layout_tree
     {
         VOID_ASSERT(ui_layout_node::IsValid(Node));
 
-        ui_layout_node *Sentinel = GetSentinel();
-        VOID_ASSERT(Sentinel);
+        if(ui_layout_node::IsValid(Node))
+        {
+            ui_layout_node *Sentinel = GetSentinel();
+            VOID_ASSERT(Sentinel);
 
-        Node->Next     = Sentinel->Next;
-        Sentinel->Next = Node->Index;
+            ui_layout_node *Prev = GetNode(Node->Prev);
+            if(ui_layout_node::IsValid(Prev))
+            {
+                Prev->Next = Node->Next;
+            }
 
-        Node->Index      = InvalidLayoutNodeIndex;
-        Node->First      = InvalidLayoutNodeIndex;
-        Node->Last       = InvalidLayoutNodeIndex;
-        Node->Prev       = InvalidLayoutNodeIndex;
-        Node->Parent     = InvalidLayoutNodeIndex;
-        Node->ChildCount = 0;
+            ui_layout_node *Next = GetNode(Node->Next);
+            if(ui_layout_node::IsValid(Next))
+            {
+                Next->Prev = Node->Prev;
+            }
 
-        --NodeCount;
+            ui_layout_node *Parent = GetNode(Node->Parent);
+            if(ui_layout_node::IsValid(Parent))
+            {
+                if(Parent->First == Node->Index)
+                {
+                    Parent->First = Node->Next;
+                }
+
+                if(Parent->Last == Node->Index)
+                {
+                    Parent->Last = Node->Prev;
+                }
+            }
+
+            Node->Next     = Sentinel->Next;
+            Sentinel->Next = Node->Index;
+
+            Node->Index      = InvalidLayoutNodeIndex;
+            Node->First      = InvalidLayoutNodeIndex;
+            Node->Last       = InvalidLayoutNodeIndex;
+            Node->Prev       = InvalidLayoutNodeIndex;
+            Node->Parent     = InvalidLayoutNodeIndex;
+            Node->ChildCount = 0;
+
+            --NodeCount;
+        }
     }
 
 
@@ -288,7 +318,7 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
         Result->NodeCount    = 0;
         Result->NodeCapacity = NodeCount;
 
-        for (uint64_t Idx = 0; Idx < Result->NodeCapacity + 1; Idx++)
+        for (uint64_t Idx = 0; Idx < Result->NodeCapacity; Idx++)
         {
             ui_layout_node *Node = Result->GetNode(Idx);
             VOID_ASSERT(ui_layout_node::IsValid(Node));
@@ -305,6 +335,7 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
 
         ui_layout_node *Sentinel = Result->GetSentinel();
         Sentinel->Next = 0;
+        Sentinel->Index = InvalidLayoutNodeIndex;
     }
 
     return Result;

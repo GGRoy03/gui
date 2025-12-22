@@ -164,6 +164,9 @@ struct ui_node
 
     // Debug
     void     DebugBox         (uint32_t Flag, bool Draw, ui_pipeline &Pipeline);
+
+    // Helpers
+    bool     IsValid          ();
 };
 
 // -----------------------------------------------------------------------------------

@@ -329,6 +329,12 @@ LoadImageInGroup(byte_string GroupName, byte_string Path)
 // -------------------------------------------------------------
 // @Public: Frame Node API
 
+bool ui_node::IsValid()
+{
+    bool Result = Index != InvalidLayoutNodeIndex;
+    return Result;
+}
+
 void ui_node::SetStyle(uint32_t StyleIndex, ui_pipeline &Pipeline)
 {
     if(StyleIndex >= Pipeline.StyleIndexMin && StyleIndex <= Pipeline.StyleIndexMax)
@@ -339,14 +345,14 @@ void ui_node::SetStyle(uint32_t StyleIndex, ui_pipeline &Pipeline)
 
 ui_node ui_node::FindChild(uint32_t FindIndex, ui_pipeline &Pipeline)
 {
-    ui_node Result = { UITreeFindChild(Index, FindIndex, Pipeline.Tree) };
+    ui_node Result = { UIFindChild(Index, FindIndex, Pipeline.Tree) };
     return Result;
 }
 
 
 void ui_node::Append(ui_node Child, ui_pipeline &Pipeline)
 {
-    UITreeAppendChild(Index, Child.Index, Pipeline.Tree);
+    UIAppendChild(Index, Child.Index, Pipeline.Tree);
 }
 
 

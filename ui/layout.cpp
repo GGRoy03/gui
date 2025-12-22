@@ -14,6 +14,9 @@ enum class NodeState : uint32_t
 template<>
 struct enable_bitmask_operators<NodeState> : std::true_type {};
 
+template<>
+struct enable_bitmask_operators<LayoutNodeFlags> : std::true_type {};
+
 struct ui_axes
 {
     float Width;
@@ -171,6 +174,8 @@ struct ui_layout_tree
                 {
                     Parent->Last = Node->Prev;
                 }
+
+                --Parent->ChildCount;
             }
 
             Node->Next     = Sentinel->Next;
@@ -344,8 +349,6 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
 static uint32_t
 UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
 {
-    VOID_ASSERT(ui_layout_tree::IsValid(Tree)); // Corruption
-
     uint32_t Result = InvalidLayoutNodeIndex;
 
     if(ui_layout_tree::IsValid(Tree))
@@ -366,7 +369,8 @@ UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
                 Node->Parent = Tree->GetNode(Tree->ParentList.Last->Index)->Index; // Weird.
             }
 
-            Tree->Append(Tree->GetNode(Node->Parent), Node);
+            ui_layout_node *Parent = Tree->GetNode(Node->Parent);
+            Tree->Append(Parent, Node);
     
             Result = Node->Index;
         }
@@ -380,10 +384,8 @@ UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
 
 
 static uint32_t
-UITreeFindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
+UIFindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
 {
-    VOID_ASSERT(ui_layout_tree::IsValid(Tree)); // Corruption
-
     uint32_t Result = InvalidLayoutNodeIndex;
 
     if(ui_layout_tree::IsValid(Tree))
@@ -391,6 +393,8 @@ UITreeFindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
         ui_layout_node *Node = Tree->GetNode(NodeIndex);
         if(ui_layout_node::IsValid(Node))
         {
+            // @Speed: Should we iterate backwards if NodeIndex > NodeCount / 2 ?
+
             ui_layout_node *Child = Tree->GetNode(Node->First);
             while(ui_layout_node::IsValid(Child) && FindIndex--)
             {
@@ -406,58 +410,65 @@ UITreeFindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
 }
 
 
-static void
-UITreeAppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
+// TODO: We need a better check, because appending could cause some sort of circular dependency.
+
+static bool
+UIAppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
 {
-    VOID_ASSERT(ui_layout_tree::IsValid(Tree)); // Corruption
-    VOID_ASSERT(ParentIndex != ChildIndex);     // Trying to append the node to itself
-    
-    if(ui_layout_tree::IsValid(Tree))
+    bool Result = false;
+
+    if(ui_layout_tree::IsValid(Tree) && ParentIndex != ChildIndex)
     {
         ui_layout_node *Parent = Tree->GetNode(ParentIndex);
         ui_layout_node *Child  = Tree->GetNode(ChildIndex);
 
-        VOID_ASSERT(ui_layout_node::IsValid(Parent) && ui_layout_node::IsValid(Child));
-
-        if(ui_layout_node::IsValid(Parent) && ui_layout_node::IsValid(Child) && ParentIndex != ChildIndex)
+        if(ui_layout_node::IsValid(Parent) && ui_layout_node::IsValid(Child))
         {
             Tree->Append(Parent, Child);
         }
     }
-}
 
-
-static bool
-PushLayoutParent(uint32_t Index, ui_layout_tree *Tree, memory_arena *Arena)
-{
-    ui_parent_node *Node = PushStruct(Arena, ui_parent_node);
-    if(Node)
-    {
-        ui_parent_list &List = Tree->ParentList;
-
-        if(!List.First)
-        {
-            List.First = Node;
-        }
-
-        Node->Index = Index;
-        Node->Prev  = List.Last;
-
-        List.Last   = Node;
-        List.Count += 1;
-    }
-
-    bool Result = Node != 0;
     return Result;
 }
 
 
 static bool
-PopLayoutParent(uint32_t Index, ui_layout_tree *Tree)
+UIPushLayoutParent(uint32_t Index, ui_layout_tree *Tree, memory_arena *Arena)
 {
     bool Result = false;
 
-    if(Tree->ParentList.Last && Index == Tree->ParentList.Last->Index)
+    if(Index != InvalidLayoutNodeIndex && ui_layout_tree::IsValid(Tree) && Arena)
+    {
+        ui_parent_node *Node = PushStruct(Arena, ui_parent_node);
+        if(Node)
+        {
+            ui_parent_list &List = Tree->ParentList;
+    
+            if(!List.First)
+            {
+                List.First = Node;
+            }
+    
+            Node->Index = Index;
+            Node->Prev  = List.Last;
+    
+            List.Last   = Node;
+            List.Count += 1;
+        }
+
+        Result = Node != 0;
+    }
+
+    return Result;
+}
+
+
+static bool
+UIPopLayoutParent(uint32_t Index, ui_layout_tree *Tree)
+{
+    bool Result = false;
+
+    if(ui_layout_tree::IsValid(Tree) && Tree->ParentList.Last && Index == Tree->ParentList.Last->Index)
     {
         ui_parent_list &List = Tree->ParentList;
         ui_parent_node *Node = List.Last;
@@ -469,6 +480,8 @@ PopLayoutParent(uint32_t Index, ui_layout_tree *Tree)
 
         List.Last   = Node->Prev;
         List.Count -= 1;
+
+        Result = true;
     }
 
     return Result;
@@ -956,15 +969,7 @@ ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_axes ParentBounds, 
     ui_text *Text = static_cast<ui_text *>(QueryNodeResource(UIResource_Text, Node->Index, Tree, ResourceTable));
     if(Text)
     {
-        uint32_t LineCount = WrapText(Text, Node);
-
-        // TODO: Handle Growing/Shrinking depending on node's policy.
-
-        if(LineCount)
-        {
-            return;
-        }
-
+        WrapText(Text, Node);
     }
 }
 

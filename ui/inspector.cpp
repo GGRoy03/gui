@@ -113,23 +113,29 @@ TreeNode(ui_pipeline &Pipeline)
 
     if(Node.Index != InvalidLayoutNodeIndex)
     {
-        bool Pushed = PushLayoutParent(Node.Index, Pipeline.Tree, Pipeline.FrameArena);
-        if(Pushed)
-        {
-            Node.SetStyle(static_cast<uint32_t>(InspectorStyle::TreeNode), Pipeline);
-        }
+        Node.SetStyle(static_cast<uint32_t>(InspectorStyle::TreeNode), Pipeline);
     }
 
     return Node;
 }
 
 
-static void
-EndTreeNode(ui_node Node, ui_pipeline &Pipeline)
-{
-    VOID_ASSERT(Node.Index != InvalidLayoutNodeIndex);
+// I mean. Yeah. This will render things inside things. But we want some sort of tree.
+// This is tricky. It works as a proof of concept though.
 
-    PopLayoutParent(Node.Index, Pipeline.Tree);
+
+static void
+RenderLayoutTree(ui_layout_node *Node, ui_layout_tree *Tree, ui_pipeline &Pipeline)
+{
+    VOID_ASSERT(ui_layout_node::IsValid(Node));
+    VOID_ASSERT(ui_layout_tree::IsValid(Tree));
+
+    for(auto *Child = Tree->GetNode(Node->First); ui_layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+    {
+        RenderLayoutTree(Child, Tree, Pipeline);
+    }
+
+    TreeNode(Pipeline);
 }
 
 // ------------------------------------------------------------------------------------
@@ -162,13 +168,14 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
         {
             ui_node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
             {
-                ui_node ImmediateNode = TreeNode(Pipeline);
-                {
-                    EndTreeNode(ImmediateNode, Pipeline);
-                }
-
-                UIEndDummy(TreePanel, Pipeline);
             }
+            UIEndDummy(TreePanel, Pipeline);
+
+            ui_node OtherPanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
+            {
+            }
+            UIEndDummy(OtherPanel, Pipeline);
+
         }
         UIEndWindow(Window, Pipeline);
     }
@@ -198,12 +205,14 @@ ShowUI(void)
 
     if(Inspector.IsInitialized)
     {
-        if(Inspector.CurrentTree)
+        ui_layout_tree *Tree = Inspector.CurrentTree;
+        if(ui_layout_tree::IsValid(Tree))
         {
-            // TODO: Walk the tree and create immediates nodes. Let's just display a stack of boxes for now.
-            // Immediate nodes are tricky. They must always be appended to some immediate node unless
-            // they are the first one. And why is that? It should just be user error. We don't care.
-            // Uhm. Yeah I don't know. In any case. It seems like it wokrs.
+            if(UIPushLayoutParent(1, Tree, Pipeline.FrameArena))
+            {
+                RenderLayoutTree(Tree->GetNode(0), Tree, Pipeline);
+                UIPopLayoutParent(1, Tree);
+            }
         }
     }
 

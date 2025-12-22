@@ -337,7 +337,7 @@ void ui_node::SetStyle(uint32_t StyleIndex, ui_pipeline &Pipeline)
     }
 }
 
-ui_node ui_node::Find(uint32_t FindIndex, ui_pipeline &Pipeline)
+ui_node ui_node::FindChild(uint32_t FindIndex, ui_pipeline &Pipeline)
 {
     ui_node Result = { UITreeFindChild(Index, FindIndex, Pipeline.Tree) };
     return Result;
@@ -347,12 +347,6 @@ ui_node ui_node::Find(uint32_t FindIndex, ui_pipeline &Pipeline)
 void ui_node::Append(ui_node Child, ui_pipeline &Pipeline)
 {
     UITreeAppendChild(Index, Child.Index, Pipeline.Tree);
-}
-
-
-void ui_node::Reserve(uint32_t Amount, ui_pipeline &Pipeline)
-{
-    UITreeReserve(Index, Amount, Pipeline.Tree);
 }
 
 

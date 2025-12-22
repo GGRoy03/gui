@@ -19,7 +19,7 @@ struct enable_bitmask_operators<LayoutNodeFlags> : std::true_type {};
 static uint64_t         GetLayoutTreeAlignment   (void);
 static uint64_t         GetLayoutTreeFootprint   (uint64_t NodeCount);
 static ui_layout_tree * PlaceLayoutTreeInMemory  (uint64_t NodeCount, void *Memory);
-static uint32_t         AllocateLayoutNode       (LayoutNodeFlags Flags, ui_layout_tree *Tree);
+static uint32_t         UICreateNode             (LayoutNodeFlags Flags, ui_layout_tree *Tree);
 static bool             PushLayoutParent         (uint32_t Index, ui_layout_tree *Tree, memory_arena *Arena);
 static bool             PopLayoutParent          (uint32_t Index, ui_layout_tree *Tree);
 static void             ComputeTreeLayout        (ui_layout_tree *Tree);
@@ -36,7 +36,6 @@ static void             SetNodeProperties        (uint32_t NodeIndex, uint32_t S
 
 static uint32_t UITreeFindChild    (uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree);
 static void     UITreeAppendChild  (uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree);
-static void     UITreeReserve      (uint32_t NodeIndex  , uint32_t Amount    , ui_layout_tree *Tree);
 
 // ------------------------------------------------------------------------------------
 // @internal: Layout Resources

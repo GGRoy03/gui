@@ -72,6 +72,21 @@ static ui_cached_style InspectorStyleArray[] =
             .CornerRadius = ui_corner_radius(4.f, 4.f, 4.f, 4.f),
         },
     },
+
+    // Tree Node
+    {
+        .Default =
+        {
+            .Size         = ui_size({50.f, LayoutSizing::Fixed}, {100.f, LayoutSizing::Fixed}),
+
+            .Color        = SurfaceBackground,
+            .BorderColor  = HoverOrange,
+
+            .BorderWidth  = 2.f,
+            .Softness     = 2.f,
+            .CornerRadius = ui_corner_radius(4.f, 4.f, 4.f, 4.f),
+        },
+    },
 };
 
 struct inspector_ui
@@ -84,6 +99,38 @@ struct inspector_ui
     // UI Resources
     ui_resource_key Font;
 };
+
+// ------------------------------------------------------------------------------------
+// @Private : Inspector Helper Components
+
+
+static ui_node
+TreeNode(ui_pipeline &Pipeline)
+{
+    LayoutNodeFlags Flags = LayoutNodeFlags::IsImmediate;
+
+    ui_node Node = {.Index = UICreateNode(Flags, Pipeline.Tree)};
+
+    if(Node.Index != InvalidLayoutNodeIndex)
+    {
+        bool Pushed = PushLayoutParent(Node.Index, Pipeline.Tree, Pipeline.FrameArena);
+        if(Pushed)
+        {
+            Node.SetStyle(static_cast<uint32_t>(InspectorStyle::TreeNode), Pipeline);
+        }
+    }
+
+    return Node;
+}
+
+
+static void
+EndTreeNode(ui_node Node, ui_pipeline &Pipeline)
+{
+    VOID_ASSERT(Node.Index != InvalidLayoutNodeIndex);
+
+    PopLayoutParent(Node.Index, Pipeline.Tree);
+}
 
 // ------------------------------------------------------------------------------------
 // @Private : Inspector Helpers
@@ -115,6 +162,11 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
         {
             ui_node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
             {
+                ui_node ImmediateNode = TreeNode(Pipeline);
+                {
+                    EndTreeNode(ImmediateNode, Pipeline);
+                }
+
                 UIEndDummy(TreePanel, Pipeline);
             }
         }
@@ -124,37 +176,6 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
     return true;
 }
 
-// ------------------------------------------------------------------------------------
-// @Private : Inspector Helper Components
-
-
-static ui_node
-TreeNode(ui_pipeline &Pipeline)
-{
-    LayoutNodeFlags Flags = LayoutNodeFlags::IsImmediate;
-
-    ui_node Node = {.Index = AllocateLayoutNode(Flags, Pipeline.Tree)}; // Think we rename to UIGetLayoutNode
-
-    if(Node.Index != InvalidLayoutNodeIndex)
-    {
-        bool Pushed = PushLayoutParent(Node.Index, Pipeline.Tree, Pipeline.FrameArena);
-        if(Pushed)
-        {
-            Node.SetStyle(static_cast<uint32_t>(InspectorStyle::TreeNode), Pipeline);
-        }
-    }
-
-    return Node;
-}
-
-
-static void
-EndTreeNode(ui_node Node, ui_pipeline &Pipeline)
-{
-    VOID_ASSERT(Node.Index != InvalidLayoutNodeIndex);
-
-    PopLayoutParent(Node.Index, Pipeline.Tree);
-}
 
 // ------------------------------------------------------------------------------------
 // @Public : Inspector API
@@ -180,6 +201,9 @@ ShowUI(void)
         if(Inspector.CurrentTree)
         {
             // TODO: Walk the tree and create immediates nodes. Let's just display a stack of boxes for now.
+            // Immediate nodes are tricky. They must always be appended to some immediate node unless
+            // they are the first one. And why is that? It should just be user error. We don't care.
+            // Uhm. Yeah I don't know. In any case. It seems like it wokrs.
         }
     }
 

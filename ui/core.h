@@ -153,9 +153,8 @@ struct ui_node
     void     SetStyle         (uint32_t Style, ui_pipeline &Pipeline);
 
     // Layout
-    ui_node  Find             (uint32_t Index , ui_pipeline &Pipeline);
+    ui_node  FindChild        (uint32_t Index , ui_pipeline &Pipeline);
     void     Append           (ui_node  Child , ui_pipeline &Pipeline);
-    void     Reserve          (uint32_t Amount, ui_pipeline &Pipeline);
 
     // Resource
     void     SetText          (byte_string Text, ui_resource_key FontKey, ui_pipeline &Pipeline);

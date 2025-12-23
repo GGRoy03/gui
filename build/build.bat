@@ -10,7 +10,6 @@ set "TARGET=void_engine.exe"
 set "SRCS=..\incremental_build.cpp"
 set "INCLUDES=..\..\ui_engine"
 set "OUT_DIR=."
-set "PDBNAME=void_engine.pdb"
 
 :: ------------------------------------
 :: Build type
@@ -18,12 +17,14 @@ set "PDBNAME=void_engine.pdb"
 if /I "%~1"=="release" (
     set "TARGET=void_engine_release.exe"
     set "BUILD=release"
-    set "CXXFLAGS=/O2 -maes -Wno-deprecated-declarations /std:c++20 /EHsc"
-    set "LDFLAGS="
+    set "CXXFLAGS=/O2 /Zi -maes -Wno-deprecated-declarations /std:c++20 /EHsc"
+    set "LDFLAGS=/SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup"
+    set "PDBNAME=void_engine_release.pdb"
 ) else (
     set "BUILD=debug"
     set "CXXFLAGS=/Od /Zi /W3 -maes -Wno-unused-function -Wno-deprecated-declarations /std:c++20 /EHsc /DDEBUG"
-    set "LDFLAGS="
+    set "LDFLAGS=/SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup"
+    set "PDBNAME=void_engine.pdb"
 )
 
 echo Building %TARGET% (%BUILD%)...

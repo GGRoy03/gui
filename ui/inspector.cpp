@@ -36,8 +36,8 @@ static ui_cached_style InspectorStyleArray[] =
             .XAlign       = Alignment::Start,
             .YAlign       = Alignment::Center,
 
-            .Padding      = ui_padding(10.f, 10.f, 10.f, 10.f),
-            .Spacing      = 3.f,
+            .Padding      = ui_padding(20.f, 20.f, 20.f, 20.f),
+            .Spacing      = 10.f,
 
             .Color        = Background,
             .BorderColor  = BorderOrDivider,
@@ -64,6 +64,8 @@ static ui_cached_style InspectorStyleArray[] =
         {
             .Size         = ui_size({50.f, LayoutSizing::Percent}, {100.f, LayoutSizing::Percent}),
 
+            .Padding      = ui_padding(20.f, 20.f, 20.f, 20.f),
+
             .Color        = SurfaceBackground,
             .BorderColor  = BorderOrDivider,
 
@@ -77,7 +79,7 @@ static ui_cached_style InspectorStyleArray[] =
     {
         .Default =
         {
-            .Size         = ui_size({50.f, LayoutSizing::Fixed}, {100.f, LayoutSizing::Fixed}),
+            .Size         = ui_size({50.f, LayoutSizing::Fixed}, {50.f, LayoutSizing::Fixed}),
 
             .Color        = SurfaceBackground,
             .BorderColor  = HoverOrange,
@@ -89,19 +91,63 @@ static ui_cached_style InspectorStyleArray[] =
     },
 };
 
+struct node_state
+{
+    uint32_t Index   = InvalidLayoutNodeIndex;
+    uint32_t Depth   = 0;
+    bool     Visible = false;
+};
+
 struct inspector_ui
 {
-    bool IsInitialized;
+    // UI Static State
+    bool          IsInitialized = false;
+    memory_arena *FrameArena    = 0;
 
-    // UI State
-    ui_layout_tree *CurrentTree; // Lazy!
+    // UI Transient State
+    uint32_t        SelectedNodeIndex = InvalidLayoutNodeIndex;
+    uint32_t        HoveredNodeIndex  = InvalidLayoutNodeIndex;
+    node_state     *Nodes             = 0;
+    uint32_t        NodeCount         = 0;
+    ui_layout_tree *CurrentTree       = 0;
 
     // UI Resources
     ui_resource_key Font;
 };
 
 // ------------------------------------------------------------------------------------
-// @Private : Inspector Helper Components
+// Rendering A Hierarchical Tree View
+// ------------------------------------------------------------------------------------
+
+static void
+BuildVisibleListEx(ui_layout_node *Node, ui_layout_tree *Tree, uint32_t Depth, inspector_ui &Inspector)
+{
+    node_state &State = Inspector.Nodes[Inspector.NodeCount++];
+    State.Index = Node->Index;
+    State.Depth = Depth;
+
+    // If the node is not expanded, stop collection. Where do I store that?
+    // I need some sort of persistent state?
+
+
+    for (auto *Child = Tree->GetNode(Node->First); ui_layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+    {
+        BuildVisibleListEx(Child, Tree, Depth + 1, Inspector);
+    }
+}
+
+
+static void
+BuildVisibleList(ui_layout_node *Root, ui_layout_tree *Tree, inspector_ui &Inspector)
+{
+    Inspector.Nodes     = PushArray(Inspector.FrameArena, node_state, Tree->NodeCount);
+    Inspector.NodeCount = 0;
+
+    if(ui_layout_node::IsValid(Root) && ui_layout_tree::IsValid(Tree))
+    {
+        BuildVisibleListEx(Root, Tree, 0, Inspector);
+    }
+}
 
 
 static ui_node
@@ -120,22 +166,30 @@ TreeNode(ui_pipeline &Pipeline)
 }
 
 
-// I mean. Yeah. This will render things inside things. But we want some sort of tree.
-// This is tricky. It works as a proof of concept though.
-
-
 static void
-RenderLayoutTree(ui_layout_node *Node, ui_layout_tree *Tree, ui_pipeline &Pipeline)
+RenderLayoutNodes(ui_pipeline &Pipeline, inspector_ui &Inspector)
 {
-    VOID_ASSERT(ui_layout_node::IsValid(Node));
-    VOID_ASSERT(ui_layout_tree::IsValid(Tree));
-
-    for(auto *Child = Tree->GetNode(Node->First); ui_layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+    for(uint32_t Idx = 0; Idx < Inspector.NodeCount; ++Idx)
     {
-        RenderLayoutTree(Child, Tree, Pipeline);
-    }
+        uint32_t LayoutIndex = Inspector.Nodes[Idx].Index;
+        uint32_t LayoutDepth = Inspector.Nodes[Idx].Depth;
 
-    TreeNode(Pipeline);
+        ui_node Row = TreeNode(Pipeline);
+
+        if(!Row.IsValid())
+        {
+            continue;
+        }
+
+        // This simply cannot work with the current architecture. Can we find something else?
+
+        if(Row.IsClicked(Pipeline))
+        {
+            VOID_ASSERT(!"Crash");
+        }
+
+        Row.SetOffset(LayoutDepth * 10.f, 0.f, Pipeline);
+    }
 }
 
 // ------------------------------------------------------------------------------------
@@ -147,14 +201,19 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
     // UI Pipeline
     {
         ui_pipeline_params Params = UIGetDefaultPipelineParams();
-        Params.NodeCount     = 64;
+        Params.NodeCount     = 128;
         Params.Pipeline      = UIPipeline::Default;
         Params.StyleArray    = InspectorStyleArray;
         Params.StyleIndexMin = static_cast<uint32_t>(InspectorStyle::Window  );
         Params.StyleIndexMax = static_cast<uint32_t>(InspectorStyle::TreeNode);
-        Params.FrameBudget   = VOID_KILOBYTE(50);
+        Params.FrameBudget   = VOID_KILOBYTE(128);
 
         UICreatePipeline(Params);
+    }
+
+    // UI State
+    {
+        Inspector.FrameArena = AllocateArena({.ReserveSize = VOID_KILOBYTE(128)});
     }
 
     // UI Resource
@@ -166,7 +225,7 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
     {
         ui_node Window = UIWindow(static_cast<uint32_t>(InspectorStyle::Window), Pipeline);
         {
-            ui_node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
+            ui_node TreePanel  = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
             {
             }
             UIEndDummy(TreePanel, Pipeline);
@@ -205,12 +264,16 @@ ShowUI(void)
 
     if(Inspector.IsInitialized)
     {
+        ClearArena(Inspector.FrameArena);
+
         ui_layout_tree *Tree = Inspector.CurrentTree;
         if(ui_layout_tree::IsValid(Tree))
         {
+            BuildVisibleList(Tree->GetNode(0), Tree, Inspector);
+
             if(UIPushLayoutParent(1, Tree, Pipeline.FrameArena))
             {
-                RenderLayoutTree(Tree->GetNode(0), Tree, Pipeline);
+                RenderLayoutNodes(Pipeline, Inspector);
                 UIPopLayoutParent(1, Tree);
             }
         }

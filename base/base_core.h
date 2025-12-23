@@ -77,3 +77,43 @@
 #define AppendToDoublyLinkedList(List, Node, Counter) if(!List->First) List->First = Node; if(List->Last) List->Last->Next = Node; Node->Prev = List->Last; List->Last = Node; ++Counter;
 #define IterateLinkedList(List, Type, N)             for(Type N = List->First; N != 0; N = N->Next)
 #define IterateLinkedListBackward(List, Type, N)     for(Type N = List->Last ; N != 0; N = N->Prev)
+
+// [Flags]
+
+#include <type_traits>
+
+template<typename E>
+struct enable_bitmask_operators : std::false_type {};
+
+template<typename E>
+constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E>
+operator|(E a, E b) noexcept {
+    using U = std::underlying_type_t<E>;
+    return static_cast<E>(static_cast<U>(a) | static_cast<U>(b));
+}
+
+template<typename E>
+constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E>
+operator&(E a, E b) noexcept {
+    using U = std::underlying_type_t<E>;
+    return static_cast<E>(static_cast<U>(a) & static_cast<U>(b));
+}
+
+template<typename E>
+constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E&>
+operator|=(E& a, E b) noexcept {
+    return a = a | b;
+}
+
+template<typename E>
+constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E&>
+operator&=(E& a, E b) noexcept {
+    return a = a & b;
+}
+
+template<typename E>
+constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E>
+operator~(E a) noexcept {
+    using U = std::underlying_type_t<E>;
+    return static_cast<E>(~static_cast<U>(a));
+}

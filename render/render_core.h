@@ -81,9 +81,6 @@ typedef struct render_pass_params_ui
     uint32_t              Count;
 } render_pass_params_ui;
 
-// Stats Types
-// Used to track resource usage per-pass/per-type.
-
 typedef struct render_pass_ui_stats
 {
     uint32_t BatchCount;
@@ -160,13 +157,29 @@ static void          SubmitRenderCommands  (render_handle HRenderer, vec2_int Re
 // ------------------------------------------------------------------------------------
 // @Internal : Textures
 
-enum class RenderTexture
+enum class RenderTextureType
+{
+    None    = 0,
+    Default = 1,    // GPU read-only (shader resource)
+    Dynamic = 2,    // CPU can write, GPU reads
+    Staging = 3,    // CPU writes, then copy to Default
+};
+
+enum class RenderTextureFormat
 {
     None = 0,
     RGBA = 1,
 };
 
-static render_handle CreateRenderTexture      (uint16_t SizeX, uint16_t SizeY, RenderTexture Type);
-static render_handle CreateRenderTextureView  (render_handle TextureHandle, RenderTexture Type);
+struct render_texture_params
+{
+    RenderTextureFormat Format;
+    RenderTextureType   Type;
+    uint16_t            SizeX;
+    uint16_t            SizeY;
+};
 
-static void          UpdateGlyphCache         (render_handle TextureHandle, const ntext::rasterized_glyph_list &List);
+static render_handle CreateRenderTexture      (render_texture_params Params);
+static render_handle CreateRenderTextureView  (render_handle TextureHandle, RenderTextureType Type);
+
+static void          UpdateGlyphCache         (render_handle CacheTransferHandle,  render_handle CacheHandle, const ntext::rasterized_glyph_list &List);

@@ -3,8 +3,9 @@
 
 struct ui_font
 {
-    render_handle          Texture;
-    render_handle          TextureView;
+    render_handle          CacheTransfer;
+    render_handle          Cache;
+    render_handle          CacheView;
     vec2_uint16            TextureSize;
     ntext::glyph_generator Generator;
     uint16_t               Size;

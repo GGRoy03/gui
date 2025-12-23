@@ -123,7 +123,6 @@ OSWin32WindowProc(HWND Handle, UINT Message, WPARAM WParam, LPARAM LParam)
 
     case WM_LBUTTONDOWN:
     {
-        LogInfo("Mouse Down\n");
         input_pointer &Pointer = Inputs->Pointers[0];
 
         EnqueuePointerClickEvent(BUTTON_PRIMARY, Pointer.Position, 0, Inputs->PointerEventList);
@@ -235,7 +234,7 @@ OSWin32GetClientSize(HWND HWindow)
     return Result;
 }
 
-static int WINAPI
+int WINAPI
 wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, int ShowCmd)
 {
     VOID_UNUSED(PrevInstance);

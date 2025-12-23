@@ -74,7 +74,7 @@ enum class LayoutNodeFlags : uint32_t
 //
 
 
-static uint32_t UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree);
+static uint32_t UICreateNode    (LayoutNodeFlags Flags, ui_layout_tree *Tree);
 
 
 //
@@ -190,6 +190,17 @@ static uint32_t UIFindChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout
 
 static bool UIAppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree);
 
+// 
+// TODO
+//
+
+static void UISetOffset(uint32_t NodeIndex, float XOffset, float YOffset, ui_layout_tree *Tree);
+
+// 
+// TODO
+//
+
+static bool UIIsNodeClicked(uint32_t NodeIndex, ui_layout_tree *Tree);
 
 // 
 // See ui/Inspector.cpp to see how these functions are used in practice.

@@ -145,6 +145,8 @@ static void * QueryNodeResource  (UIResource_Type Type, uint32_t NodeIndex, ui_l
 
 struct ui_pipeline;
 
+// I do wonder if we want to add the pipeline as a member to simplify?
+
 struct ui_node
 {
     uint32_t Index;
@@ -155,6 +157,10 @@ struct ui_node
     // Layout
     ui_node  FindChild        (uint32_t Index , ui_pipeline &Pipeline);
     void     Append           (ui_node  Child , ui_pipeline &Pipeline);
+    void     SetOffset        (float XOffset, float YOffset, ui_pipeline &Pipeline);
+
+    // Queries
+    bool     IsClicked        (ui_pipeline &Pipeline);
 
     // Resource
     void     SetText          (byte_string Text, ui_resource_key FontKey, ui_pipeline &Pipeline);
@@ -170,10 +176,6 @@ struct ui_node
 };
 
 // -----------------------------------------------------------------------------------
-
-struct pointer_event_node;
-struct pointer_event_list;
-static void ConsumePointerEvent  (pointer_event_node *Node, pointer_event_list *List);
 
 static void UIBeginFrame  (vec2_int WindowSize);
 static void UIEndFrame    (void);

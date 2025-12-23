@@ -1,5 +1,6 @@
 #pragma once
 
+
 enum class Alignment
 {
     None   = 0,
@@ -8,6 +9,7 @@ enum class Alignment
     End    = 3,
 };
 
+
 enum class LayoutDirection
 {
     None       = 0,
@@ -15,10 +17,27 @@ enum class LayoutDirection
     Vertical   = 2,
 };
 
+
+enum class LayoutSizing
+{
+    None    = 0,
+    Fixed   = 1,
+    Percent = 2,
+    Fit     = 3,
+};
+
+
+struct ui_sizing
+{
+    float        Value;
+    LayoutSizing Type;
+};
+
+
 struct ui_size
 {
-    float Width;
-    float Height;
+    ui_sizing Width;
+    ui_sizing Height;
 };
 
 // TODO: Can we be smarter about what a command really is?
@@ -40,11 +59,13 @@ struct ui_paint_command
     float            BorderWidth;
 };
 
+
 struct ui_paint_buffer
 {
     ui_paint_command *Commands;
     uint32_t          Size;
 };
+
 
 template<typename T>
 struct ui_property

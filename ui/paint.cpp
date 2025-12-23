@@ -1,29 +1,3 @@
-// ------------------------------------------------------------------------------------
-// @Internal: Helpers
-
-static bool
-IsVisibleColor(ui_color Color)
-{
-    bool Result = (Color.A > 0.f);
-    return Result;
-}
-
-static ui_color
-NormalizeColor(ui_color Color)
-{
-    float Inverse = 1.f / 255.f;
-
-    ui_color Result =
-    {
-        .R = Color.R * Inverse,
-        .G = Color.G * Inverse,
-        .B = Color.B * Inverse,
-        .A = Color.A * Inverse,
-    };
-
-    return Result;
-}
-
 // -----------------------------------------------------------------------------------
 // Painting internal Implementation
 
@@ -54,7 +28,7 @@ GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
             {
                 ui_font *Font = static_cast<ui_font *>(FontState.Resource);
 
-                Params.Texture     = Font->TextureView;
+                Params.Texture     = Font->CacheView;
                 Params.TextureSize = Font->TextureSize;
             }
         }
@@ -175,18 +149,9 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
         {
             ui_color TextColor = Command.TextColor;
 
-            //LogInfo("Text rendering: ShapedCount=%u, TextColor=(%f,%f,%f,%f)",
-            //    Text->ShapedCount, TextColor.R, TextColor.G, TextColor.B, TextColor.A);
-
             for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
             {
                 const ui_shaped_glyph &Glyph = Text->Shaped[Idx];
-
-                //LogInfo("Glyph[%u]: Pos=(%f,%f,%f,%f) Src=(%f,%f,%f,%f) Color=(%f,%f,%f,%f)",
-                //    Idx,
-                //    Glyph.Position.Left, Glyph.Position.Top, Glyph.Position.Right, Glyph.Position.Bottom,
-                //    Glyph.Source.Left, Glyph.Source.Top, Glyph.Source.Right, Glyph.Source.Bottom,
-                //    TextColor.R, TextColor.G, TextColor.B, TextColor.A);
 
                 PaintUIGlyph(Glyph.Position, TextColor, Glyph.Source, BatchList, Arena);
 
@@ -195,7 +160,7 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
             }
         }
 
-        // TODO: RE-IMPLEMENT TEXT & TEXT-INPUT & IMAGE DRAWING (TRIVIAL, JUST READ RESOURCE KEY?)
+        // TODO: RE-IMPLEMENT TEXT-INPUT & IMAGE DRAWING (TRIVIAL, JUST READ RESOURCE KEY?)
         // TODO: RE-IMPLEMENT CLIPPING AND WHATNOT
         // TODO: RE-IMPLEMENT DEBUG DRAWING
     }

@@ -8,7 +8,10 @@ enum class NodeState : uint32_t
 
     UseHoveredStyle    = 1 << 0,
     UseFocusedStyle    = 1 << 1,
+
     HasCapturedPointer = 1 << 2,
+
+    IsClicked          = 1 << 3,
 };
 
 template<>
@@ -48,6 +51,10 @@ struct ui_layout_node
     ui_padding      Padding;
     float           Spacing;
 
+    // Experimental
+    vec2_float VisualOffset;
+    bool       Touched;
+
     // State
     NodeState       State;
     LayoutNodeFlags Flags;
@@ -77,6 +84,8 @@ struct ui_parent_list
     ui_parent_node *Last;
     uint32_t        Count;
 };
+
+#include <unordered_map>
 
 struct ui_layout_tree
 {
@@ -346,6 +355,7 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
     return Result;
 }
 
+
 static uint32_t
 UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
 {
@@ -354,6 +364,7 @@ UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
     if(ui_layout_tree::IsValid(Tree))
     {
         ui_layout_node *Node = Tree->GetFreeNode();
+
         if(ui_layout_node::IsValid(Node))
         {
             VOID_ASSERT(Node->First  == InvalidLayoutNodeIndex);
@@ -362,7 +373,8 @@ UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
             VOID_ASSERT(Node->Next   == InvalidLayoutNodeIndex);
             VOID_ASSERT(Node->Parent == InvalidLayoutNodeIndex);
 
-            Node->Flags  = Flags;
+            Node->Flags   = Flags;
+            Node->Touched = true;
     
             if(Tree->ParentList.Last)
             {
@@ -371,7 +383,7 @@ UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
 
             ui_layout_node *Parent = Tree->GetNode(Node->Parent);
             Tree->Append(Parent, Node);
-    
+
             Result = Node->Index;
         }
     }
@@ -425,6 +437,39 @@ UIAppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
         if(ui_layout_node::IsValid(Parent) && ui_layout_node::IsValid(Child))
         {
             Tree->Append(Parent, Child);
+        }
+    }
+
+    return Result;
+}
+
+
+static void
+UISetOffset(uint32_t NodeIndex, float XOffset, float YOffset, ui_layout_tree *Tree)
+{
+    if(ui_layout_tree::IsValid(Tree))
+    {
+        ui_layout_node *Node = Tree->GetNode(NodeIndex);
+        if(ui_layout_node::IsValid(Node))
+        {
+            Node->VisualOffset.X = XOffset;
+            Node->VisualOffset.Y = YOffset;
+        }
+    }
+}
+
+
+static bool
+UIIsNodeClicked(uint32_t NodeIndex, ui_layout_tree *Tree)
+{
+    bool Result = false;
+
+    if(ui_layout_tree::IsValid(Tree))
+    {
+        ui_layout_node *Node = Tree->GetNode(NodeIndex);
+        if(ui_layout_node::IsValid(Node))
+        {
+            Result = ((Node->State & NodeState::IsClicked) != NodeState::None);
         }
     }
 
@@ -665,6 +710,7 @@ HandlePointerClick(vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, 
                     }
                 }
     
+                Node->State |= NodeState::IsClicked;
                 Node->State |= NodeState::UseFocusedStyle;
                 Node->State |= NodeState::HasCapturedPointer;
     
@@ -1009,12 +1055,12 @@ PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_resource_table *Resou
 
         if(IsXMajor)
         {
-            Child->OutputPosition.Y += MinorOffset;
+            Child->OutputPosition.Y += MinorOffset + Child->VisualOffset.Y;
             Cursor.X                += Child->OutputSize.Width  + Node->Spacing;
         }
         else
         {
-            Child->OutputPosition.X += MinorOffset;
+            Child->OutputPosition.X += MinorOffset + Child->VisualOffset.X;
             Cursor.Y                += Child->OutputSize.Height + Node->Spacing;
         }
 
@@ -1127,6 +1173,9 @@ GeneratePaintBuffer(ui_layout_tree *Tree, ui_cached_style *CachedBuffer, memory_
     
                     Node->State &= ~NodeState::UseHoveredStyle;
                 }
+
+                // VERY EXPERIMENTAL, DON'T THINK WE WANT TO DO THIS HERE?
+                Node->State &= ~NodeState::IsClicked;
     
                 // Set Geometry
                 Command.Rectangle     = GetNodeOuterRect(Node);

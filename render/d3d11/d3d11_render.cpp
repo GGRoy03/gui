@@ -72,13 +72,13 @@ D3D11Release(d3d11_renderer *Renderer)
 }
 
 static d3d11_format
-D3D11GetFormat(RenderTexture Type)
+D3D11GetFormat(RenderTextureFormat Format)
 {
     d3d11_format Result = {};
 
-    switch(Type)
+    switch(Format)
     {
-        case RenderTexture::RGBA:
+        case RenderTextureFormat::RGBA:
         {
             Result.Native        = DXGI_FORMAT_R8G8B8A8_UNORM;
             Result.BytesPerPixel = 4;
@@ -112,7 +112,7 @@ InitializeRenderer(void *HWindow, vec2_int Resolution, memory_arena *Arena)
     {
         UINT CreateFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
         #ifndef NDEBUG
-        // CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
+        CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
         #endif
         D3D_FEATURE_LEVEL Levels[] = { D3D_FEATURE_LEVEL_11_0 };
         Error = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
@@ -122,12 +122,6 @@ InitializeRenderer(void *HWindow, vec2_int Resolution, memory_arena *Arena)
         {
             return Result;
         }
-    }
-
-    // TODO: Handle DPI
-    {
-        // HWND Handle       = OSWin32GetWindowHandle();
-        // UINT DPIForWindow = GetDpiForWindow(Handle);
     }
 
     {
@@ -466,9 +460,9 @@ SubmitRenderCommands(render_handle HRenderer, vec2_int Resolution, render_pass_l
                 DeviceContext->PSSetSamplers(0, 1, &Renderer->AtlasSamplerState);
 
                 // Scissor
+                D3D11_RECT Rect = {};
                 {
                     rect_float Clip = NodeParams.Clip;
-                    D3D11_RECT Rect = {};
 
                     if (Clip.Left == 0 && Clip.Top == 0 && Clip.Right == 0 && Clip.Bottom == 0)
                     {
@@ -519,34 +513,84 @@ SubmitRenderCommands(render_handle HRenderer, vec2_int Resolution, render_pass_l
     RenderPassList->Last  = 0;
 }
 
+ 
+// -----------------------------------------------------------------------------------
+// @Internal: Texture Helpers
+
+struct d3d11_texture_flags
+{
+    D3D11_USAGE Usage;
+    UINT        BindFlags;
+    UINT        CPUAccessFlags;
+};
+
+static d3d11_texture_flags
+D3D11GetTextureFlags(RenderTextureType Type)
+{
+    d3d11_texture_flags Result = {};
+    
+    switch(Type)
+    {
+        case RenderTextureType::Default:
+        {
+            Result.Usage = D3D11_USAGE_DEFAULT;
+            Result.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            Result.CPUAccessFlags = 0;
+        } break;
+        
+        case RenderTextureType::Dynamic:
+        {
+            Result.Usage = D3D11_USAGE_DYNAMIC;
+            Result.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            Result.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        } break;
+        
+        case RenderTextureType::Staging:
+        {
+            Result.Usage = D3D11_USAGE_STAGING;
+            Result.BindFlags = 0;
+            Result.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE | D3D11_CPU_ACCESS_READ;
+        } break;
+        
+        default:
+        {
+            VOID_ASSERT(!"Invalid RenderTextureType");
+        } break;
+    }
+    
+    return Result;
+}
+
 // -----------------------------------------------------------------------------------
 // @Public: Texture API
 
+
 static render_handle
-CreateRenderTexture(uint16_t SizeX, uint16_t SizeY, RenderTexture Type)
+CreateRenderTexture(render_texture_params Params)
 {
-    VOID_ASSERT(SizeX > 0 && SizeY > 0);
-    VOID_ASSERT(Type != RenderTexture::None);
+    VOID_ASSERT(Params.SizeX > 0 && Params.SizeY > 0);
+    VOID_ASSERT(Params.Format != RenderTextureFormat::None);
 
     render_handle Result = RenderHandle(0);
 
-    d3d11_renderer *Backend = D3D11GetRenderer(RenderState.Renderer);
+    d3d11_format        Format  = D3D11GetFormat(Params.Format);
+    d3d11_texture_flags Flags   = D3D11GetTextureFlags(Params.Type);
+    d3d11_renderer     *Backend = D3D11GetRenderer(RenderState.Renderer);
     VOID_ASSERT(Backend);
 
-    d3d11_format Format = D3D11GetFormat(Type);
     if(D3D11IsValidFormat(Format) && Backend)
     {
         D3D11_TEXTURE2D_DESC TextureDesc =
         {
-            .Width          = SizeX,
-            .Height         = SizeY,
+            .Width          = Params.SizeX,
+            .Height         = Params.SizeY,
             .MipLevels      = 1,
             .ArraySize      = 1,
             .Format         = Format.Native,
             .SampleDesc     = {.Count   = 1, .Quality = 0,},
-            .Usage          = D3D11_USAGE_DYNAMIC,
-            .BindFlags      = D3D11_BIND_SHADER_RESOURCE,
-            .CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+            .Usage          = Flags.Usage,
+            .BindFlags      = Flags.BindFlags,
+            .CPUAccessFlags = Flags.CPUAccessFlags,
         };
 
         Backend->Device->CreateTexture2D(&TextureDesc, nullptr, reinterpret_cast<ID3D11Texture2D **>(&Result.Value));
@@ -555,8 +599,9 @@ CreateRenderTexture(uint16_t SizeX, uint16_t SizeY, RenderTexture Type)
     return Result;
 }
 
+
 static render_handle
-CreateRenderTextureView(render_handle TextureHandle, RenderTexture Type)
+CreateRenderTextureView(render_handle TextureHandle, RenderTextureFormat TextureFormat)
 {
     render_handle Result = {};
 
@@ -567,7 +612,7 @@ CreateRenderTextureView(render_handle TextureHandle, RenderTexture Type)
     {
         ID3D11Texture2D *Texture = D3D11GetTexture2D(TextureHandle);
 
-        d3d11_format Format = D3D11GetFormat(Type);
+        d3d11_format Format = D3D11GetFormat(TextureFormat);
         if(D3D11IsValidFormat(Format))
         {
             D3D11_SHADER_RESOURCE_VIEW_DESC ViewDesc =
@@ -590,22 +635,20 @@ CreateRenderTextureView(render_handle TextureHandle, RenderTexture Type)
 
 // TODO: Safer code
 
-// I guess the current way that NText works forces a dynamic texture. This is annoying.
-// And potentially bad. I believe dynamic resources are placed in a "worse" region in memory
-// than default textures. Uhmmmm. I guess we could do some sort of packing grouping that allows for
-// single updates. But this will give bad packing. Idk.
+// This is still too involved I think. It has to be simpler. It's really rough. But it works.
 
 static void
-UpdateGlyphCache(render_handle TextureHandle, const ntext::rasterized_glyph_list &List)
+UpdateGlyphCache(render_handle CacheTransferHandle, render_handle CacheHandle, const ntext::rasterized_glyph_list &List)
 {
     d3d11_renderer *Backend = D3D11GetRenderer(RenderState.Renderer);
     VOID_ASSERT(Backend);
 
-    ID3D11Texture2D *Texture = D3D11GetTexture2D(TextureHandle);
-    VOID_ASSERT(Texture);
+    ID3D11Texture2D *StagingTexture = D3D11GetTexture2D(CacheTransferHandle);
+    ID3D11Texture2D *CacheTexture  = D3D11GetTexture2D(CacheHandle);
+    VOID_ASSERT(StagingTexture && CacheTexture);
 
     D3D11_MAPPED_SUBRESOURCE Mapped = {};
-    HRESULT HR = Backend->DeviceContext->Map(Texture, 0, D3D11_MAP_WRITE_DISCARD, 0, &Mapped);
+    HRESULT HR = Backend->DeviceContext->Map(StagingTexture, 0, D3D11_MAP_WRITE, 0, &Mapped);
     VOID_ASSERT(SUCCEEDED(HR) && Mapped.pData);
 
     // Atlas is forced to RGBA8 for now.
@@ -653,5 +696,11 @@ UpdateGlyphCache(render_handle TextureHandle, const ntext::rasterized_glyph_list
         }
     }
 
-    Backend->DeviceContext->Unmap(Texture, 0);
+    Backend->DeviceContext->Unmap(StagingTexture, 0);
+
+    // So the easiest way is to copy the content of the staging texture to the cache. Uhm.
+    // I guess one problem is that this might get called multiple times per frame which we could avoid.
+    // This will move, but fine for now.
+
+    Backend->DeviceContext->CopyResource(CacheTexture, StagingTexture);
 }

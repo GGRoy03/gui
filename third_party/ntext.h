@@ -693,7 +693,7 @@ struct glyph_table_params
 
 struct glyph_hash
 {
-    __m128i Value;
+    alignas(16)__m128i Value;
 };
 
 
@@ -877,61 +877,73 @@ GlyphHashesAreEqual(glyph_hash A, glyph_hash B)
     return (Mask == 0xFFFF);
 }
 
+// I need to understand alignment. 
+// It's simple, but I make the same mistake everywhere in the code 
+// which might cause a bunch of other issues. Need to focus on that.
+// Why is it that the refterm code does not handle that? Or does it when allocating?
+
 
 static uint64_t
 GetGlyphTableFootprint(glyph_table_params Params)
 {
     uint64_t SlotCount = Params.GroupCount * static_cast<uint32_t>(Params.GroupWidth);
-
     uint64_t MetadataSize = SlotCount * sizeof(uint8_t);
-    uint64_t BucketsSize  = (SlotCount + 1) * sizeof(glyph_entry); // Accounts for sentinel.
-    uint64_t Result       = MetadataSize + BucketsSize + sizeof(glyph_table);
+    uint64_t BucketsSize = (SlotCount + 1) * sizeof(glyph_entry); // Accounts for sentinel.
+    uint64_t TableSize = sizeof(glyph_table);
 
+    // Account for alignment padding (16 bytes per section)
+    uint64_t Result = MetadataSize + 15  // Metadata
+        + BucketsSize + 15   // Buckets
+        + TableSize + 15;    // Table
     return Result;
 }
-
 
 static glyph_table *
 PlaceGlyphTableInMemory(glyph_table_params Params, void *Memory)
 {
     glyph_table *Result = 0;
-
-    if(Memory)
+    if (Memory)
     {
         uint64_t SlotCount = Params.GroupCount * static_cast<uint32_t>(Params.GroupWidth);
 
-        uint8_t     *Metadata = static_cast<uint8_t *>(Memory);
-        glyph_entry *Buckets  = reinterpret_cast<glyph_entry*>(Metadata + SlotCount);
+        uintptr_t MetadataAddr = reinterpret_cast<uintptr_t>(Memory);
+        MetadataAddr = (MetadataAddr + 15) & ~15ULL;
+        uint8_t *Metadata = reinterpret_cast<uint8_t *>(MetadataAddr);
 
-        Result = reinterpret_cast<glyph_table *>(Buckets + SlotCount + 1); // Skip sentinel
-        Result->Metadata      = Metadata;
-        Result->Buckets       = Buckets;
-        Result->GroupWidth    = static_cast<uint64_t>(Params.GroupWidth);
-        Result->GroupCount    = Params.GroupCount;
-        Result->HashMask      = Params.GroupCount - 1; // Only used to find the group index, not the slot index
+        uintptr_t BucketsAddr = MetadataAddr + (SlotCount * sizeof(uint8_t));
+        BucketsAddr = (BucketsAddr + 15) & ~15ULL;
+        glyph_entry *Buckets = reinterpret_cast<glyph_entry *>(BucketsAddr);
+
+        uintptr_t ResultAddr = BucketsAddr + ((SlotCount + 1) * sizeof(glyph_entry));
+        ResultAddr = (ResultAddr + 15) & ~15ULL;
+        Result = reinterpret_cast<glyph_table *>(ResultAddr);
+
+        Result->Metadata = Metadata;
+        Result->Buckets = Buckets;
+        Result->GroupWidth = static_cast<uint64_t>(Params.GroupWidth);
+        Result->GroupCount = Params.GroupCount;
+        Result->HashMask = Params.GroupCount - 1;
         Result->SentinelIndex = SlotCount;
 
-        for(uint32_t Idx = 0; Idx < SlotCount; ++Idx)
+        for (uint32_t Idx = 0; Idx < SlotCount; ++Idx)
         {
             glyph_entry *Entry = GetGlyphEntry(Idx, Result);
-            Entry->GlyphIndex   = 0;
-            Entry->Source       = {};
-            Entry->Layout       = {};
+            Entry->GlyphIndex = 0;
+            Entry->Source = {};
+            Entry->Layout = {};
             Entry->IsRasterized = false;
         }
 
-        for(uint32_t Idx = 0; Idx < SlotCount; ++Idx)
+        for (uint32_t Idx = 0; Idx < SlotCount; ++Idx)
         {
             Result->Metadata[Idx] = GlyphTableEmptyMask;
         }
 
         glyph_entry *Sentinel = GetGlyphTableSentinel(Result);
         NTEXT_ASSERT(Sentinel);
-
         Sentinel->PrevLRU = Result->SentinelIndex;
         Sentinel->NextLRU = Result->SentinelIndex;
     }
-
     return Result;
 }
 
@@ -1018,8 +1030,12 @@ FindGlyphEntryByHash(glyph_hash Hash, glyph_table *Table)
         // Since the tag is 00XX XXXX, we clear the state bits.
         Table->Metadata[EntryIndex] = GetGlyphTagFromHash(Hash).Value;
 
+
         Result = GetGlyphEntry(EntryIndex, Table);
-        Result->Hash = Hash;
+        if (Result)
+        {
+            Result->Hash = Hash;
+        }
     }
 
     glyph_entry *Sentinel = GetGlyphTableSentinel(Table);

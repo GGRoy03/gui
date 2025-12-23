@@ -25,12 +25,29 @@ UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t Cac
                 .CacheSizeY        = CacheSizeY,
             };
 
-            Font->Generator   = ntext::CreateGlyphGenerator(GeneratorParams);
-            Font->Texture     = CreateRenderTexture(CacheSizeX, CacheSizeY, RenderTexture::RGBA);
-            Font->TextureView = CreateRenderTextureView(Font->Texture, RenderTexture::RGBA);
-            Font->TextureSize = vec2_uint16(CacheSizeX, CacheSizeY);
-            Font->Size        = Size;
-            Font->Name        = Name;
+            render_texture_params CacheParams =
+            {
+                .Format = RenderTextureFormat::RGBA,
+                .Type   = RenderTextureType::Default,
+                .SizeX  = CacheSizeX,
+                .SizeY  = CacheSizeY,
+            };
+
+            render_texture_params CacheTransferParams = 
+            {
+                .Format = RenderTextureFormat::RGBA,
+                .Type   = RenderTextureType::Staging,
+                .SizeX  = CacheSizeX,
+                .SizeY  = CacheSizeY,
+            };
+
+            Font->Generator     = ntext::CreateGlyphGenerator(GeneratorParams);
+            Font->Cache         = CreateRenderTexture(CacheParams);
+            Font->CacheTransfer = CreateRenderTexture(CacheTransferParams);
+            Font->CacheView     = CreateRenderTextureView(Font->Cache, RenderTextureFormat::RGBA);
+            Font->TextureSize   = vec2_uint16(CacheSizeX, CacheSizeY);
+            Font->Size          = Size;
+            Font->Name          = Name;
 
             UpdateResourceTable(State.Id, Key, Font, Context.ResourceTable);
         }
@@ -41,6 +58,8 @@ UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t Cac
 
 // =================================================================
 // @Internal: Static Text Implementation
+
+// There might be an alignment issue. Need to understand more.
 
 static uint64_t
 GetTextFootprint(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run)
@@ -112,7 +131,7 @@ PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui
         }
         Result->WordCount = Analysed.Words.Count;
 
-        UpdateGlyphCache(Font->Texture, Run.UpdateList);
+        UpdateGlyphCache(Font->CacheTransfer, Font->Cache, Run.UpdateList);
     }
 
     return Result;

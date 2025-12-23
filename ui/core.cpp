@@ -311,21 +311,6 @@ QueryNodeResource(UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree
 }
 
 
-// ------------------------------------------------------------
-// @Public: Image Processing API
-
-static void
-UICreateImageGroup(byte_string Name, int Width, int Height)
-{
-    // TODO: Reimplement.
-}
-
-static void
-LoadImageInGroup(byte_string GroupName, byte_string Path)
-{
-    // TODO: Reimplement.
-}
-
 // -------------------------------------------------------------
 // @Public: Frame Node API
 
@@ -353,6 +338,17 @@ ui_node ui_node::FindChild(uint32_t FindIndex, ui_pipeline &Pipeline)
 void ui_node::Append(ui_node Child, ui_pipeline &Pipeline)
 {
     UIAppendChild(Index, Child.Index, Pipeline.Tree);
+}
+
+void ui_node::SetOffset(float XOffset, float YOffset, ui_pipeline &Pipeline)
+{
+    UISetOffset(Index, XOffset, YOffset, Pipeline.Tree);
+}
+
+bool ui_node::IsClicked(ui_pipeline &Pipeline)
+{
+    bool Result = UIIsNodeClicked(Index, Pipeline.Tree);
+    return Result;
 }
 
 
@@ -535,7 +531,7 @@ UIBeginFrame(vec2_int WindowSize)
         }
     }
 
-    // If _some_ ButtonMask is 0 then it means the pointer is in a hover state.
+    // If the ButtonMask is 0 then it means the pointer is in a hover state.
     // We look for that hover target in any of the pipelines.
 
     for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
@@ -563,7 +559,7 @@ UIBeginFrame(vec2_int WindowSize)
 static void
 UIEndFrame(void)
 {
-    // TODO: Something.
+    // TODO: Unsure
 }
 
 // ==================================================================================

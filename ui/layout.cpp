@@ -791,7 +791,8 @@ static float ComputeNodeSize(sizing Sizing, float ParentSize)
     return Result;
 }
 
-static void ComputeLayout(layout_node *Node, layout_tree *Tree, axes ParentBounds, core::resource_table *ResourceTable, bool &Changed)
+static void
+ComputeLayout(layout_node *Node, layout_tree *Tree, axes ParentBounds, core::resource_table *ResourceTable, bool &Changed)
 {
     VOID_ASSERT(layout_node::IsValid(Node));
     VOID_ASSERT(layout_tree::IsValid(Tree));
@@ -816,10 +817,26 @@ static void ComputeLayout(layout_node *Node, layout_tree *Tree, axes ParentBound
         Changed = true;
     }
 
-    axes ContentBounds = {
+    axes ContentBounds =
+    {
         .Width  = Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right),
         .Height = Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot  ),
     };
+
+    if(Node->ChildCount > 0)
+    {
+        float Spacing = Node->Spacing * (Node->ChildCount - 1);
+
+        if(Node->Direction == LayoutDirection::Horizontal)
+        {
+            ContentBounds.Width  -= Spacing;
+        } else
+        if(Node->Direction == LayoutDirection::Vertical)
+        {
+            ContentBounds.Height -= Spacing;
+        }
+    }
+
     VOID_ASSERT(ContentBounds.Width >= 0 && ContentBounds.Height >= 0);
 
     for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
@@ -830,11 +847,7 @@ static void ComputeLayout(layout_node *Node, layout_tree *Tree, axes ParentBound
         Node->OutputChildSize.Height += Child->OutputSize.Height;
     }
 
-    if(Node->ChildCount > 0)
-    {
-        Node->OutputChildSize.Width  += Node->Spacing * (Node->ChildCount - 1); 
-        Node->OutputChildSize.Height += Node->Spacing * (Node->ChildCount - 1); 
-    }
+
 
     text *Text = static_cast<text *>(QueryNodeResource(core::ResourceType::Text, Node->Index, Tree, ResourceTable));
     if(Text)

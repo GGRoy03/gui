@@ -4,46 +4,46 @@ namespace core
 // ----------------------------------------------------------------------------------
 // UI Resource Cache Private Implementation
 
-struct ui_resource_allocator
+struct resource_allocator
 {
     uint64_t AllocatedCount;
     uint64_t AllocatedBytes;
 };
 
-struct ui_resource_entry
+struct resource_entry
 {
-    ui_resource_key Key;
+    resource_key Key;
 
     uint32_t        NextWithSameHashSlot;
     uint32_t        NextLRU;
     uint32_t        PrevLRU;
 
-    UIResource_Type ResourceType;
+    ResourceType ResourceType;
     void           *Memory;
 };
 
-struct ui_resource_table
+struct resource_table
 {
-    ui_resource_stats     Stats;
-    ui_resource_allocator Allocator;
+    resource_stats     Stats;
+    resource_allocator Allocator;
 
     uint32_t              HashMask;
     uint32_t              HashSlotCount;
     uint32_t              EntryCount;
 
     uint32_t             *HashTable;
-    ui_resource_entry    *Entries;
+    resource_entry    *Entries;
 };
 
-static ui_resource_entry *
-GetResourceSentinel(ui_resource_table *Table)
+static resource_entry *
+GetResourceSentinel(resource_table *Table)
 {
-    ui_resource_entry *Result = Table->Entries;
+    resource_entry *Result = Table->Entries;
     return Result;
 }
 
 static uint32_t *
-GetResourceSlotPointer(ui_resource_key Key, ui_resource_table *Table)
+GetResourceSlotPointer(resource_key Key, resource_table *Table)
 {
     uint32_t HashIndex = _mm_cvtsi128_si32(Key.Value);
     uint32_t HashSlot  = (HashIndex & Table->HashMask);
@@ -54,17 +54,17 @@ GetResourceSlotPointer(ui_resource_key Key, ui_resource_table *Table)
     return Result;
 }
 
-static ui_resource_entry *
-GetResourceEntry(uint32_t Index, ui_resource_table *Table)
+static resource_entry *
+GetResourceEntry(uint32_t Index, resource_table *Table)
 {
     VOID_ASSERT(Index < Table->EntryCount);
 
-    ui_resource_entry *Result = Table->Entries + Index;
+    resource_entry *Result = Table->Entries + Index;
     return Result;
 }
 
 static bool
-ResourceKeyAreEqual(ui_resource_key A, ui_resource_key B)
+ResourceKeyAreEqual(resource_key A, resource_key B)
 {
     __m128i Compare = _mm_cmpeq_epi32(A.Value, B.Value);
     bool     Result  = (_mm_movemask_epi8(Compare) == 0xffff);
@@ -73,9 +73,9 @@ ResourceKeyAreEqual(ui_resource_key A, ui_resource_key B)
 }
 
 static uint32_t
-PopFreeResourceEntry(ui_resource_table *Table)
+PopFreeResourceEntry(resource_table *Table)
 {
-    ui_resource_entry *Sentinel = GetResourceSentinel(Table);
+    resource_entry *Sentinel = GetResourceSentinel(Table);
 
     // At initialization we populate sentinel's the hash chain such that:
     // (Sentinel) -> (Slot) -> (Slot) -> (Slot)
@@ -88,25 +88,25 @@ PopFreeResourceEntry(ui_resource_table *Table)
 
     uint32_t Result = Sentinel->NextWithSameHashSlot;
 
-    ui_resource_entry *Entry = GetResourceEntry(Result, Table);
+    resource_entry *Entry = GetResourceEntry(Result, Table);
     Sentinel->NextWithSameHashSlot = Entry->NextWithSameHashSlot;
     Entry->NextWithSameHashSlot    = 0;
 
     return Result;
 }
 
-static UIResource_Type
-GetResourceTypeFromKey(ui_resource_key Key)
+static ResourceType
+GetResourceTypeFromKey(resource_key Key)
 {
     uint64_t             High = _mm_extract_epi64(Key.Value, 1);
-    UIResource_Type Type = (UIResource_Type)(High >> 32);
+    ResourceType Type = (ResourceType)(High >> 32);
     return Type;
 }
 
 // TODO: Make a better resource allocator.
 
 static void *
-AllocateUIResource(uint64_t Size, ui_resource_allocator *Allocator)
+AllocateUIResource(uint64_t Size, resource_allocator *Allocator)
 {
     void *Result = OSReserveMemory(Size);
 
@@ -126,30 +126,30 @@ AllocateUIResource(uint64_t Size, ui_resource_allocator *Allocator)
 // UI Resource Cache Public API
 
 static uint64_t
-GetResourceTableFootprint(ui_resource_table_params Params)
+GetResourceTableFootprint(resource_table_params Params)
 {
     uint64_t HashTableSize  = Params.HashSlotCount  * sizeof(uint32_t);
-    uint64_t EntryArraySize = Params.EntryCount * sizeof(ui_resource_entry);
-    uint64_t Result         = sizeof(ui_resource_table) + HashTableSize + EntryArraySize;
+    uint64_t EntryArraySize = Params.EntryCount * sizeof(resource_entry);
+    uint64_t Result         = sizeof(resource_table) + HashTableSize + EntryArraySize;
 
     return Result;
 }
 
-static ui_resource_table *
-PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
+static resource_table *
+PlaceResourceTableInMemory(resource_table_params Params, void *Memory)
 {
     VOID_ASSERT(Params.EntryCount);
     VOID_ASSERT(Params.HashSlotCount);
     VOID_ASSERT(VOID_ISPOWEROFTWO(Params.HashSlotCount));
 
-    ui_resource_table *Result = 0;
+    resource_table *Result = 0;
 
     if(Memory)
     {
         uint32_t          *HashTable = (uint32_t *)Memory;
-        ui_resource_entry *Entries   = (ui_resource_entry *)(HashTable + Params.HashSlotCount);
+        resource_entry *Entries   = (resource_entry *)(HashTable + Params.HashSlotCount);
 
-        Result = (ui_resource_table *)(Entries + Params.EntryCount);
+        Result = (resource_table *)(Entries + Params.EntryCount);
         Result->HashTable     = HashTable;
         Result->Entries       = Entries;
         Result->EntryCount    = Params.EntryCount;
@@ -158,7 +158,7 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
 
         for(uint32_t Idx = 0; Idx < Params.EntryCount; ++Idx)
         {
-            ui_resource_entry *Entry = GetResourceEntry(Idx, Result);
+            resource_entry *Entry = GetResourceEntry(Idx, Result);
             if((Idx + 1) < Params.EntryCount)
             {
                 Entry->NextWithSameHashSlot = Idx + 1;
@@ -168,7 +168,7 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
                 Entry->NextWithSameHashSlot = 0;
             }
 
-            Entry->ResourceType = UIResource_None;
+            Entry->ResourceType = ResourceType::None;
             Entry->Memory       = 0;
         }
     }
@@ -176,13 +176,13 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
     return Result;
 }
 
-static ui_resource_key
-MakeNodeResourceKey(UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tree *Tree)
+static resource_key
+MakeNodeResourceKey(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tree)
 {
     uint64_t Low  = (uint64_t)Tree;
     uint64_t High = ((uint64_t)Type << 32) | NodeIndex;
 
-    ui_resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
+    resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
     return Key;
 }
 
@@ -191,28 +191,28 @@ MakeNodeResourceKey(UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_
 // str8_lit("Consolas") 
 // Do they get stored in the same place in memory? Does it depend?
 
-static ui_resource_key
+static resource_key
 MakeFontResourceKey(byte_string Name, float Size)
 {
     uint64_t Low  = reinterpret_cast<uint64_t>(Name.String);
-    uint64_t High = (static_cast<uint64_t>(UIResource_Font) << 32) | static_cast<uint32_t>(Size);
+    uint64_t High = (static_cast<uint64_t>(ResourceType::Font) << 32) | static_cast<uint32_t>(Size);
 
-    ui_resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
+    resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
     return Key;
 }
 
 
-static ui_resource_state
-FindResourceByKey(ui_resource_key Key, FindResourceFlag Flags, ui_resource_table *Table)
+static resource_state
+FindResourceByKey(resource_key Key, FindResourceFlag Flags, resource_table *Table)
 {
-    ui_resource_entry *FoundEntry = 0;
+    resource_entry *FoundEntry = 0;
 
     uint32_t *Slot       = GetResourceSlotPointer(Key, Table);
     uint32_t  EntryIndex = Slot[0];
 
     while(EntryIndex)
     {
-        ui_resource_entry *Entry = GetResourceEntry(EntryIndex, Table);
+        resource_entry *Entry = GetResourceEntry(EntryIndex, Table);
         if(ResourceKeyAreEqual(Entry->Key, Key))
         {
             FoundEntry = Entry;
@@ -228,8 +228,8 @@ FindResourceByKey(ui_resource_key Key, FindResourceFlag Flags, ui_resource_table
         // (Prev) -> (Entry) -> (Next)
         // (Prev) -> (Next)
 
-        ui_resource_entry *Prev = GetResourceEntry(FoundEntry->PrevLRU, Table);
-        ui_resource_entry *Next = GetResourceEntry(FoundEntry->NextLRU, Table);
+        resource_entry *Prev = GetResourceEntry(FoundEntry->PrevLRU, Table);
+        resource_entry *Next = GetResourceEntry(FoundEntry->NextLRU, Table);
 
         Prev->NextLRU = FoundEntry->NextLRU;
         Next->PrevLRU = FoundEntry->PrevLRU;
@@ -263,19 +263,19 @@ FindResourceByKey(ui_resource_key Key, FindResourceFlag Flags, ui_resource_table
         // What we have: (Sentinel) -> (Entry)    -> (Entry) -> (Entry)
         // What we want: (Sentinel) -> (NewEntry) -> (Entry) -> (Entry) -> (Entry)
 
-        ui_resource_entry *Sentinel = GetResourceSentinel(Table);
+        resource_entry *Sentinel = GetResourceSentinel(Table);
         FoundEntry->NextLRU = Sentinel->NextLRU;
         FoundEntry->PrevLRU = 0;
     
-        ui_resource_entry *NextLRU = GetResourceEntry(Sentinel->NextLRU, Table);
+        resource_entry *NextLRU = GetResourceEntry(Sentinel->NextLRU, Table);
         NextLRU->PrevLRU  = EntryIndex;
         Sentinel->NextLRU = EntryIndex;
     }
 
-    ui_resource_state Result =
+    resource_state Result =
     {
         .Id           = EntryIndex,
-        .ResourceType = FoundEntry ? FoundEntry->ResourceType : UIResource_None,
+        .ResourceType = FoundEntry ? FoundEntry->ResourceType : ResourceType::None,
         .Resource     = FoundEntry ? FoundEntry->Memory       : 0,
     };
 
@@ -284,9 +284,9 @@ FindResourceByKey(ui_resource_key Key, FindResourceFlag Flags, ui_resource_table
 
 
 static void
-UpdateResourceTable(uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_table *Table)
+UpdateResourceTable(uint32_t Id, resource_key Key, void *Memory, resource_table *Table)
 {
-    ui_resource_entry *Entry = GetResourceEntry(Id, Table);
+    resource_entry *Entry = GetResourceEntry(Id, Table);
     VOID_ASSERT(Entry);
 
     // This is weird. Kind of.
@@ -299,15 +299,15 @@ UpdateResourceTable(uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_
     Entry->Memory       = Memory;
     Entry->ResourceType = GetResourceTypeFromKey(Key);
 
-    VOID_ASSERT(Entry->ResourceType != UIResource_None);
+    VOID_ASSERT(Entry->ResourceType != ResourceType::None);
 }
 
 
 static void *
-QueryNodeResource(UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tree *Tree, ui_resource_table *Table)
+QueryNodeResource(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tree, resource_table *Table)
 {
-    ui_resource_key   Key   = MakeNodeResourceKey(Type, NodeIndex, Tree);
-    ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::None, Table);
+    resource_key   Key   = MakeNodeResourceKey(Type, NodeIndex, Tree);
+    resource_state State = FindResourceByKey(Key, FindResourceFlag::None, Table);
 
     void *Result = State.Resource;
     return Result;
@@ -317,27 +317,27 @@ QueryNodeResource(UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tr
 // -------------------------------------------------------------
 // @Public: Frame Node API
 
-bool ui_node::IsValid()
+bool node::IsValid()
 {
     bool Result = Index != ::layout::InvalidIndex;
     return Result;
 }
 
 
-ui_node ui_node::FindChild(uint32_t FindIndex, ui_pipeline &Pipeline)
+node node::FindChild(uint32_t FindIndex, pipeline &Pipeline)
 {
-    ui_node Result = { ::layout::FindChild(Index, FindIndex, Pipeline.Tree) };
+    node Result = { ::layout::FindChild(Index, FindIndex, Pipeline.Tree) };
     return Result;
 }
 
 
-void ui_node::Append(ui_node Child, ui_pipeline &Pipeline)
+void node::Append(node Child, pipeline &Pipeline)
 {
     ::layout::AppendChild(Index, Child.Index, Pipeline.Tree);
 }
 
 
-void ui_node::SetOffset(float XOffset, float YOffset, ui_pipeline &Pipeline)
+void node::SetOffset(float XOffset, float YOffset, pipeline &Pipeline)
 {
     ::layout::SetNodeOffset(Index, XOffset, YOffset, Pipeline.Tree);
 }
@@ -345,19 +345,19 @@ void ui_node::SetOffset(float XOffset, float YOffset, ui_pipeline &Pipeline)
 
 // There are so many indirections. This is unusual.
 
-void ui_node::SetText(byte_string UserText, ui_resource_key FontKey, ui_pipeline &Pipeline)
+void node::SetText(byte_string UserText, resource_key FontKey, pipeline &Pipeline)
 {
     void_context      &Context       = GetVoidContext();
-    ui_resource_table *ResourceTable = Context.ResourceTable;
+    resource_table *ResourceTable = Context.ResourceTable;
 
-    auto  TextKey   = MakeNodeResourceKey(UIResource_Text, Index, Pipeline.Tree);
+    auto  TextKey   = MakeNodeResourceKey(ResourceType::Text, Index, Pipeline.Tree);
     auto  TextState = FindResourceByKey(TextKey, FindResourceFlag::AddIfNotFound, ResourceTable);
-    auto *Text      = static_cast<ui_text *>(TextState.Resource);
+    auto *Text      = static_cast<text *>(TextState.Resource);
 
     if(!Text)
     {
         auto  FontState = FindResourceByKey(FontKey, FindResourceFlag::None, Context.ResourceTable);
-        auto *Font      = static_cast<ui_font *>(FontState.Resource);
+        auto *Font      = static_cast<font *>(FontState.Resource);
 
         if(Font)
         {
@@ -382,18 +382,18 @@ void ui_node::SetText(byte_string UserText, ui_resource_key FontKey, ui_pipeline
     }
 }
 
-void ui_node::SetTextInput(uint8_t *Buffer, uint64_t BufferSize, ui_pipeline &Pipeline)
+void node::SetTextInput(uint8_t *Buffer, uint64_t BufferSize, pipeline &Pipeline)
 {
 }
 
 // This is badly implemented.
 
-void ui_node::SetScroll(float ScrollSpeed, AxisType Axis, ui_pipeline &Pipeline)
+void node::SetScroll(float ScrollSpeed, AxisType Axis, pipeline &Pipeline)
 {
     void_context &Context  = GetVoidContext();
 
-    ui_resource_key   Key   = MakeNodeResourceKey(UIResource_ScrollRegion, Index, Pipeline.Tree);
-    ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
+    resource_key   Key   = MakeNodeResourceKey(ResourceType::ScrollRegion, Index, Pipeline.Tree);
+    resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 
     uint64_t Size   = layout::GetScrollRegionFootprint();
     void    *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);
@@ -404,26 +404,26 @@ void ui_node::SetScroll(float ScrollSpeed, AxisType Axis, ui_pipeline &Pipeline)
         .Axis         = Axis,
     };
 
-    layout::ui_scroll_region *ScrollRegion = layout::PlaceScrollRegionInMemory(Params, Memory);
+    layout::scroll_region *ScrollRegion = layout::PlaceScrollRegionInMemory(Params, Memory);
     if(ScrollRegion)
     {
         UpdateResourceTable(State.Id, Key, ScrollRegion, Context.ResourceTable);
     }
 }
 
-void ui_node::SetImage(byte_string Path, byte_string Group, ui_pipeline &Pipeline)
+void node::SetImage(byte_string Path, byte_string Group, pipeline &Pipeline)
 {
     // TODO: Reimplement.
 }
 
-void ui_node::DebugBox(uint32_t Flag, bool Draw, ui_pipeline &Pipeline)
+void node::DebugBox(uint32_t Flag, bool Draw, pipeline &Pipeline)
 {
 }
 
 // ----------------------------------------------------------------------------------
 // Context Public API Implementation
 
-struct ui_pointer_state
+struct pointer_state
 {
     uint32_t   Id;
     vec2_float Position;
@@ -431,19 +431,19 @@ struct ui_pointer_state
     uint32_t   ButtonMask;
 
     // Targets?
-    bool       IsCaptured; // This might be, uhhh, a state flag with some other states.
-    UIPipeline PipelineSource;
+    bool     IsCaptured; // This might be, uhhh, a state flag with some other states.
+    Pipeline PipelineSource;
 
     // Other Stuff
 };
 
 static void
-UIBeginFrame(vec2_int WindowSize)
+BeginFrame(vec2_int WindowSize)
 {
     void_context       &Context   = GetVoidContext();
     pointer_event_list &EventList = OSGetInputs()->PointerEventList;
 
-    static ui_pointer_state PointerStates[1];
+    static pointer_state PointerStates[1];
 
     // It seems like processing the pointer events here is the better idea.
     // But we need some kind of UI side state. Which maps to some pointer.
@@ -459,7 +459,7 @@ UIBeginFrame(vec2_int WindowSize)
 
         case PointerEvent::Move:
         {
-            ui_pointer_state &State = PointerStates[0];
+            pointer_state &State = PointerStates[0];
 
             State.LastPosition = State.Position;
             State.Position     = Event.Position;
@@ -467,7 +467,7 @@ UIBeginFrame(vec2_int WindowSize)
             if(State.IsCaptured)
             {
                 // Not great.
-                ui_pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
+                pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
 
                 layout::HandlePointerMove(Event.Delta, Pipeline.Tree);
             }
@@ -475,13 +475,13 @@ UIBeginFrame(vec2_int WindowSize)
 
         case PointerEvent::Click:
         {
-            ui_pointer_state &State = PointerStates[0];
+            pointer_state &State = PointerStates[0];
 
             State.ButtonMask |= Event.ButtonMask;
 
             for(uint32_t Idx = 0; Idx < Context.PipelineCount; ++Idx)
             {
-                ui_pipeline &Pipeline = Context.PipelineArray[Idx];
+                pipeline &Pipeline = Context.PipelineArray[Idx];
 
                 // So here, we'd call something like: IsMouseOverPipeline
                 if(true)
@@ -499,14 +499,14 @@ UIBeginFrame(vec2_int WindowSize)
 
         case PointerEvent::Release:
         {
-            ui_pointer_state &State = PointerStates[0];
+            pointer_state &State = PointerStates[0];
 
             State.ButtonMask &= ~Event.ButtonMask;
 
             if(State.IsCaptured)
             {
                 // Not great.
-                ui_pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
+                pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
 
                 layout::HandlePointerRelease(State.Position, State.ButtonMask, 0, Pipeline.Tree);
 
@@ -527,13 +527,13 @@ UIBeginFrame(vec2_int WindowSize)
 
     for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
     {
-        ui_pointer_state &State = PointerStates[PointerIdx];
+        pointer_state &State = PointerStates[PointerIdx];
 
         if(State.ButtonMask == 0)
         {
             for(uint32_t Idx = 0; Idx < Context.PipelineCount; ++Idx)
             {
-                ui_pipeline &Pipeline = Context.PipelineArray[Idx];
+                pipeline &Pipeline = Context.PipelineArray[Idx];
 
                 bool Handled = layout::HandlePointerHover(State.Position, 0, Pipeline.Tree);
                 if(Handled)
@@ -548,7 +548,7 @@ UIBeginFrame(vec2_int WindowSize)
 }
 
 static void
-UIEndFrame(void)
+EndFrame(void)
 {
     // TODO: Unsure
 }
@@ -579,7 +579,7 @@ CreateVoidContext(void)
 
     // State
     {
-        ui_resource_table_params TableParams =
+        resource_table_params TableParams =
         {
             .HashSlotCount = 512,
             .EntryCount    = 2048,
@@ -603,7 +603,7 @@ CreateVoidContext(void)
 constexpr uint32_t InvalidMetaNodeIndex = 0xFFFFFFFF;
 
 
-struct ui_meta_node
+struct meta_node
 {
     // Frame State
 
@@ -618,7 +618,7 @@ struct ui_meta_node
 
     uint32_t LayoutIndex;
     
-    static bool IsValid(ui_meta_node *Node)
+    static bool IsValid(meta_node *Node)
     {
         bool Result = Node && Node->Index != InvalidMetaNodeIndex;
         return Result;
@@ -626,28 +626,28 @@ struct ui_meta_node
 };
 
 
-struct ui_meta_parent_node
+struct meta_parent_node
 {
-    ui_meta_parent_node *Prev;
+    meta_parent_node *Prev;
     uint32_t             Value;
 };
 
 
-struct ui_meta_tree
+struct meta_tree
 {
     // Nodes
 
-    ui_meta_node *Nodes;
+    meta_node *Nodes;
     uint32_t      NodeCount;
     uint32_t      NodeCapacity;
 
     // Frame State
 
-    ui_meta_parent_node *Parent;
+    meta_parent_node *Parent;
 
     // Helpers
     
-    static bool IsValid(ui_meta_tree *Tree)
+    static bool IsValid(meta_tree *Tree)
     {
         bool Result = Tree && Tree->Nodes && Tree->NodeCount <= Tree->NodeCapacity;
         return Result;
@@ -658,21 +658,21 @@ struct ui_meta_tree
 static uint64_t
 GetMetaTreeFootprint(uint64_t NodeCount)
 {
-    uint64_t NodeBuffer = NodeCount * sizeof(ui_meta_node);
-    uint64_t Result     = NodeBuffer + sizeof(ui_meta_tree);
+    uint64_t NodeBuffer = NodeCount * sizeof(meta_node);
+    uint64_t Result     = NodeBuffer + sizeof(meta_tree);
     return Result;
 }
 
 
-static ui_meta_tree *
+static meta_tree *
 PlaceMetaTreeInMemory(uint64_t NodeCount, void *Memory)
 {
-    ui_meta_tree *Result = nullptr;
+    meta_tree *Result = nullptr;
     
     if(Memory)
     {
-        ui_meta_node *Nodes = static_cast<ui_meta_node*>(Memory);
-        Result = reinterpret_cast<ui_meta_tree*>(Nodes + NodeCount);
+        meta_node *Nodes = static_cast<meta_node*>(Memory);
+        Result = reinterpret_cast<meta_tree*>(Nodes + NodeCount);
         
         Result->Nodes = Nodes;
         Result->NodeCount = 0;
@@ -689,19 +689,19 @@ PlaceMetaTreeInMemory(uint64_t NodeCount, void *Memory)
 
 
 static void
-MetaTreesEx(uint32_t ActiveIdx, ui_meta_tree *ActiveTree, uint32_t StaticIdx, ui_meta_tree *StaticTree, layout::ui_layout_tree *LayoutTree, ui_cached_style *StyleArray)
+MetaTreesEx(uint32_t ActiveIdx, meta_tree *ActiveTree, uint32_t StaticIdx, meta_tree *StaticTree, layout::layout_tree *LayoutTree, cached_style *StyleArray)
 {
     if(ActiveIdx >= ActiveTree->NodeCount)
     {
         return;
     }
 
-    ui_meta_node *ActiveNode = ActiveTree->Nodes + ActiveIdx;
-    ui_meta_node *StaticNode = (StaticIdx < StaticTree->NodeCount) ? StaticTree->Nodes + StaticIdx : nullptr;
+    meta_node *ActiveNode = ActiveTree->Nodes + ActiveIdx;
+    meta_node *StaticNode = (StaticIdx < StaticTree->NodeCount) ? StaticTree->Nodes + StaticIdx : nullptr;
     
-    VOID_ASSERT(ui_meta_node::IsValid(ActiveNode));
+    VOID_ASSERT(meta_node::IsValid(ActiveNode));
     
-    if(!ui_meta_node::IsValid(StaticNode) || ActiveNode->Type != StaticNode->Type)
+    if(!meta_node::IsValid(StaticNode) || ActiveNode->Type != StaticNode->Type)
     {
         ActiveNode->LayoutIndex = layout::CreateNode(ActiveNode->Flags, LayoutTree);
 
@@ -709,13 +709,13 @@ MetaTreesEx(uint32_t ActiveIdx, ui_meta_tree *ActiveTree, uint32_t StaticIdx, ui
 
         if(ActiveNode->Parent != InvalidMetaNodeIndex)
         {
-            ui_meta_node *Parent = ActiveTree->Nodes + ActiveNode->Parent;
+            meta_node *Parent = ActiveTree->Nodes + ActiveNode->Parent;
             layout::AppendChild(Parent->LayoutIndex, ActiveNode->LayoutIndex, LayoutTree);
         }
     }
     else
     {
-        VOID_ASSERT(ui_meta_node::IsValid(StaticNode));
+        VOID_ASSERT(meta_node::IsValid(StaticNode));
 
         // If we reach this branch we want to update attributes. Now that is up to us to figure out
         // which attributes make sense.
@@ -727,9 +727,9 @@ MetaTreesEx(uint32_t ActiveIdx, ui_meta_tree *ActiveTree, uint32_t StaticIdx, ui
 
 
 static void
-MetaTrees(ui_meta_tree *ActiveTree, ui_meta_tree *StaticTree, layout::ui_layout_tree *LayoutTree, ui_cached_style *StyleArray)
+MetaTrees(meta_tree *ActiveTree, meta_tree *StaticTree, layout::layout_tree *LayoutTree, cached_style *StyleArray)
 {
-    if(ui_meta_tree::IsValid(ActiveTree))
+    if(meta_tree::IsValid(ActiveTree))
     {
         for(uint32_t i = 0; i < ActiveTree->NodeCount; ++i)
         {
@@ -740,14 +740,14 @@ MetaTrees(ui_meta_tree *ActiveTree, ui_meta_tree *StaticTree, layout::ui_layout_
 
 
 static uint32_t
-UICreateNode2(uint32_t StyleIndex, NodeType Type, layout::NodeFlags Flags, ui_meta_tree *Tree)
+UICreateNode2(uint32_t StyleIndex, NodeType Type, layout::NodeFlags Flags, meta_tree *Tree)
 {
     uint32_t Result = InvalidMetaNodeIndex;
     
-    if(ui_meta_tree::IsValid(Tree) && Tree->NodeCount < Tree->NodeCapacity)
+    if(meta_tree::IsValid(Tree) && Tree->NodeCount < Tree->NodeCapacity)
     {
         uint32_t      Index = Tree->NodeCount++;
-        ui_meta_node *Node  = Tree->Nodes + Index;
+        meta_node *Node  = Tree->Nodes + Index;
         
         Node->Parent = Tree->Parent ? Tree->Parent->Value : InvalidMetaNodeIndex;
         Node->Index  = Index;
@@ -764,11 +764,11 @@ UICreateNode2(uint32_t StyleIndex, NodeType Type, layout::NodeFlags Flags, ui_me
 
 
 static bool
-UIPushLayoutParent2(uint32_t NodeIndex, ui_meta_tree *MetaTree, memory_arena *Arena)
+UIPushLayoutParent2(uint32_t NodeIndex, meta_tree *MetaTree, memory_arena *Arena)
 {
-    if(ui_meta_tree::IsValid(MetaTree) && Arena)
+    if(meta_tree::IsValid(MetaTree) && Arena)
     {
-        ui_meta_parent_node *ParentNode = PushStruct(Arena, ui_meta_parent_node);
+        meta_parent_node *ParentNode = PushStruct(Arena, meta_parent_node);
         if(ParentNode)
         {
             ParentNode->Value = NodeIndex;
@@ -783,9 +783,9 @@ UIPushLayoutParent2(uint32_t NodeIndex, ui_meta_tree *MetaTree, memory_arena *Ar
 
 
 static bool
-UIPopLayoutParent2(uint32_t NodeIndex, ui_meta_tree *MetaTree)
+UIPopLayoutParent2(uint32_t NodeIndex, meta_tree *MetaTree)
 {
-    if(ui_meta_tree::IsValid(MetaTree))
+    if(meta_tree::IsValid(MetaTree))
     {
         if(MetaTree->Parent && MetaTree->Parent->Value == NodeIndex)
         {
@@ -801,7 +801,7 @@ UIPopLayoutParent2(uint32_t NodeIndex, ui_meta_tree *MetaTree)
 
 
 static uint64_t
-GetPipelineStateFootprint(const ui_pipeline_params &Params)
+GetPipelineStateFootprint(const pipeline_params &Params)
 {
     uint64_t TreeSize = layout::GetLayoutTreeFootprint(Params.NodeCount);
     uint64_t MetaSize = GetMetaTreeFootprint(Params.NodeCount) * 2;
@@ -816,10 +816,10 @@ GetPipelineStateFootprint(const ui_pipeline_params &Params)
 // TODO: Error check.
 
 static void
-UICreatePipeline(const ui_pipeline_params &Params)
+UICreatePipeline(const pipeline_params &Params)
 {
     void_context &Context  = GetVoidContext();
-    ui_pipeline  &Pipeline = Context.PipelineArray[static_cast<uint32_t>(Params.Pipeline)];
+    pipeline  &Pipeline = Context.PipelineArray[static_cast<uint32_t>(Params.Pipeline)];
 
     // Memory
     {
@@ -837,8 +837,8 @@ UICreatePipeline(const ui_pipeline_params &Params)
         Pipeline.Tree = layout::PlaceLayoutTreeInMemory(Params.NodeCount, TreeMemory);
 
         uint64_t MetaFootprint = GetMetaTreeFootprint(Params.NodeCount);
-        void    *MetaMemory0   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(ui_meta_node));
-        void    *MetaMemory1   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(ui_meta_node));
+        void    *MetaMemory0   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(meta_node));
+        void    *MetaMemory1   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(meta_node));
 
         Pipeline.MetaTrees[0] = PlaceMetaTreeInMemory(Params.NodeCount, MetaMemory0);
         Pipeline.MetaTrees[1] = PlaceMetaTreeInMemory(Params.NodeCount, MetaMemory1);
@@ -863,11 +863,11 @@ UICreatePipeline(const ui_pipeline_params &Params)
 // This probably should be done in frame start. Idk about that whole bind/unbind stuff?
 
 
-static ui_pipeline &
-UIBindPipeline(UIPipeline UserPipeline)
+static pipeline &
+UIBindPipeline(Pipeline UserPipeline)
 {
     void_context &Context  = GetVoidContext();
-    ui_pipeline  &Pipeline = Context.PipelineArray[static_cast<uint32_t>(UserPipeline)];
+    pipeline  &Pipeline = Context.PipelineArray[static_cast<uint32_t>(UserPipeline)];
 
     if(!Pipeline.Bound)
     {
@@ -880,8 +880,8 @@ UIBindPipeline(UIPipeline UserPipeline)
         Pipeline.Bound          = true;
 
         // Experimental
-        ui_meta_tree *ActiveTree = Pipeline.GetActiveTree();
-        if (ui_meta_tree::IsValid(ActiveTree))
+        meta_tree *ActiveTree = Pipeline.GetActiveTree();
+        if (meta_tree::IsValid(ActiveTree))
         {
             ActiveTree->NodeCount = 0;
         }
@@ -892,22 +892,22 @@ UIBindPipeline(UIPipeline UserPipeline)
 
 
 static void
-UIUnbindPipeline(UIPipeline UserPipeline)
+UIUnbindPipeline(Pipeline UserPipeline)
 {
     void_context &Context  = GetVoidContext();
-    ui_pipeline  &Pipeline = Context.PipelineArray[static_cast<uint32_t>(UserPipeline)];
+    pipeline     &Pipeline = Context.PipelineArray[static_cast<uint32_t>(UserPipeline)];
 
     if(Pipeline.Bound)
     {
         // Experimental.
-        ui_meta_tree *ActiveTree = Pipeline.GetActiveTree();
-        ui_meta_tree *StaticTree = ActiveTree == Pipeline.MetaTrees[0] ? Pipeline.MetaTrees[1] : Pipeline.MetaTrees[0];
+        meta_tree *ActiveTree = Pipeline.GetActiveTree();
+        meta_tree *StaticTree = ActiveTree == Pipeline.MetaTrees[0] ? Pipeline.MetaTrees[1] : Pipeline.MetaTrees[0];
 
         MetaTrees(ActiveTree, StaticTree, Pipeline.Tree, Pipeline.StyleArray);
 
         layout::ComputeTreeLayout(Pipeline.Tree);
 
-        ui_paint_buffer Buffer = layout::GeneratePaintBuffer(Pipeline.Tree, Pipeline.StyleArray, Pipeline.FrameArena);
+        paint_buffer Buffer = layout::GeneratePaintBuffer(Pipeline.Tree, Pipeline.StyleArray, Pipeline.FrameArena);
         if(Buffer.Commands && Buffer.Size)
         {
             ExecutePaintCommands(Buffer, Pipeline.FrameArena);

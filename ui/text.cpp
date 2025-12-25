@@ -1,18 +1,18 @@
 // =================================================================
 // @Internal: Fonts Implementation
 
-static core::ui_resource_key
+static core::resource_key
 UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t CacheSizeY)
 {
     core::void_context &Context = core::GetVoidContext();
 
-    core::ui_resource_key   Key   = core::MakeFontResourceKey(Name, Size);
-    core::ui_resource_state State = core::FindResourceByKey(Key, core::FindResourceFlag::AddIfNotFound, Context.ResourceTable);
+    core::resource_key   Key   = core::MakeFontResourceKey(Name, Size);
+    core::resource_state State = core::FindResourceByKey(Key, core::FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 
     if(!State.Resource)
     {
-        uint64_t  Footprint = sizeof(ui_font);
-        ui_font  *Font      = static_cast<ui_font *>(malloc(Footprint)); // Do we really malloc?
+        uint64_t  Footprint = sizeof(font);
+        font  *Font      = static_cast<font *>(malloc(Footprint)); // Do we really malloc?
 
         if(Font)
         {
@@ -64,9 +64,9 @@ UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t Cac
 static uint64_t
 GetTextFootprint(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run)
 {
-    uint64_t ShapedBufferSize = Run.ShapedCount      * sizeof(ui_shaped_glyph);
-    uint64_t WordBufferSize   = Analysed.Words.Count * sizeof(ui_text_word);
-    uint64_t Result           = ShapedBufferSize + WordBufferSize + sizeof(ui_text);
+    uint64_t ShapedBufferSize = Run.ShapedCount      * sizeof(shaped_glyph);
+    uint64_t WordBufferSize   = Analysed.Words.Count * sizeof(text_word);
+    uint64_t Result           = ShapedBufferSize + WordBufferSize + sizeof(text);
 
     return Result;
 }
@@ -74,28 +74,28 @@ GetTextFootprint(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run)
 // This is very bad. It's quite complex for something so simple.
 // How can I reduce complexity here?
 
-static ui_text *
-PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui_font *Font, void *Memory)
+static text *
+PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, font *Font, void *Memory)
 {
     VOID_ASSERT(Font);
     VOID_ASSERT(Memory);
 
-    ui_text      *Result  = 0;
+    text      *Result  = 0;
     core::void_context &Context = core::GetVoidContext();
 
     if(Memory && Context.ResourceTable)
     {
-        auto         *Shaped = static_cast<ui_shaped_glyph *>(Memory);
-        ui_text_word *Words  = 0;
+        auto         *Shaped = static_cast<shaped_glyph *>(Memory);
+        text_word *Words  = 0;
 
         if(Analysed.Words.Count)
         {
-            Words  = reinterpret_cast<ui_text_word *>(Shaped + Run.ShapedCount);
-            Result = reinterpret_cast<ui_text      *>(Words  + Analysed.Words.Count);
+            Words  = reinterpret_cast<text_word *>(Shaped + Run.ShapedCount);
+            Result = reinterpret_cast<text      *>(Words  + Analysed.Words.Count);
         }
         else
         {
-            Result = reinterpret_cast<ui_text      *>(Shaped + Run.ShapedCount);
+            Result = reinterpret_cast<text      *>(Shaped + Run.ShapedCount);
         }
 
         VOID_ASSERT(Result);

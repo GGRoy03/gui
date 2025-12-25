@@ -8,35 +8,35 @@ enum class InspectorStyle : uint32_t
     TreeNode  = 2,
 };
 
-constexpr core::ui_color MainOrange        = core::ui_color(0.9765f, 0.4510f, 0.0863f, 1.0f);
-constexpr core::ui_color WhiteOrange       = core::ui_color(1.0000f, 0.9686f, 0.9294f, 1.0f);
-constexpr core::ui_color SurfaceOrange     = core::ui_color(0.9961f, 0.8431f, 0.6667f, 1.0f);
-constexpr core::ui_color HoverOrange       = core::ui_color(0.9176f, 0.3451f, 0.0471f, 1.0f);
-constexpr core::ui_color SubtleOrange      = core::ui_color(0.1686f, 0.1020f, 0.0627f, 1.0f);
+constexpr core::color MainOrange        = core::color(0.9765f, 0.4510f, 0.0863f, 1.0f);
+constexpr core::color WhiteOrange       = core::color(1.0000f, 0.9686f, 0.9294f, 1.0f);
+constexpr core::color SurfaceOrange     = core::color(0.9961f, 0.8431f, 0.6667f, 1.0f);
+constexpr core::color HoverOrange       = core::color(0.9176f, 0.3451f, 0.0471f, 1.0f);
+constexpr core::color SubtleOrange      = core::color(0.1686f, 0.1020f, 0.0627f, 1.0f);
 
-constexpr core::ui_color Background        = core::ui_color(0.0588f, 0.0588f, 0.0627f, 1.0f);
-constexpr core::ui_color SurfaceBackground = core::ui_color(0.1020f, 0.1098f, 0.1176f, 1.0f);
-constexpr core::ui_color BorderOrDivider   = core::ui_color(0.1804f, 0.1961f, 0.2118f, 1.0f);
+constexpr core::color Background        = core::color(0.0588f, 0.0588f, 0.0627f, 1.0f);
+constexpr core::color SurfaceBackground = core::color(0.1020f, 0.1098f, 0.1176f, 1.0f);
+constexpr core::color BorderOrDivider   = core::color(0.1804f, 0.1961f, 0.2118f, 1.0f);
 
-constexpr core::ui_color TextPrimary       = core::ui_color(0.9765f, 0.9804f, 0.9843f, 1.0f);
-constexpr core::ui_color TextSecondary     = core::ui_color(0.6118f, 0.6392f, 0.6863f, 1.0f);
+constexpr core::color TextPrimary       = core::color(0.9765f, 0.9804f, 0.9843f, 1.0f);
+constexpr core::color TextSecondary     = core::color(0.6118f, 0.6392f, 0.6863f, 1.0f);
 
-constexpr core::ui_color Success           = core::ui_color(0.1333f, 0.7725f, 0.3686f, 1.0f);
-constexpr core::ui_color Error             = core::ui_color(0.9373f, 0.2667f, 0.2667f, 1.0f);
-constexpr core::ui_color Warning           = core::ui_color(0.9608f, 0.6196f, 0.0431f, 1.0f);
+constexpr core::color Success           = core::color(0.1333f, 0.7725f, 0.3686f, 1.0f);
+constexpr core::color Error             = core::color(0.9373f, 0.2667f, 0.2667f, 1.0f);
+constexpr core::color Warning           = core::color(0.9608f, 0.6196f, 0.0431f, 1.0f);
 
-static ui_cached_style InspectorStyleArray[] =
+static cached_style InspectorStyleArray[] =
 {
     // Window
     {
         .Default =
         {
-            .Size         = ui_size({1000.f, LayoutSizing::Fixed}, {1000.f, LayoutSizing::Fixed}),
+            .Size         = size({1000.f, LayoutSizing::Fixed}, {1000.f, LayoutSizing::Fixed}),
             .Direction    = LayoutDirection::Horizontal,
             .XAlign       = Alignment::Start,
             .YAlign       = Alignment::Center,
 
-            .Padding      = core::ui_padding(20.f, 20.f, 20.f, 20.f),
+            .Padding      = core::padding(20.f, 20.f, 20.f, 20.f),
             .Spacing      = 10.f,
 
             .Color        = Background,
@@ -44,7 +44,7 @@ static ui_cached_style InspectorStyleArray[] =
 
             .BorderWidth  = 2.f,
             .Softness     = 2.f,
-            .CornerRadius = core::ui_corner_radius(4.f, 4.f, 4.f, 4.f),
+            .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
         },
 
         .Hovered =
@@ -62,16 +62,16 @@ static ui_cached_style InspectorStyleArray[] =
     {
         .Default =
         {
-            .Size         = ui_size({50.f, LayoutSizing::Percent}, {100.f, LayoutSizing::Percent}),
+            .Size         = size({50.f, LayoutSizing::Percent}, {100.f, LayoutSizing::Percent}),
 
-            .Padding      = core::ui_padding(20.f, 20.f, 20.f, 20.f),
+            .Padding      = core::padding(20.f, 20.f, 20.f, 20.f),
 
             .Color        = SurfaceBackground,
             .BorderColor  = BorderOrDivider,
 
             .BorderWidth  = 2.f,
             .Softness     = 2.f,
-            .CornerRadius = core::ui_corner_radius(4.f, 4.f, 4.f, 4.f),
+            .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
         },
     },
 
@@ -79,14 +79,14 @@ static ui_cached_style InspectorStyleArray[] =
     {
         .Default =
         {
-            .Size         = ui_size({50.f, LayoutSizing::Fixed}, {50.f, LayoutSizing::Fixed}),
+            .Size         = size({50.f, LayoutSizing::Fixed}, {50.f, LayoutSizing::Fixed}),
 
             .Color        = SurfaceBackground,
             .BorderColor  = HoverOrange,
 
             .BorderWidth  = 2.f,
             .Softness     = 2.f,
-            .CornerRadius = core::ui_corner_radius(4.f, 4.f, 4.f, 4.f),
+            .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
         },
     },
 };
@@ -115,10 +115,10 @@ struct inspector_ui
     uint32_t        HoveredNodeIndex  = layout::InvalidIndex;
     node_state     *Nodes             = 0;
     uint32_t        NodeCount         = 0;
-    layout::ui_layout_tree *CurrentTree       = 0;
+    layout::layout_tree *CurrentTree       = 0;
 
     // UI Resources
-    core::ui_resource_key Font;
+    core::resource_key Font;
 };
 
 // ------------------------------------------------------------------------------------
@@ -126,7 +126,7 @@ struct inspector_ui
 // ------------------------------------------------------------------------------------
 
 static void
-BuildVisibleListEx(layout::ui_layout_node *Node, layout::ui_layout_tree *Tree, uint32_t Depth, visible_list &List)
+BuildVisibleListEx(layout::layout_node *Node, layout::layout_tree *Tree, uint32_t Depth, visible_list &List)
 {
     node_state &State = List.Nodes[List.Count++];
     State.Index = Node->Index;
@@ -136,7 +136,7 @@ BuildVisibleListEx(layout::ui_layout_node *Node, layout::ui_layout_tree *Tree, u
     // I need some sort of persistent state?
 
 
-    for (auto *Child = Tree->GetNode(Node->First); layout::ui_layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+    for (auto *Child = Tree->GetNode(Node->First); layout::layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
     {
         BuildVisibleListEx(Child, Tree, Depth + 1, List);
     }
@@ -144,7 +144,7 @@ BuildVisibleListEx(layout::ui_layout_node *Node, layout::ui_layout_tree *Tree, u
 
 
 static visible_list
-BuildVisibleList(layout::ui_layout_node *Root, layout::ui_layout_tree *Tree, memory_arena *Arena)
+BuildVisibleList(layout::layout_node *Root, layout::layout_tree *Tree, memory_arena *Arena)
 {
     visible_list List =
     {
@@ -152,7 +152,7 @@ BuildVisibleList(layout::ui_layout_node *Root, layout::ui_layout_tree *Tree, mem
         .Count = 0,
     };
 
-    if(layout::ui_layout_node::IsValid(Root) && layout::ui_layout_tree::IsValid(Tree))
+    if(layout::layout_node::IsValid(Root) && layout::layout_tree::IsValid(Tree))
     {
         BuildVisibleListEx(Root, Tree, 0, List);
     }
@@ -161,23 +161,23 @@ BuildVisibleList(layout::ui_layout_node *Root, layout::ui_layout_tree *Tree, mem
 }
 
 
-static core::ui_node
-TreeNode(core::ui_pipeline &Pipeline)
+static core::node
+TreeNode(core::pipeline &Pipeline)
 {
-    core::ui_node Node = {.Index = UICreateNode2(static_cast<uint32_t>(InspectorStyle::TreeNode), core::NodeType::None, layout::NodeFlags::None, Pipeline.GetActiveTree())};
+    core::node Node = {.Index = UICreateNode2(static_cast<uint32_t>(InspectorStyle::TreeNode), core::NodeType::None, layout::NodeFlags::None, Pipeline.GetActiveTree())};
     return Node;
 }
 
 
 static void
-RenderLayoutNodes(core::ui_pipeline &Pipeline, const visible_list &List)
+RenderLayoutNodes(core::pipeline &Pipeline, const visible_list &List)
 {
     for(uint32_t Idx = 0; Idx < List.Count; ++Idx)
     {
         uint32_t LayoutIndex = List.Nodes[Idx].Index;
         uint32_t LayoutDepth = List.Nodes[Idx].Depth;
 
-        core::ui_node Row = TreeNode(Pipeline);
+        core::node Row = TreeNode(Pipeline);
 
         if(!Row.IsValid())
         {
@@ -199,15 +199,15 @@ RenderLayoutNodes(core::ui_pipeline &Pipeline, const visible_list &List)
 // @Private : Inspector Helpers
 
 static bool
-InitializeInspector(inspector_ui &Inspector, core::ui_pipeline &Pipeline)
+InitializeInspector(inspector_ui &Inspector, core::pipeline &Pipeline)
 {
     // UI Pipeline
     {
-        core::ui_pipeline_params Params =
+        core::pipeline_params Params =
         {
             .NodeCount     = 128,
             .FrameBudget   = VOID_KILOBYTE(128),
-            .Pipeline      = core::UIPipeline::Default,
+            .Pipeline      = core::Pipeline::Default,
             .StyleArray    = InspectorStyleArray,
             .StyleIndexMin = static_cast<uint32_t>(InspectorStyle::Window  ),
             .StyleIndexMax = static_cast<uint32_t>(InspectorStyle::TreeNode),
@@ -240,7 +240,7 @@ ShowUI(void)
 
     // It is weird that we allow binding before it's even created. Perhaps we rename these functions?
     
-    core::ui_pipeline &Pipeline = UIBindPipeline(core::UIPipeline::Default);
+    core::pipeline &Pipeline = UIBindPipeline(core::Pipeline::Default);
 
     if(!Inspector.IsInitialized)
     {
@@ -253,17 +253,17 @@ ShowUI(void)
     {
         ClearArena(Inspector.FrameArena);
 
-        layout::ui_layout_tree *Tree = Inspector.CurrentTree;
-        if(layout::ui_layout_tree::IsValid(Tree))
+        layout::layout_tree *Tree = Inspector.CurrentTree;
+        if(layout::layout_tree::IsValid(Tree))
         {
-            core::ui_node Window = UIWindow(static_cast<uint32_t>(InspectorStyle::Window), Pipeline);
+            core::node Window = UIWindow(static_cast<uint32_t>(InspectorStyle::Window), Pipeline);
             {
-                core::ui_node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
+                core::node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
                 {
                 }
                 UIEndDummy(TreePanel, Pipeline);
 
-                core::ui_node OtherPanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
+                core::node OtherPanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
                 {
                 }
                 UIEndDummy(OtherPanel, Pipeline);
@@ -272,7 +272,7 @@ ShowUI(void)
         }
     }
 
-    UIUnbindPipeline(core::UIPipeline::Default);
+    UIUnbindPipeline(core::Pipeline::Default);
 }
 
 

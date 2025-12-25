@@ -6,7 +6,7 @@
 // and can already be inferred from the context.
 
 static render_batch_list *
-GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
+GetPaintBatchList(text *Text, memory_arena *Arena, rect_float RectangleClip)
 {
     VOID_ASSERT(Arena); // Internal Corruption
 
@@ -26,7 +26,7 @@ GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
             auto FontState = FindResourceByKey(Text->FontKey, core::FindResourceFlag::None, Context.ResourceTable);
             if(FontState.Resource)
             {
-                ui_font *Font = static_cast<ui_font *>(FontState.Resource);
+                font *Font = static_cast<font *>(FontState.Resource);
 
                 Params.Texture     = Font->CacheView;
                 Params.TextureSize = Font->TextureSize;
@@ -44,7 +44,7 @@ GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
     if(!Node || !CanMergeNodes)
     {
         Node = PushStruct(Arena, rect_group_node);
-        Node->BatchList.BytesPerInstance = sizeof(core::ui_rect);
+        Node->BatchList.BytesPerInstance = sizeof(core::rect);
 
         AppendToLinkedList(UIParams, Node, UIParams->Count);
     }
@@ -59,9 +59,9 @@ GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
 
 
 static void
-PaintUIRect(rect_float Rect, core::ui_color Color, core::ui_corner_radius CornerRadii, float BorderWidth, float Softness, render_batch_list *BatchList, memory_arena *Arena)
+PaintUIRect(rect_float Rect, core::color Color, core::corner_radius CornerRadii, float BorderWidth, float Softness, render_batch_list *BatchList, memory_arena *Arena)
 {
-    core::ui_rect *UIRect = (core::ui_rect *)PushDataInBatchList(Arena, BatchList);
+    core::rect *UIRect = (core::rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
     UIRect->ColorTL       = Color;
     UIRect->ColorBL       = Color;
@@ -77,7 +77,7 @@ PaintUIRect(rect_float Rect, core::ui_color Color, core::ui_corner_radius Corner
 static void
 PaintUIImage(rect_float Rect, rect_float Source, render_batch_list *BatchList, memory_arena *Arena)
 {
-    core::ui_rect *UIRect = (core::ui_rect *)PushDataInBatchList(Arena, BatchList);
+    core::rect *UIRect = (core::rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
     UIRect->ColorTL       = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
     UIRect->ColorBL       = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
@@ -91,9 +91,9 @@ PaintUIImage(rect_float Rect, rect_float Source, render_batch_list *BatchList, m
 }
 
 static void
-PaintUIGlyph(rect_float Rect, core::ui_color Color, rect_float Source, render_batch_list *BatchList, memory_arena *Arena)
+PaintUIGlyph(rect_float Rect, core::color Color, rect_float Source, render_batch_list *BatchList, memory_arena *Arena)
 {
-    core::ui_rect *UIRect = (core::ui_rect *)PushDataInBatchList(Arena, BatchList);
+    core::rect *UIRect = (core::rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
     UIRect->ColorTL       = Color;
     UIRect->ColorBL       = Color;
@@ -110,7 +110,7 @@ PaintUIGlyph(rect_float Rect, core::ui_color Color, rect_float Source, render_ba
 // Painting Public API Implementation
 
 static void
-ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
+ExecutePaintCommands(paint_buffer Buffer, memory_arena *Arena)
 {
     VOID_ASSERT(Buffer.Commands);  // Internal Corruption
     VOID_ASSERT(Arena);            // Internal Corruption
@@ -119,15 +119,15 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
 
     for(uint32_t Idx = 0; Idx < Buffer.Size; ++Idx)
     {
-        ui_paint_command &Command = Buffer.Commands[Idx];
+        paint_command &Command = Buffer.Commands[Idx];
 
         rect_float       Rect     = Command.Rectangle;
-        core::ui_color         Color    = Command.Color;
-        core::ui_corner_radius Radius   = Command.CornerRadius;
+        core::color         Color    = Command.Color;
+        core::corner_radius Radius   = Command.CornerRadius;
         float            Softness = Command.Softness;
 
-        core::ui_resource_state TextState = FindResourceByKey(Command.TextKey , core::FindResourceFlag::None, Context.ResourceTable);
-        auto             *Text      = static_cast<ui_text  *>(TextState.Resource);
+        auto  TextState = FindResourceByKey(Command.TextKey , core::FindResourceFlag::None, Context.ResourceTable);
+        auto *Text      = static_cast<text  *>(TextState.Resource);
 
         // TODO: Can this return NULL?
         render_batch_list *BatchList = GetPaintBatchList(Text, Arena, Command.RectangleClip);
@@ -137,7 +137,7 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
             PaintUIRect(Rect, Color, Radius, 0, Softness, BatchList, Arena);
         }
 
-        core::ui_color BorderColor = Command.BorderColor;
+        core::color BorderColor = Command.BorderColor;
         float    BorderWidth = Command.BorderWidth;
 
         if(BorderColor.A > 0.f && BorderWidth > 0.f)
@@ -147,11 +147,11 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
 
         if(Text)
         {
-            core::ui_color TextColor = Command.TextColor;
+            core::color TextColor = Command.TextColor;
 
             for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
             {
-                const ui_shaped_glyph &Glyph = Text->Shaped[Idx];
+                const shaped_glyph &Glyph = Text->Shaped[Idx];
 
                 PaintUIGlyph(Glyph.Position, TextColor, Glyph.Source, BatchList, Arena);
 

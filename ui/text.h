@@ -1,7 +1,7 @@
 // =================================================================
 // @Internal: Fonts Implementation
 
-struct ui_font
+struct font
 {
     render_handle          CacheTransfer;
     render_handle          Cache;
@@ -12,12 +12,12 @@ struct ui_font
     byte_string            Name;
 };
 
-static core::ui_resource_key UILoadSystemFont  (byte_string Name, float Size, uint16_t CacheSizeX, uint16_t CacheSizeY);
+static core::resource_key UILoadSystemFont  (byte_string Name, float Size, uint16_t CacheSizeX, uint16_t CacheSizeY);
 
 // =================================================================
 // @Internal: Static Text Implementation
 
-struct ui_shaped_glyph
+struct shaped_glyph
 {
     float      OffsetX;
     float      OffsetY;
@@ -28,7 +28,7 @@ struct ui_shaped_glyph
     bool       Skip;
 };
 
-struct ui_text_word
+struct text_word
 {
     float    LeadingWhitespaceAdvance;
     float    Advance;
@@ -39,14 +39,14 @@ struct ui_text_word
 // Do we need to store Texture/TextureSize, since we can always get them from the font?
 // And it would also fix the problem of who owns what (the font owns the texture)
 
-struct ui_text
+struct text
 {
-    core::ui_resource_key FontKey;
-    ui_shaped_glyph      *Shaped;
-    uint32_t              ShapedCount;
-    ui_text_word          *Words;
-    uint32_t              WordCount;
+    core::resource_key FontKey;
+    shaped_glyph      *Shaped;
+    uint32_t           ShapedCount;
+    text_word         *Words;
+    uint32_t           WordCount;
 };
 
-static uint64_t  GetTextFootprint   (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run);
-static ui_text * PlaceTextInMemory  (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui_font *Font, void *Memory);
+static uint64_t GetTextFootprint   (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run);
+static text *   PlaceTextInMemory  (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, font *Font, void *Memory);

@@ -1,28 +1,32 @@
-// Think this should not be here honestly.
+#pragma once
+
+#include <immintrin.h>
+
 namespace layout
 {
-    struct ui_layout_tree;
+    struct layout_tree;
 }
 
-// Idk...
-struct ui_font;
-struct ui_cached_style;
+
+struct font;
+struct cached_style;
 
 namespace core
 {
 
+// =============================================================================
+// DOMAIN: Basic Types
+// =============================================================================
+
 enum class AxisType
 {
     None = 0,
-
     X    = 1,
     Y    = 2,
     XY   = 3,
 };
 
-// [CORE TYPES]
-
-struct ui_color
+struct color
 {
     float R;
     float G;
@@ -30,7 +34,7 @@ struct ui_color
     float A;
 };
 
-struct ui_corner_radius
+struct corner_radius
 {
     float TL;
     float TR;
@@ -38,7 +42,7 @@ struct ui_corner_radius
     float BL;
 };
 
-struct ui_padding
+struct padding
 {
     float Left;
     float Top;
@@ -46,80 +50,35 @@ struct ui_padding
     float Bot;
 };
 
-
-// NOTE: Must be padded to 16 bytes alignment.
-typedef struct ui_rect
+struct rect
 {
-    rect_float       RectBounds;
-    rect_float       TextureSource;
-    ui_color         ColorTL;
-    ui_color         ColorBL;
-    ui_color         ColorTR;
-    ui_color         ColorBR;
-    ui_corner_radius CornerRadii;
-    float            BorderWidth, Softness, SampleTexture, _P0; // Style Params
-} ui_rect;
-
-// ------------------------------------------------------------------------------------
-
-#include <immintrin.h>
-
-typedef enum UIResource_Type
-{
-    UIResource_None         = 0,
-    UIResource_Text         = 1,
-    UIResource_TextInput    = 2,
-    UIResource_ScrollRegion = 3,
-    UIResource_Image        = 4,
-    UIResource_ImageGroup   = 5,
-    UIResource_Font         = 6,
-} UIResource_Type;
-
-struct ui_resource_key
-{
-    __m128i Value;
+    rect_float    RectBounds;
+    rect_float    TextureSource;
+    color         ColorTL;
+    color         ColorBL;
+    color         ColorTR;
+    color         ColorBR;
+    corner_radius CornerRadii;
+    float         BorderWidth;
+    float         Softness;
+    float         SampleTexture;
+    float        _Padding0;
 };
 
-struct ui_resource_stats
+// =============================================================================
+// DOMAIN: Resources
+// =============================================================================
+
+enum class ResourceType
 {
-    uint64_t CacheHitCount;
-    uint64_t CacheMissCount;
+    None         = 0,
+    Text         = 1,
+    TextInput    = 2,
+    ScrollRegion = 3,
+    Image        = 4,
+    ImageGroup   = 5,
+    Font         = 6,
 };
-
-struct ui_resource_table_params
-{
-    uint32_t HashSlotCount;
-    uint32_t EntryCount;
-};
-
-struct ui_resource_state
-{
-    uint32_t        Id;
-    UIResource_Type ResourceType;
-    void           *Resource;
-};
-
-
-struct ui_resource_table;
-
-static uint64_t            GetResourceTableFootprint   (ui_resource_table_params Params);
-static ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_params Params, void *Memory);
-
-// Keys:
-//   Opaque handles to resources. Use a resource table to retrieve the associated data
-//   MakeNodeResourceKey is used for general node-based resources
-//   MakeFontResourceKey is used for global  font       resources
-
-
-
-
-static ui_resource_key MakeNodeResourceKey   (UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tree *Tree);
-static ui_resource_key MakeFontResourceKey   (byte_string Name, float Size);
-
-// Resources:
-//   Use FindResourceByKey to retrieve some resource with a key created from MakeResourceKey.
-//   If the resource doesn't exist yet, the returned state will contain: .ResourceType = UIResource_None AND .Resource = NULL.
-//   You may update the table using UpdateResourceTable by passing the relevant updated data. The id is retrieved in State.Id.
 
 enum class FindResourceFlag
 {
@@ -127,161 +86,178 @@ enum class FindResourceFlag
     AddIfNotFound = 1 << 0,
 };
 
-// Template this for convenience.
+inline FindResourceFlag operator|(FindResourceFlag A, FindResourceFlag B)
+{
+    return static_cast<FindResourceFlag>(static_cast<int>(A) | static_cast<int>(B));
+}
 
-inline FindResourceFlag operator|(FindResourceFlag A, FindResourceFlag B) {return static_cast<FindResourceFlag>(static_cast<int>(A) | static_cast<int>(B));}
-inline FindResourceFlag operator&(FindResourceFlag A, FindResourceFlag B) {return static_cast<FindResourceFlag>(static_cast<int>(A) & static_cast<int>(B));}
+inline FindResourceFlag operator&(FindResourceFlag A, FindResourceFlag B)
+{
+    return static_cast<FindResourceFlag>(static_cast<int>(A) & static_cast<int>(B));
+}
 
-static ui_resource_state FindResourceByKey     (ui_resource_key Key, FindResourceFlag Flags,  ui_resource_table *Table);
-static void              UpdateResourceTable   (uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_table *Table);
+struct resource_key
+{
+    __m128i Value;
+};
 
-static void * QueryNodeResource  (UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tree *Tree, ui_resource_table *Table);
+struct resource_stats
+{
+    uint64_t CacheHitCount;
+    uint64_t CacheMissCount;
+};
 
+struct resource_table_params
+{
+    uint32_t HashSlotCount;
+    uint32_t EntryCount;
+};
 
-struct ui_pipeline;
+struct resource_state
+{
+    uint32_t     Id;
+    ResourceType ResourceType;
+    void        *Resource;
+};
 
-// I do wonder if we want to add the pipeline as a member to simplify?
-// What do we want to do with this anyways?
+struct resource_table;
 
-struct ui_node
+// --- Public API ---
+
+static uint64_t         GetResourceTableFootprint   (resource_table_params Params);
+static resource_table * PlaceResourceTableInMemory  (resource_table_params Params, void *Memory);
+
+static resource_key     MakeNodeResourceKey         (ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tree);
+static resource_key     MakeFontResourceKey         (byte_string Name, float Size);
+
+static resource_state   FindResourceByKey           (resource_key Key, FindResourceFlag Flags, resource_table *Table);
+static void             UpdateResourceTable         (uint32_t Id, resource_key Key, void *Memory, resource_table *Table);
+
+static void           * QueryNodeResource           (ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tree, resource_table *Table);
+
+// =============================================================================
+// DOMAIN:  Node
+// =============================================================================
+
+struct pipeline;
+
+struct node
 {
     uint32_t Index;
 
-    // Layout
-    ui_node  FindChild        (uint32_t Index , ui_pipeline &Pipeline);
-    void     Append           (ui_node  Child , ui_pipeline &Pipeline);
-    void     SetOffset        (float XOffset, float YOffset, ui_pipeline &Pipeline);
+    node FindChild(uint32_t Index, pipeline &Pipeline);
+    void Append(node Child, pipeline &Pipeline);
+    void SetOffset(float XOffset, float YOffset, pipeline &Pipeline);
 
-    // Queries
-    bool     IsClicked        (ui_pipeline &Pipeline);
+    bool IsClicked(pipeline &Pipeline);
 
-    // Resource
-    void     SetText          (byte_string Text, ui_resource_key FontKey, ui_pipeline &Pipeline);
-    void     SetTextInput     (uint8_t *Buffer, uint64_t BufferSize, ui_pipeline &Pipeline);
-    void     SetScroll        (float ScrollSpeed, AxisType Axis, ui_pipeline &Pipeline);
-    void     SetImage         (byte_string Path, byte_string Group, ui_pipeline &Pipeline);
+    void SetText(byte_string Text, resource_key FontKey, pipeline &Pipeline);
+    void SetTextInput(uint8_t *Buffer, uint64_t BufferSize, pipeline &Pipeline);
+    void SetScroll(float ScrollSpeed, AxisType Axis, pipeline &Pipeline);
+    void SetImage(byte_string Path, byte_string Group, pipeline &Pipeline);
 
-    // Debug
-    void     DebugBox         (uint32_t Flag, bool Draw, ui_pipeline &Pipeline);
+    void DebugBox(uint32_t Flag, bool Draw, pipeline &Pipeline);
 
-    // Helpers
-    bool     IsValid          ();
+    bool IsValid();
 };
 
-// -----------------------------------------------------------------------------------
+// =============================================================================
+// DOMAIN: Pipeline
+// =============================================================================
 
-static void UIBeginFrame  (vec2_int WindowSize);
-static void UIEndFrame    (void);
-
-// -----------------------------------------------------------------------------------
-
-enum class UIPipeline : uint32_t
+enum class Pipeline
 {
     Default = 0,
     Count   = 1,
 };
 
-constexpr uint32_t PipelineCount = static_cast<uint32_t>(UIPipeline::Count);
+constexpr uint32_t PipelineCount = static_cast<uint32_t>(Pipeline::Count);
 
-struct ui_pipeline_params
+struct pipeline_params
 {
-    uint64_t             NodeCount;
-    uint64_t             FrameBudget;
-
-    UIPipeline           Pipeline;
-    ui_cached_style     *StyleArray;
-    uint32_t             StyleIndexMin;
-    uint32_t             StyleIndexMax;
+    uint64_t      NodeCount;
+    uint64_t      FrameBudget;
+    Pipeline      Pipeline;
+    cached_style *StyleArray;
+    uint32_t      StyleIndexMin;
+    uint32_t      StyleIndexMax;
 };
 
-struct ui_meta_tree;
-struct ui_pipeline
-{
-    // UI State
+struct meta_tree;
 
-    layout::ui_layout_tree *Tree;
-    ui_meta_tree           *MetaTrees[2];
+struct pipeline
+{
+    layout::layout_tree    *Tree;
+    meta_tree              *MetaTrees[2];
     uint32_t                ActiveMetaTree;
 
-    // User State
-
-    UIPipeline              Type;
-    ui_cached_style        *StyleArray;
+    Pipeline                Type;
+    cached_style           *StyleArray;
     uint32_t                StyleIndexMin;
     uint32_t                StyleIndexMax;
-
-    // Memory
 
     memory_arena           *StateArena;
     memory_arena           *FrameArena;
 
-    // Misc
-
     bool                    Bound;
-    uint64_t                NodeCount; // Why?
-    
-    // Helpers
+    uint64_t                NodeCount;
 
-    ui_meta_tree * GetActiveTree()
+    meta_tree * GetActiveTree()
     {
-        ui_meta_tree *Result = MetaTrees[ActiveMetaTree];
-        return Result;
+        return MetaTrees[ActiveMetaTree];
     }
 };
 
+// --- Public API ---
 
-static void               UICreatePipeline            (const ui_pipeline_params &Params);
-static ui_pipeline&       UIBindPipeline              (UIPipeline Pipeline);
-static void               UIUnbindPipeline            (UIPipeline Pipeline);
+static void       BeginFrame      (vec2_int WindowSize);
+static void       EndFrame        ();
 
-// ----------------------------------------
+static void       CreatePipeline  (const pipeline_params &Params);
+static pipeline & BindPipeline    (Pipeline Pipeline);
+static void       UnbindPipeline  (Pipeline Pipeline);
 
-// NOTE:
-// Only here, because of the D3D11 debug layer bug? Really?
-// Because it could fit in the global resource pattern as far as I understand?
+// =============================================================================
+// DOMAIN: Fonts & Context
+// =============================================================================
 
-struct ui_font_list
+struct font_list
 {
-    ui_font *First;
-    ui_font *Last;
+    font     *First;
+    font     *Last;
     uint32_t Count;
 };
 
 struct void_context
 {
-    // Memory
-    memory_arena      *StateArena;
-
-    // State
-    ui_resource_table *ResourceTable;
-    ui_pipeline        PipelineArray[PipelineCount];
-    uint32_t           PipelineCount;
-
-    ui_font_list     Fonts; // TODO: Find a solution such that this is a global resource.
-
-    // State
-    vec2_int   WindowSize;
+    memory_arena   *StateArena;
+    resource_table *ResourceTable;
+    pipeline        PipelineArray[PipelineCount];
+    uint32_t        PipelineCount;
+    font_list       Fonts;
+    vec2_int        WindowSize;
 };
 
 static void_context GlobalVoidContext;
 
-static void_context & GetVoidContext     (void);
-static void           CreateVoidContext  (void);
+// --- Public API ---
 
+static void_context & GetVoidContext();
+static void CreateVoidContext();
 
-// -----------------------------------------------------------------------------
-// @Private Meta-Layout API
-// Functions intended for internal use.
-// -----------------------------------------------------------------------------
+// =============================================================================
+// DOMAIN: Meta Tree
+// =============================================================================
 
-enum class NodeType : uint32_t
+enum class NodeType
 {
-    None = 0,
-
+    None      = 0,
     Container = 1,
 };
 
-static uint64_t GetMetaTreeFootprint   (uint64_t NodeCount);
-static uint64_t PlaceMetaTreeInMemory  (uint64_t NodeCount);
+// --- Public API ---
+
+static uint64_t GetMetaTreeFootprint(uint64_t NodeCount);
+static uint64_t PlaceMetaTreeInMemory(uint64_t NodeCount);
 
 } // namespace core

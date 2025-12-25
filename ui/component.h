@@ -1,2 +1,2 @@
-static core::ui_node UIWindow     (uint32_t Style, core::ui_pipeline &Pipeline);
-static void          UIEndWindow  (core::ui_node  Node , core::ui_pipeline &Pipeline);
+static core::node UIWindow     (uint32_t Style, core::pipeline &Pipeline);
+static void       UIEndWindow  (core::node  Node , core::pipeline &Pipeline);

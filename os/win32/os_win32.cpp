@@ -302,9 +302,9 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, int ShowCmd
         {
             TimeBlock("UI Logic");
 
-            core::UIBeginFrame(ClientSize);
+            core::BeginFrame(ClientSize);
             Inspector::ShowUI();
-            core::UIEndFrame();
+            core::EndFrame();
         }
 
         {

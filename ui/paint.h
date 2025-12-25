@@ -27,98 +27,98 @@ enum class LayoutSizing
 };
 
 
-struct ui_sizing
+struct sizing
 {
     float        Value;
     LayoutSizing Type;
 };
 
 
-struct ui_size
+struct size
 {
-    ui_sizing Width;
-    ui_sizing Height;
+    sizing Width;
+    sizing Height;
 };
 
 // TODO: Can we be smarter about what a command really is?
 // Right now it's mostly tied to a node in the tree so we need some fat struct.
 
-struct ui_paint_command
+struct paint_command
 {
     rect_float             Rectangle;
     rect_float             RectangleClip;
 
-    core::ui_resource_key  TextKey;
-    core::ui_resource_key  ImageKey;
+    core::resource_key  TextKey;
+    core::resource_key  ImageKey;
 
-    core::ui_color         Color;
-    core::ui_color         BorderColor;
-    core::ui_color         TextColor;
-    core::ui_corner_radius CornerRadius;
+    core::color         Color;
+    core::color         BorderColor;
+    core::color         TextColor;
+    core::corner_radius CornerRadius;
     float                  Softness;
     float                  BorderWidth;
 };
 
 
-struct ui_paint_buffer
+struct paint_buffer
 {
-    ui_paint_command *Commands;
+    paint_command *Commands;
     uint32_t          Size;
 };
 
 
 template<typename T>
-struct ui_property
+struct style_property
 {
     T    Value;
     bool IsSet;
 
-    ui_property() = default;
-    constexpr ui_property(const T& Value_)              : Value(Value_), IsSet(true) {}
-    constexpr ui_property(const T& Value_, bool IsSet_) : Value(Value_), IsSet(IsSet_) {}
+    style_property() = default;
+    constexpr style_property(const T& Value_)              : Value(Value_), IsSet(true) {}
+    constexpr style_property(const T& Value_, bool IsSet_) : Value(Value_), IsSet(IsSet_) {}
 
-    ui_property& operator=(const T& Value_) { Value = Value_; IsSet = true; return *this; }
+    style_property& operator=(const T& Value_) { Value = Value_; IsSet = true; return *this; }
 };
 
-struct ui_paint_properties
+struct paint_properties
 {
-    ui_property<core::ui_color>         Color;
-    ui_property<core::ui_color>         BorderColor;
-    ui_property<core::ui_color>         TextColor;
-    ui_property<core::ui_color>         CaretColor;
+    style_property<core::color>         Color;
+    style_property<core::color>         BorderColor;
+    style_property<core::color>         TextColor;
+    style_property<core::color>         CaretColor;
 
-    ui_property<float>                  BorderWidth;
-    ui_property<float>                  Softness;
-    ui_property<core::ui_corner_radius> CornerRadius;
+    style_property<float>                  BorderWidth;
+    style_property<float>                  Softness;
+    style_property<core::corner_radius> CornerRadius;
 
-    ui_property<float>            CaretWidth;
+    style_property<float>            CaretWidth;
 };
 
-struct ui_default_properties
+struct default_properties
 {
-    ui_property<ui_size>                Size;
-    ui_property<ui_size>                MinSize;
-    ui_property<ui_size>                MaxSize;
-    ui_property<LayoutDirection>        Direction;
-    ui_property<Alignment>              XAlign;
-    ui_property<Alignment>              YAlign;
+    style_property<size>                Size;
+    style_property<size>                MinSize;
+    style_property<size>                MaxSize;
+    style_property<LayoutDirection>        Direction;
+    style_property<Alignment>              XAlign;
+    style_property<Alignment>              YAlign;
 
-    ui_property<core::ui_padding>       Padding;
-    ui_property<float>                  Spacing;
-    ui_property<float>                  Grow;
-    ui_property<float>                  Shrink;
+    style_property<core::padding>       Padding;
+    style_property<float>                  Spacing;
+    style_property<float>                  Grow;
+    style_property<float>                  Shrink;
 
-    ui_property<core::ui_color>         Color;
-    ui_property<core::ui_color>         BorderColor;
-    ui_property<core::ui_color>         TextColor;
+    style_property<core::color>         Color;
+    style_property<core::color>         BorderColor;
+    style_property<core::color>         TextColor;
 
-    ui_property<float>                  BorderWidth;
-    ui_property<float>                  Softness;
-    ui_property<core::ui_corner_radius> CornerRadius;
+    style_property<float>                  BorderWidth;
+    style_property<float>                  Softness;
+    style_property<core::corner_radius> CornerRadius;
 
-    ui_paint_properties MakePaintProperties(void)
+    paint_properties MakePaintProperties(void)
     {
-        ui_paint_properties Result = {};
+        paint_properties Result = {};
 
         Result.Color        = Color;
         Result.BorderColor  = BorderColor;
@@ -131,16 +131,16 @@ struct ui_default_properties
     }
 };
 
-struct ui_hovered_properties
+struct hovered_properties
 {
-    ui_property<core::ui_color>         Color;
-    ui_property<core::ui_color>         BorderColor;
-    ui_property<float>                  Softness;
-    ui_property<core::ui_corner_radius> CornerRadius;
+    style_property<core::color>         Color;
+    style_property<core::color>         BorderColor;
+    style_property<float>                  Softness;
+    style_property<core::corner_radius> CornerRadius;
 
-    ui_paint_properties InheritPaintProperties(const ui_paint_properties &Default)
+    paint_properties InheritPaintProperties(const paint_properties &Default)
     {
-        ui_paint_properties Result = Default;
+        paint_properties Result = Default;
 
         if (Color.IsSet)        Result.Color        = Color;
         if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;
@@ -151,19 +151,19 @@ struct ui_hovered_properties
     }
 };
 
-struct ui_focused_properties
+struct focused_properties
 {
-    ui_property<core::ui_color>         Color;
-    ui_property<core::ui_color>         BorderColor;
-    ui_property<core::ui_color>         TextColor;
-    ui_property<core::ui_color>         CaretColor;
-    ui_property<float>                  CaretWidth;
-    ui_property<float>                  Softness;
-    ui_property<core::ui_corner_radius> CornerRadius;
+    style_property<core::color>         Color;
+    style_property<core::color>         BorderColor;
+    style_property<core::color>         TextColor;
+    style_property<core::color>         CaretColor;
+    style_property<float>               CaretWidth;
+    style_property<float>               Softness;
+    style_property<core::corner_radius> CornerRadius;
 
-    ui_paint_properties InheritPaintProperties(const ui_paint_properties &Default)
+    paint_properties InheritPaintProperties(const paint_properties &Default)
     {
-        ui_paint_properties Result = Default;
+        paint_properties Result = Default;
 
         if (Color.IsSet)        Result.Color        = Color;
         if (BorderColor.IsSet)  Result.BorderColor  = BorderColor;
@@ -177,11 +177,11 @@ struct ui_focused_properties
     }
 };
 
-struct ui_cached_style
+struct cached_style
 {
-    ui_default_properties Default;
-    ui_hovered_properties Hovered;
-    ui_focused_properties Focused;
+    default_properties Default;
+    hovered_properties Hovered;
+    focused_properties Focused;
 };
 
-static void ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena);
+static void ExecutePaintCommands(paint_buffer Buffer, memory_arena *Arena);

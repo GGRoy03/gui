@@ -1,13 +1,13 @@
 // =================================================================
 // @Internal: Fonts Implementation
 
-static ui_resource_key
+static core::ui_resource_key
 UILoadSystemFont(byte_string Name, float Size, uint16_t CacheSizeX, uint16_t CacheSizeY)
 {
-    void_context &Context = GetVoidContext();
+    core::void_context &Context = core::GetVoidContext();
 
-    ui_resource_key   Key   = MakeFontResourceKey(Name, Size);
-    ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
+    core::ui_resource_key   Key   = core::MakeFontResourceKey(Name, Size);
+    core::ui_resource_state State = core::FindResourceByKey(Key, core::FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 
     if(!State.Resource)
     {
@@ -81,7 +81,7 @@ PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui
     VOID_ASSERT(Memory);
 
     ui_text      *Result  = 0;
-    void_context &Context = GetVoidContext();
+    core::void_context &Context = core::GetVoidContext();
 
     if(Memory && Context.ResourceTable)
     {
@@ -102,7 +102,7 @@ PlaceTextInMemory(ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, ui
 
         Result->Shaped      = Shaped;
         Result->Words       = Words;
-        Result->FontKey     = MakeFontResourceKey(Font->Name, Font->Size);
+        Result->FontKey     = core::MakeFontResourceKey(Font->Name, Font->Size);
         Result->ShapedCount = Run.ShapedCount;
 
         for(uint32_t Idx = 0; Idx < Run.ShapedCount; ++Idx)

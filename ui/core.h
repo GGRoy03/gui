@@ -1,10 +1,24 @@
-typedef enum UIAxis_Type
+// Think this should not be here honestly.
+namespace layout
 {
-    UIAxis_None = 0,
-    UIAxis_X    = 1,
-    UIAxis_Y    = 2,
-    UIAxis_XY   = 3,
-} UIAxis_Type;
+    struct ui_layout_tree;
+}
+
+// Idk...
+struct ui_font;
+struct ui_cached_style;
+
+namespace core
+{
+
+enum class AxisType
+{
+    None = 0,
+
+    X    = 1,
+    Y    = 2,
+    XY   = 3,
+};
 
 // [CORE TYPES]
 
@@ -45,26 +59,6 @@ typedef struct ui_rect
     ui_corner_radius CornerRadii;
     float            BorderWidth, Softness, SampleTexture, _P0; // Style Params
 } ui_rect;
-
-// ------------------------------------------------------------------------------------
-// User Callbacks
-
-typedef enum UIEvent_State
-{
-    UIEvent_Untouched = 0,
-    UIEvent_Rejected  = 1,
-    UIEvent_Handled   = 2,
-} UIEvent_State;
-
-typedef UIEvent_State (*ui_text_input_onchar)  (uint8_t Char, void *UserData);
-typedef UIEvent_State (*ui_text_input_onkey)   (OSInputKey_Type Key, void *UserData);
-
-
-
-// -----------------------------------------------------------------------------------
-// Image API
-
-static void UICreateImageGroup  (byte_string Name, int Width, int Height);
 
 // ------------------------------------------------------------------------------------
 
@@ -116,9 +110,10 @@ static ui_resource_table * PlaceResourceTableInMemory  (ui_resource_table_params
 //   MakeNodeResourceKey is used for general node-based resources
 //   MakeFontResourceKey is used for global  font       resources
 
-struct ui_layout_tree;
 
-static ui_resource_key MakeNodeResourceKey   (UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree);
+
+
+static ui_resource_key MakeNodeResourceKey   (UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tree *Tree);
 static ui_resource_key MakeFontResourceKey   (byte_string Name, float Size);
 
 // Resources:
@@ -140,19 +135,17 @@ inline FindResourceFlag operator&(FindResourceFlag A, FindResourceFlag B) {retur
 static ui_resource_state FindResourceByKey     (ui_resource_key Key, FindResourceFlag Flags,  ui_resource_table *Table);
 static void              UpdateResourceTable   (uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_table *Table);
 
-static void * QueryNodeResource  (UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree, ui_resource_table *Table);
+static void * QueryNodeResource  (UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tree *Tree, ui_resource_table *Table);
 
 
 struct ui_pipeline;
 
 // I do wonder if we want to add the pipeline as a member to simplify?
+// What do we want to do with this anyways?
 
 struct ui_node
 {
     uint32_t Index;
-
-    // Style
-    void     SetStyle         (uint32_t Style, ui_pipeline &Pipeline);
 
     // Layout
     ui_node  FindChild        (uint32_t Index , ui_pipeline &Pipeline);
@@ -165,7 +158,7 @@ struct ui_node
     // Resource
     void     SetText          (byte_string Text, ui_resource_key FontKey, ui_pipeline &Pipeline);
     void     SetTextInput     (uint8_t *Buffer, uint64_t BufferSize, ui_pipeline &Pipeline);
-    void     SetScroll        (float ScrollSpeed, UIAxis_Type Axis, ui_pipeline &Pipeline);
+    void     SetScroll        (float ScrollSpeed, AxisType Axis, ui_pipeline &Pipeline);
     void     SetImage         (byte_string Path, byte_string Group, ui_pipeline &Pipeline);
 
     // Debug
@@ -181,8 +174,6 @@ static void UIBeginFrame  (vec2_int WindowSize);
 static void UIEndFrame    (void);
 
 // -----------------------------------------------------------------------------------
-
-struct ui_cached_style;
 
 enum class UIPipeline : uint32_t
 {
@@ -208,26 +199,26 @@ struct ui_pipeline
 {
     // UI State
 
-    ui_layout_tree      *Tree;
-    ui_meta_tree        *MetaTrees[2];
-    uint32_t             ActiveMetaTree;
+    layout::ui_layout_tree *Tree;
+    ui_meta_tree           *MetaTrees[2];
+    uint32_t                ActiveMetaTree;
 
     // User State
 
-    UIPipeline           Type;
-    ui_cached_style     *StyleArray;
-    uint32_t             StyleIndexMin;
-    uint32_t             StyleIndexMax;
+    UIPipeline              Type;
+    ui_cached_style        *StyleArray;
+    uint32_t                StyleIndexMin;
+    uint32_t                StyleIndexMax;
 
     // Memory
 
-    memory_arena        *StateArena;
-    memory_arena        *FrameArena;
+    memory_arena           *StateArena;
+    memory_arena           *FrameArena;
 
     // Misc
 
-    bool                 Bound;
-    uint64_t             NodeCount; // Why?
+    bool                    Bound;
+    uint64_t                NodeCount; // Why?
     
     // Helpers
 
@@ -249,7 +240,6 @@ static void               UIUnbindPipeline            (UIPipeline Pipeline);
 // Only here, because of the D3D11 debug layer bug? Really?
 // Because it could fit in the global resource pattern as far as I understand?
 
-struct ui_font;
 struct ui_font_list
 {
     ui_font *First;
@@ -293,4 +283,5 @@ enum class NodeType : uint32_t
 
 static uint64_t GetMetaTreeFootprint   (uint64_t NodeCount);
 static uint64_t PlaceMetaTreeInMemory  (uint64_t NodeCount);
-static void     CompareMetaTrees       (ui_meta_tree *Active, ui_meta_tree *Static);
+
+} // namespace core

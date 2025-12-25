@@ -10,7 +10,7 @@ GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
 {
     VOID_ASSERT(Arena); // Internal Corruption
 
-    void_context &Context = GetVoidContext();
+    core::void_context &Context = core::GetVoidContext();
 
     render_pass           *Pass     = GetRenderPass(Arena, RenderPass_UI);
     render_pass_params_ui *UIParams = &Pass->Params.UI.Params;
@@ -23,7 +23,7 @@ GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
 
         if(Text)
         {
-            auto FontState = FindResourceByKey(Text->FontKey, FindResourceFlag::None, Context.ResourceTable);
+            auto FontState = FindResourceByKey(Text->FontKey, core::FindResourceFlag::None, Context.ResourceTable);
             if(FontState.Resource)
             {
                 ui_font *Font = static_cast<ui_font *>(FontState.Resource);
@@ -44,7 +44,7 @@ GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
     if(!Node || !CanMergeNodes)
     {
         Node = PushStruct(Arena, rect_group_node);
-        Node->BatchList.BytesPerInstance = sizeof(ui_rect);
+        Node->BatchList.BytesPerInstance = sizeof(core::ui_rect);
 
         AppendToLinkedList(UIParams, Node, UIParams->Count);
     }
@@ -59,9 +59,9 @@ GetPaintBatchList(ui_text *Text, memory_arena *Arena, rect_float RectangleClip)
 
 
 static void
-PaintUIRect(rect_float Rect, ui_color Color, ui_corner_radius CornerRadii, float BorderWidth, float Softness, render_batch_list *BatchList, memory_arena *Arena)
+PaintUIRect(rect_float Rect, core::ui_color Color, core::ui_corner_radius CornerRadii, float BorderWidth, float Softness, render_batch_list *BatchList, memory_arena *Arena)
 {
-    ui_rect *UIRect = (ui_rect *)PushDataInBatchList(Arena, BatchList);
+    core::ui_rect *UIRect = (core::ui_rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
     UIRect->ColorTL       = Color;
     UIRect->ColorBL       = Color;
@@ -77,7 +77,7 @@ PaintUIRect(rect_float Rect, ui_color Color, ui_corner_radius CornerRadii, float
 static void
 PaintUIImage(rect_float Rect, rect_float Source, render_batch_list *BatchList, memory_arena *Arena)
 {
-    ui_rect *UIRect = (ui_rect *)PushDataInBatchList(Arena, BatchList);
+    core::ui_rect *UIRect = (core::ui_rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
     UIRect->ColorTL       = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
     UIRect->ColorBL       = {.R  = 1, .G  = 1, .B  = 1, .A  = 1};
@@ -91,9 +91,9 @@ PaintUIImage(rect_float Rect, rect_float Source, render_batch_list *BatchList, m
 }
 
 static void
-PaintUIGlyph(rect_float Rect, ui_color Color, rect_float Source, render_batch_list *BatchList, memory_arena *Arena)
+PaintUIGlyph(rect_float Rect, core::ui_color Color, rect_float Source, render_batch_list *BatchList, memory_arena *Arena)
 {
-    ui_rect *UIRect = (ui_rect *)PushDataInBatchList(Arena, BatchList);
+    core::ui_rect *UIRect = (core::ui_rect *)PushDataInBatchList(Arena, BatchList);
     UIRect->RectBounds    = Rect;
     UIRect->ColorTL       = Color;
     UIRect->ColorBL       = Color;
@@ -115,18 +115,18 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
     VOID_ASSERT(Buffer.Commands);  // Internal Corruption
     VOID_ASSERT(Arena);            // Internal Corruption
 
-    void_context &Context = GetVoidContext();
+    core::void_context &Context = core::GetVoidContext();
 
     for(uint32_t Idx = 0; Idx < Buffer.Size; ++Idx)
     {
         ui_paint_command &Command = Buffer.Commands[Idx];
 
         rect_float       Rect     = Command.Rectangle;
-        ui_color         Color    = Command.Color;
-        ui_corner_radius Radius   = Command.CornerRadius;
+        core::ui_color         Color    = Command.Color;
+        core::ui_corner_radius Radius   = Command.CornerRadius;
         float            Softness = Command.Softness;
 
-        ui_resource_state TextState = FindResourceByKey(Command.TextKey , FindResourceFlag::None, Context.ResourceTable);
+        core::ui_resource_state TextState = FindResourceByKey(Command.TextKey , core::FindResourceFlag::None, Context.ResourceTable);
         auto             *Text      = static_cast<ui_text  *>(TextState.Resource);
 
         // TODO: Can this return NULL?
@@ -137,7 +137,7 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
             PaintUIRect(Rect, Color, Radius, 0, Softness, BatchList, Arena);
         }
 
-        ui_color BorderColor = Command.BorderColor;
+        core::ui_color BorderColor = Command.BorderColor;
         float    BorderWidth = Command.BorderWidth;
 
         if(BorderColor.A > 0.f && BorderWidth > 0.f)
@@ -147,7 +147,7 @@ ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena)
 
         if(Text)
         {
-            ui_color TextColor = Command.TextColor;
+            core::ui_color TextColor = Command.TextColor;
 
             for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
             {

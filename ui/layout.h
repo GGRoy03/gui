@@ -1,20 +1,11 @@
 #pragma once
 
-// TODO: Needs a big cleanup.
-
-namespace Layout
+namespace layout
 {
 
+struct ui_layout_tree;
 
-constexpr uint32_t InvalidIndex = 0xFFFFFFFFu;
-
-
-//
-// Flags describing layout node behavior.
-//
-// These flags control how a node participates in layout, input handling,
-// and interaction. Flags may be combined using bitwise operators.
-// 
+constexpr uint32_t InvalidIndex = 0xFFFFFFFFu; // TODO: HIDE
 
 
 enum class NodeFlags : uint32_t
@@ -41,7 +32,6 @@ static uint32_t FindChild      (uint32_t ParentIndex, uint32_t ChildIndex, ui_la
 
 static void     SetNodeOffset  (uint32_t NodeIndex, float X, float Y, ui_layout_tree *Tree);
 
-} // namespace Layout
 
 // -----------------------------------------------------------------------------
 // @Private Layout API
@@ -70,7 +60,7 @@ static void             HandlePointerMove       (vec2_float Delta, ui_layout_tre
 
 // Rendering and styling helpers.
 static ui_paint_buffer  GeneratePaintBuffer     (ui_layout_tree *Tree, ui_cached_style *Cached, memory_arena *Arena);
-static void             SetNodeProperties       (uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style &Cached, ui_layout_tree *Tree);
+static void             UpdateLayoutInput       (uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style &Cached, ui_layout_tree *Tree);
 
 // ------------------------------------------------------------------------------------
 // @internal: Layout Resources
@@ -99,9 +89,12 @@ struct ui_scroll_region;
 
 struct scroll_region_params
 {
-    float       PixelPerLine;
-    UIAxis_Type Axis;
+    float          PixelPerLine;
+    core::AxisType Axis;
 };
 
 static uint64_t           GetScrollRegionFootprint   (void);
 static ui_scroll_region * PlaceScrollRegionInMemory  (scroll_region_params Params, void *Memory);
+
+
+} // namespace Layout

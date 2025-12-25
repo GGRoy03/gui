@@ -45,18 +45,18 @@ struct ui_size
 
 struct ui_paint_command
 {
-    rect_float       Rectangle;
-    rect_float       RectangleClip;
+    rect_float             Rectangle;
+    rect_float             RectangleClip;
 
-    ui_resource_key  TextKey;
-    ui_resource_key  ImageKey;
+    core::ui_resource_key  TextKey;
+    core::ui_resource_key  ImageKey;
 
-    ui_color         Color;
-    ui_color         BorderColor;
-    ui_color         TextColor;
-    ui_corner_radius CornerRadius;
-    float            Softness;
-    float            BorderWidth;
+    core::ui_color         Color;
+    core::ui_color         BorderColor;
+    core::ui_color         TextColor;
+    core::ui_corner_radius CornerRadius;
+    float                  Softness;
+    float                  BorderWidth;
 };
 
 
@@ -82,39 +82,39 @@ struct ui_property
 
 struct ui_paint_properties
 {
-    ui_property<ui_color>         Color;
-    ui_property<ui_color>         BorderColor;
-    ui_property<ui_color>         TextColor;
-    ui_property<ui_color>         CaretColor;
+    ui_property<core::ui_color>         Color;
+    ui_property<core::ui_color>         BorderColor;
+    ui_property<core::ui_color>         TextColor;
+    ui_property<core::ui_color>         CaretColor;
 
-    ui_property<float>            BorderWidth;
-    ui_property<float>            Softness;
-    ui_property<ui_corner_radius> CornerRadius;
+    ui_property<float>                  BorderWidth;
+    ui_property<float>                  Softness;
+    ui_property<core::ui_corner_radius> CornerRadius;
 
     ui_property<float>            CaretWidth;
 };
 
 struct ui_default_properties
 {
-    ui_property<ui_size>          Size;
-    ui_property<ui_size>          MinSize;
-    ui_property<ui_size>          MaxSize;
-    ui_property<LayoutDirection>  Direction;
-    ui_property<Alignment>        XAlign;
-    ui_property<Alignment>        YAlign;
+    ui_property<ui_size>                Size;
+    ui_property<ui_size>                MinSize;
+    ui_property<ui_size>                MaxSize;
+    ui_property<LayoutDirection>        Direction;
+    ui_property<Alignment>              XAlign;
+    ui_property<Alignment>              YAlign;
 
-    ui_property<ui_padding>       Padding;
-    ui_property<float>            Spacing;
-    ui_property<float>            Grow;
-    ui_property<float>            Shrink;
+    ui_property<core::ui_padding>       Padding;
+    ui_property<float>                  Spacing;
+    ui_property<float>                  Grow;
+    ui_property<float>                  Shrink;
 
-    ui_property<ui_color>         Color;
-    ui_property<ui_color>         BorderColor;
-    ui_property<ui_color>         TextColor;
+    ui_property<core::ui_color>         Color;
+    ui_property<core::ui_color>         BorderColor;
+    ui_property<core::ui_color>         TextColor;
 
-    ui_property<float>            BorderWidth;
-    ui_property<float>            Softness;
-    ui_property<ui_corner_radius> CornerRadius;
+    ui_property<float>                  BorderWidth;
+    ui_property<float>                  Softness;
+    ui_property<core::ui_corner_radius> CornerRadius;
 
     ui_paint_properties MakePaintProperties(void)
     {
@@ -133,10 +133,10 @@ struct ui_default_properties
 
 struct ui_hovered_properties
 {
-    ui_property<ui_color>         Color;
-    ui_property<ui_color>         BorderColor;
-    ui_property<float>            Softness;
-    ui_property<ui_corner_radius> CornerRadius;
+    ui_property<core::ui_color>         Color;
+    ui_property<core::ui_color>         BorderColor;
+    ui_property<float>                  Softness;
+    ui_property<core::ui_corner_radius> CornerRadius;
 
     ui_paint_properties InheritPaintProperties(const ui_paint_properties &Default)
     {
@@ -153,13 +153,13 @@ struct ui_hovered_properties
 
 struct ui_focused_properties
 {
-    ui_property<ui_color>         Color;
-    ui_property<ui_color>         BorderColor;
-    ui_property<ui_color>         TextColor;
-    ui_property<ui_color>         CaretColor;
-    ui_property<float>            CaretWidth;
-    ui_property<float>            Softness;
-    ui_property<ui_corner_radius> CornerRadius;
+    ui_property<core::ui_color>         Color;
+    ui_property<core::ui_color>         BorderColor;
+    ui_property<core::ui_color>         TextColor;
+    ui_property<core::ui_color>         CaretColor;
+    ui_property<float>                  CaretWidth;
+    ui_property<float>                  Softness;
+    ui_property<core::ui_corner_radius> CornerRadius;
 
     ui_paint_properties InheritPaintProperties(const ui_paint_properties &Default)
     {
@@ -183,11 +183,5 @@ struct ui_cached_style
     ui_hovered_properties Hovered;
     ui_focused_properties Focused;
 };
-
-// ===================================================================================
-// @Internal: Small Helpers
-
-static bool     IsVisibleColor  (ui_color Color);
-static ui_color NormalizeColor  (ui_color Color);
 
 static void ExecutePaintCommands(ui_paint_buffer Buffer, memory_arena *Arena);

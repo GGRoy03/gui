@@ -265,7 +265,7 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, int ShowCmd
         OSWin32State.Arena      = AllocateArena(ArenaParams);
     }
 
-    CreateVoidContext(); // NOTE: Perhaps lazily intialized?
+    core::CreateVoidContext(); // NOTE: Perhaps lazily intialized?
 
     // Render State
     {
@@ -302,9 +302,9 @@ wWinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPWSTR CmdLine, int ShowCmd
         {
             TimeBlock("UI Logic");
 
-            UIBeginFrame(ClientSize);
+            core::UIBeginFrame(ClientSize);
             Inspector::ShowUI();
-            UIEndFrame();
+            core::UIEndFrame();
         }
 
         {

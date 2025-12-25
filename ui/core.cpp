@@ -1,3 +1,6 @@
+namespace core
+{
+
 // ----------------------------------------------------------------------------------
 // UI Resource Cache Private Implementation
 
@@ -174,7 +177,7 @@ PlaceResourceTableInMemory(ui_resource_table_params Params, void *Memory)
 }
 
 static ui_resource_key
-MakeNodeResourceKey(UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree)
+MakeNodeResourceKey(UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tree *Tree)
 {
     uint64_t Low  = (uint64_t)Tree;
     uint64_t High = ((uint64_t)Type << 32) | NodeIndex;
@@ -301,7 +304,7 @@ UpdateResourceTable(uint32_t Id, ui_resource_key Key, void *Memory, ui_resource_
 
 
 static void *
-QueryNodeResource(UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree, ui_resource_table *Table)
+QueryNodeResource(UIResource_Type Type, uint32_t NodeIndex, layout::ui_layout_tree *Tree, ui_resource_table *Table)
 {
     ui_resource_key   Key   = MakeNodeResourceKey(Type, NodeIndex, Tree);
     ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::None, Table);
@@ -316,33 +319,27 @@ QueryNodeResource(UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree
 
 bool ui_node::IsValid()
 {
-    bool Result = Index != Layout::InvalidIndex;
+    bool Result = Index != ::layout::InvalidIndex;
     return Result;
 }
 
-void ui_node::SetStyle(uint32_t StyleIndex, ui_pipeline &Pipeline)
-{
-    if(StyleIndex >= Pipeline.StyleIndexMin && StyleIndex <= Pipeline.StyleIndexMax)
-    {
-        SetNodeProperties(Index, StyleIndex, Pipeline.StyleArray[StyleIndex], Pipeline.Tree);
-    }
-}
 
 ui_node ui_node::FindChild(uint32_t FindIndex, ui_pipeline &Pipeline)
 {
-    ui_node Result = { Layout::FindChild(Index, FindIndex, Pipeline.Tree) };
+    ui_node Result = { ::layout::FindChild(Index, FindIndex, Pipeline.Tree) };
     return Result;
 }
 
 
 void ui_node::Append(ui_node Child, ui_pipeline &Pipeline)
 {
-    Layout::AppendChild(Index, Child.Index, Pipeline.Tree);
+    ::layout::AppendChild(Index, Child.Index, Pipeline.Tree);
 }
+
 
 void ui_node::SetOffset(float XOffset, float YOffset, ui_pipeline &Pipeline)
 {
-    Layout::SetNodeOffset(Index, XOffset, YOffset, Pipeline.Tree);
+    ::layout::SetNodeOffset(Index, XOffset, YOffset, Pipeline.Tree);
 }
 
 
@@ -391,23 +388,23 @@ void ui_node::SetTextInput(uint8_t *Buffer, uint64_t BufferSize, ui_pipeline &Pi
 
 // This is badly implemented.
 
-void ui_node::SetScroll(float ScrollSpeed, UIAxis_Type Axis, ui_pipeline &Pipeline)
+void ui_node::SetScroll(float ScrollSpeed, AxisType Axis, ui_pipeline &Pipeline)
 {
     void_context &Context  = GetVoidContext();
 
     ui_resource_key   Key   = MakeNodeResourceKey(UIResource_ScrollRegion, Index, Pipeline.Tree);
     ui_resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 
-    uint64_t Size   = GetScrollRegionFootprint();
+    uint64_t Size   = layout::GetScrollRegionFootprint();
     void    *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);
 
-    scroll_region_params Params =
+    layout::scroll_region_params Params =
     {
         .PixelPerLine = ScrollSpeed,
         .Axis         = Axis,
     };
 
-    ui_scroll_region *ScrollRegion = PlaceScrollRegionInMemory(Params, Memory);
+    layout::ui_scroll_region *ScrollRegion = layout::PlaceScrollRegionInMemory(Params, Memory);
     if(ScrollRegion)
     {
         UpdateResourceTable(State.Id, Key, ScrollRegion, Context.ResourceTable);
@@ -472,7 +469,7 @@ UIBeginFrame(vec2_int WindowSize)
                 // Not great.
                 ui_pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
 
-                HandlePointerMove(Event.Delta, Pipeline.Tree);
+                layout::HandlePointerMove(Event.Delta, Pipeline.Tree);
             }
         } break;
 
@@ -489,7 +486,7 @@ UIBeginFrame(vec2_int WindowSize)
                 // So here, we'd call something like: IsMouseOverPipeline
                 if(true)
                 {
-                    State.IsCaptured     = HandlePointerClick(State.Position, State.ButtonMask, 0, Pipeline.Tree);
+                    State.IsCaptured     = layout::HandlePointerClick(State.Position, State.ButtonMask, 0, Pipeline.Tree);
                     State.PipelineSource = Pipeline.Type;
                 }
 
@@ -511,7 +508,7 @@ UIBeginFrame(vec2_int WindowSize)
                 // Not great.
                 ui_pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
 
-                HandlePointerRelease(State.Position, State.ButtonMask, 0, Pipeline.Tree);
+                layout::HandlePointerRelease(State.Position, State.ButtonMask, 0, Pipeline.Tree);
 
                 State.IsCaptured = false;
             }
@@ -538,7 +535,7 @@ UIBeginFrame(vec2_int WindowSize)
             {
                 ui_pipeline &Pipeline = Context.PipelineArray[Idx];
 
-                bool Handled = HandlePointerHover(State.Position, 0, Pipeline.Tree);
+                bool Handled = layout::HandlePointerHover(State.Position, 0, Pipeline.Tree);
                 if(Handled)
                 {
                     break;
@@ -611,9 +608,10 @@ struct ui_meta_node
     // Frame State
 
     NodeType          Type;
-    Layout::NodeFlags Flags;
+    layout::NodeFlags Flags;
     uint64_t          Hint;
     uint32_t          Index;
+    uint32_t          Style;
     uint32_t          Parent;
 
     // Persistent State (EXP)
@@ -691,13 +689,13 @@ PlaceMetaTreeInMemory(uint64_t NodeCount, void *Memory)
 
 
 static void
-MetaTreesEx(uint32_t ActiveIdx, ui_meta_tree *ActiveTree, uint32_t StaticIdx, ui_meta_tree *StaticTree, ui_layout_tree *LayoutTree)
+MetaTreesEx(uint32_t ActiveIdx, ui_meta_tree *ActiveTree, uint32_t StaticIdx, ui_meta_tree *StaticTree, layout::ui_layout_tree *LayoutTree, ui_cached_style *StyleArray)
 {
     if(ActiveIdx >= ActiveTree->NodeCount)
     {
         return;
     }
-    
+
     ui_meta_node *ActiveNode = ActiveTree->Nodes + ActiveIdx;
     ui_meta_node *StaticNode = (StaticIdx < StaticTree->NodeCount) ? StaticTree->Nodes + StaticIdx : nullptr;
     
@@ -705,12 +703,14 @@ MetaTreesEx(uint32_t ActiveIdx, ui_meta_tree *ActiveTree, uint32_t StaticIdx, ui
     
     if(!ui_meta_node::IsValid(StaticNode) || ActiveNode->Type != StaticNode->Type)
     {
-        ActiveNode->LayoutIndex = Layout::CreateNode(ActiveNode->Flags, LayoutTree);
+        ActiveNode->LayoutIndex = layout::CreateNode(ActiveNode->Flags, LayoutTree);
+
+        layout::UpdateLayoutInput(ActiveNode->LayoutIndex, ActiveNode->Style, StyleArray[ActiveNode->Style], LayoutTree);
 
         if(ActiveNode->Parent != InvalidMetaNodeIndex)
         {
             ui_meta_node *Parent = ActiveTree->Nodes + ActiveNode->Parent;
-            Layout::AppendChild(Parent->LayoutIndex, ActiveNode->LayoutIndex, LayoutTree);
+            layout::AppendChild(Parent->LayoutIndex, ActiveNode->LayoutIndex, LayoutTree);
         }
     }
     else
@@ -727,20 +727,20 @@ MetaTreesEx(uint32_t ActiveIdx, ui_meta_tree *ActiveTree, uint32_t StaticIdx, ui
 
 
 static void
-MetaTrees(ui_meta_tree *ActiveTree, ui_meta_tree *StaticTree, ui_layout_tree *LayoutTree)
+MetaTrees(ui_meta_tree *ActiveTree, ui_meta_tree *StaticTree, layout::ui_layout_tree *LayoutTree, ui_cached_style *StyleArray)
 {
     if(ui_meta_tree::IsValid(ActiveTree))
     {
         for(uint32_t i = 0; i < ActiveTree->NodeCount; ++i)
         {
-            MetaTreesEx(i, ActiveTree, i, StaticTree, LayoutTree);
+            MetaTreesEx(i, ActiveTree, i, StaticTree, LayoutTree, StyleArray);
         }
     }
 }
 
 
 static uint32_t
-UICreateNode2(NodeType Type, Layout::NodeFlags Flags, ui_meta_tree *Tree)
+UICreateNode2(uint32_t StyleIndex, NodeType Type, layout::NodeFlags Flags, ui_meta_tree *Tree)
 {
     uint32_t Result = InvalidMetaNodeIndex;
     
@@ -751,6 +751,7 @@ UICreateNode2(NodeType Type, Layout::NodeFlags Flags, ui_meta_tree *Tree)
         
         Node->Parent = Tree->Parent ? Tree->Parent->Value : InvalidMetaNodeIndex;
         Node->Index  = Index;
+        Node->Style  = StyleIndex;
         Node->Type   = Type;
         Node->Flags  = Flags;
         Node->Hint   = 0;
@@ -796,10 +797,13 @@ UIPopLayoutParent2(uint32_t NodeIndex, ui_meta_tree *MetaTree)
 }
 
 
+// --------
+
+
 static uint64_t
 GetPipelineStateFootprint(const ui_pipeline_params &Params)
 {
-    uint64_t TreeSize = GetLayoutTreeFootprint(Params.NodeCount);
+    uint64_t TreeSize = layout::GetLayoutTreeFootprint(Params.NodeCount);
     uint64_t MetaSize = GetMetaTreeFootprint(Params.NodeCount) * 2;
     uint64_t Result   = TreeSize + MetaSize;
 
@@ -827,10 +831,10 @@ UICreatePipeline(const ui_pipeline_params &Params)
 
     // UI State
     {
-        uint64_t TreeFootprint  = GetLayoutTreeFootprint(Params.NodeCount);
-        void    *TreeMemory     = PushArena(Pipeline.StateArena, TreeFootprint, GetLayoutTreeAlignment());
+        uint64_t TreeFootprint  = layout::GetLayoutTreeFootprint(Params.NodeCount);
+        void    *TreeMemory     = PushArena(Pipeline.StateArena, TreeFootprint, layout::GetLayoutTreeAlignment());
 
-        Pipeline.Tree = PlaceLayoutTreeInMemory(Params.NodeCount, TreeMemory);
+        Pipeline.Tree = layout::PlaceLayoutTreeInMemory(Params.NodeCount, TreeMemory);
 
         uint64_t MetaFootprint = GetMetaTreeFootprint(Params.NodeCount);
         void    *MetaMemory0   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(ui_meta_node));
@@ -899,11 +903,11 @@ UIUnbindPipeline(UIPipeline UserPipeline)
         ui_meta_tree *ActiveTree = Pipeline.GetActiveTree();
         ui_meta_tree *StaticTree = ActiveTree == Pipeline.MetaTrees[0] ? Pipeline.MetaTrees[1] : Pipeline.MetaTrees[0];
 
-        MetaTrees(ActiveTree, StaticTree, Pipeline.Tree);
+        MetaTrees(ActiveTree, StaticTree, Pipeline.Tree, Pipeline.StyleArray);
 
-        ComputeTreeLayout(Pipeline.Tree);
+        layout::ComputeTreeLayout(Pipeline.Tree);
 
-        ui_paint_buffer Buffer = GeneratePaintBuffer(Pipeline.Tree, Pipeline.StyleArray, Pipeline.FrameArena);
+        ui_paint_buffer Buffer = layout::GeneratePaintBuffer(Pipeline.Tree, Pipeline.StyleArray, Pipeline.FrameArena);
         if(Buffer.Commands && Buffer.Size)
         {
             ExecutePaintCommands(Buffer, Pipeline.FrameArena);
@@ -914,4 +918,4 @@ UIUnbindPipeline(UIPipeline UserPipeline)
 }
 
 
-
+} // namespace core

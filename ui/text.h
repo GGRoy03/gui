@@ -12,7 +12,7 @@ struct ui_font
     byte_string            Name;
 };
 
-static ui_resource_key UILoadSystemFont  (byte_string Name, float Size, uint16_t CacheSizeX, uint16_t CacheSizeY);
+static core::ui_resource_key UILoadSystemFont  (byte_string Name, float Size, uint16_t CacheSizeX, uint16_t CacheSizeY);
 
 // =================================================================
 // @Internal: Static Text Implementation
@@ -41,11 +41,11 @@ struct ui_text_word
 
 struct ui_text
 {
-    ui_resource_key  FontKey;
-    ui_shaped_glyph *Shaped;
-    uint32_t         ShapedCount;
-    ui_text_word    *Words;
-    uint32_t         WordCount;
+    core::ui_resource_key FontKey;
+    ui_shaped_glyph      *Shaped;
+    uint32_t              ShapedCount;
+    ui_text_word          *Words;
+    uint32_t              WordCount;
 };
 
 static uint64_t  GetTextFootprint   (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run);

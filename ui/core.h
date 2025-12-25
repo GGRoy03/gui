@@ -194,9 +194,6 @@ constexpr uint32_t PipelineCount = static_cast<uint32_t>(UIPipeline::Count);
 
 struct ui_pipeline_params
 {
-    byte_string          VtxShaderByteCode;
-    byte_string          PxlShaderByteCode;
-
     uint64_t             NodeCount;
     uint64_t             FrameBudget;
 
@@ -206,34 +203,45 @@ struct ui_pipeline_params
     uint32_t             StyleIndexMax;
 };
 
-struct ui_node_table;
-
+struct ui_meta_tree;
 struct ui_pipeline
 {
     // UI State
+
     ui_layout_tree      *Tree;
-    ui_node_table       *NodeTable;
+    ui_meta_tree        *MetaTrees[2];
+    uint32_t             ActiveMetaTree;
 
     // User State
+
     UIPipeline           Type;
     ui_cached_style     *StyleArray;
     uint32_t             StyleIndexMin;
     uint32_t             StyleIndexMax;
 
     // Memory
-    memory_arena *StateArena;
-    memory_arena *FrameArena;
+
+    memory_arena        *StateArena;
+    memory_arena        *FrameArena;
 
     // Misc
-    bool     Bound;
-    uint64_t NodeCount;
+
+    bool                 Bound;
+    uint64_t             NodeCount; // Why?
+    
+    // Helpers
+
+    ui_meta_tree * GetActiveTree()
+    {
+        ui_meta_tree *Result = MetaTrees[ActiveMetaTree];
+        return Result;
+    }
 };
 
 
 static void               UICreatePipeline            (const ui_pipeline_params &Params);
 static ui_pipeline&       UIBindPipeline              (UIPipeline Pipeline);
 static void               UIUnbindPipeline            (UIPipeline Pipeline);
-static ui_pipeline_params UIGetDefaultPipelineParams  (void);
 
 // ----------------------------------------
 
@@ -242,12 +250,12 @@ static ui_pipeline_params UIGetDefaultPipelineParams  (void);
 // Because it could fit in the global resource pattern as far as I understand?
 
 struct ui_font;
-typedef struct ui_font_list
+struct ui_font_list
 {
     ui_font *First;
     ui_font *Last;
     uint32_t Count;
-} ui_font_list;
+};
 
 struct void_context
 {
@@ -269,3 +277,20 @@ static void_context GlobalVoidContext;
 
 static void_context & GetVoidContext     (void);
 static void           CreateVoidContext  (void);
+
+
+// -----------------------------------------------------------------------------
+// @Private Meta-Layout API
+// Functions intended for internal use.
+// -----------------------------------------------------------------------------
+
+enum class NodeType : uint32_t
+{
+    None = 0,
+
+    Container = 1,
+};
+
+static uint64_t GetMetaTreeFootprint   (uint64_t NodeCount);
+static uint64_t PlaceMetaTreeInMemory  (uint64_t NodeCount);
+static void     CompareMetaTrees       (ui_meta_tree *Active, ui_meta_tree *Static);

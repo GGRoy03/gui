@@ -93,9 +93,15 @@ static ui_cached_style InspectorStyleArray[] =
 
 struct node_state
 {
-    uint32_t Index   = InvalidLayoutNodeIndex;
+    uint32_t Index   = Layout::InvalidIndex;
     uint32_t Depth   = 0;
     bool     Visible = false;
+};
+
+struct visible_list
+{
+    node_state *Nodes;
+    uint32_t    Count;
 };
 
 struct inspector_ui
@@ -105,8 +111,8 @@ struct inspector_ui
     memory_arena *FrameArena    = 0;
 
     // UI Transient State
-    uint32_t        SelectedNodeIndex = InvalidLayoutNodeIndex;
-    uint32_t        HoveredNodeIndex  = InvalidLayoutNodeIndex;
+    uint32_t        SelectedNodeIndex = Layout::InvalidIndex;
+    uint32_t        HoveredNodeIndex  = Layout::InvalidIndex;
     node_state     *Nodes             = 0;
     uint32_t        NodeCount         = 0;
     ui_layout_tree *CurrentTree       = 0;
@@ -120,9 +126,9 @@ struct inspector_ui
 // ------------------------------------------------------------------------------------
 
 static void
-BuildVisibleListEx(ui_layout_node *Node, ui_layout_tree *Tree, uint32_t Depth, inspector_ui &Inspector)
+BuildVisibleListEx(ui_layout_node *Node, ui_layout_tree *Tree, uint32_t Depth, visible_list &List)
 {
-    node_state &State = Inspector.Nodes[Inspector.NodeCount++];
+    node_state &State = List.Nodes[List.Count++];
     State.Index = Node->Index;
     State.Depth = Depth;
 
@@ -132,32 +138,35 @@ BuildVisibleListEx(ui_layout_node *Node, ui_layout_tree *Tree, uint32_t Depth, i
 
     for (auto *Child = Tree->GetNode(Node->First); ui_layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
     {
-        BuildVisibleListEx(Child, Tree, Depth + 1, Inspector);
+        BuildVisibleListEx(Child, Tree, Depth + 1, List);
     }
 }
 
 
-static void
-BuildVisibleList(ui_layout_node *Root, ui_layout_tree *Tree, inspector_ui &Inspector)
+static visible_list
+BuildVisibleList(ui_layout_node *Root, ui_layout_tree *Tree, memory_arena *Arena)
 {
-    Inspector.Nodes     = PushArray(Inspector.FrameArena, node_state, Tree->NodeCount);
-    Inspector.NodeCount = 0;
+    visible_list List =
+    {
+        .Nodes = PushArray(Arena, node_state, Tree->NodeCount),
+        .Count = 0,
+    };
 
     if(ui_layout_node::IsValid(Root) && ui_layout_tree::IsValid(Tree))
     {
-        BuildVisibleListEx(Root, Tree, 0, Inspector);
+        BuildVisibleListEx(Root, Tree, 0, List);
     }
+
+    return List;
 }
 
 
 static ui_node
 TreeNode(ui_pipeline &Pipeline)
 {
-    LayoutNodeFlags Flags = LayoutNodeFlags::IsImmediate;
+    ui_node Node = {.Index = UICreateNode2(NodeType::None, Layout::NodeFlags::None, Pipeline.GetActiveTree())};
 
-    ui_node Node = {.Index = UICreateNode(Flags, Pipeline.Tree)};
-
-    if(Node.Index != InvalidLayoutNodeIndex)
+    if(Node.Index != Layout::InvalidIndex)
     {
         Node.SetStyle(static_cast<uint32_t>(InspectorStyle::TreeNode), Pipeline);
     }
@@ -167,12 +176,12 @@ TreeNode(ui_pipeline &Pipeline)
 
 
 static void
-RenderLayoutNodes(ui_pipeline &Pipeline, inspector_ui &Inspector)
+RenderLayoutNodes(ui_pipeline &Pipeline, const visible_list &List)
 {
-    for(uint32_t Idx = 0; Idx < Inspector.NodeCount; ++Idx)
+    for(uint32_t Idx = 0; Idx < List.Count; ++Idx)
     {
-        uint32_t LayoutIndex = Inspector.Nodes[Idx].Index;
-        uint32_t LayoutDepth = Inspector.Nodes[Idx].Depth;
+        uint32_t LayoutIndex = List.Nodes[Idx].Index;
+        uint32_t LayoutDepth = List.Nodes[Idx].Depth;
 
         ui_node Row = TreeNode(Pipeline);
 
@@ -200,13 +209,15 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
 {
     // UI Pipeline
     {
-        ui_pipeline_params Params = UIGetDefaultPipelineParams();
-        Params.NodeCount     = 128;
-        Params.Pipeline      = UIPipeline::Default;
-        Params.StyleArray    = InspectorStyleArray;
-        Params.StyleIndexMin = static_cast<uint32_t>(InspectorStyle::Window  );
-        Params.StyleIndexMax = static_cast<uint32_t>(InspectorStyle::TreeNode);
-        Params.FrameBudget   = VOID_KILOBYTE(128);
+        ui_pipeline_params Params =
+        {
+            .NodeCount     = 128,
+            .FrameBudget   = VOID_KILOBYTE(128),
+            .Pipeline      = UIPipeline::Default,
+            .StyleArray    = InspectorStyleArray,
+            .StyleIndexMin = static_cast<uint32_t>(InspectorStyle::Window  ),
+            .StyleIndexMax = static_cast<uint32_t>(InspectorStyle::TreeNode),
+        };
 
         UICreatePipeline(Params);
     }
@@ -219,24 +230,6 @@ InitializeInspector(inspector_ui &Inspector, ui_pipeline &Pipeline)
     // UI Resource
     {
         Inspector.Font = UILoadSystemFont(str8_comp("Consolas"), 16.f, 1024, 1024);
-    }
-
-    // Base Layout
-    {
-        ui_node Window = UIWindow(static_cast<uint32_t>(InspectorStyle::Window), Pipeline);
-        {
-            ui_node TreePanel  = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
-            {
-            }
-            UIEndDummy(TreePanel, Pipeline);
-
-            ui_node OtherPanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
-            {
-            }
-            UIEndDummy(OtherPanel, Pipeline);
-
-        }
-        UIEndWindow(Window, Pipeline);
     }
 
     return true;
@@ -259,7 +252,7 @@ ShowUI(void)
     {
         Inspector.IsInitialized = InitializeInspector(Inspector, Pipeline);
 
-        Inspector.CurrentTree = Pipeline.Tree; // Lazy!
+        Inspector.CurrentTree = Pipeline.Tree; // Lazy! Might cause some weird recursive issues.
     }
 
     if(Inspector.IsInitialized)
@@ -269,17 +262,24 @@ ShowUI(void)
         ui_layout_tree *Tree = Inspector.CurrentTree;
         if(ui_layout_tree::IsValid(Tree))
         {
-            BuildVisibleList(Tree->GetNode(0), Tree, Inspector);
-
-            if(UIPushLayoutParent(1, Tree, Pipeline.FrameArena))
+            ui_node Window = UIWindow(static_cast<uint32_t>(InspectorStyle::Window), Pipeline);
             {
-                RenderLayoutNodes(Pipeline, Inspector);
-                UIPopLayoutParent(1, Tree);
+                ui_node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
+                {
+                }
+                UIEndDummy(TreePanel, Pipeline);
+
+                ui_node OtherPanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
+                {
+                }
+                UIEndDummy(OtherPanel, Pipeline);
             }
+            UIEndWindow(Window, Pipeline);
         }
     }
 
     UIUnbindPipeline(UIPipeline::Default);
 }
+
 
 }

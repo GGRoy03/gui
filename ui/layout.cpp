@@ -18,7 +18,7 @@ template<>
 struct enable_bitmask_operators<NodeState> : std::true_type {};
 
 template<>
-struct enable_bitmask_operators<LayoutNodeFlags> : std::true_type {};
+struct enable_bitmask_operators<Layout::NodeFlags> : std::true_type {};
 
 struct ui_axes
 {
@@ -53,13 +53,12 @@ struct ui_layout_node
 
     // Experimental
     vec2_float VisualOffset;
-    bool       Touched;
+    vec2_float DragOffset;
 
     // State
     NodeState       State;
-    LayoutNodeFlags Flags;
+    Layout::NodeFlags Flags;
     vec2_float      ScrollOffset;
-    vec2_float      DragOffset;
 
     // Extra Info
     uint32_t Index;
@@ -68,24 +67,9 @@ struct ui_layout_node
     // Helpers
     static bool IsValid(const ui_layout_node *Node)
     {
-        return Node && Node->Index != InvalidLayoutNodeIndex;
+        return Node && Node->Index != Layout::InvalidIndex;
     }
 };
-
-struct ui_parent_node
-{
-    ui_parent_node *Prev;
-    uint32_t        Index;
-};
-
-struct ui_parent_list
-{
-    ui_parent_node *First;
-    ui_parent_node *Last;
-    uint32_t        Count;
-};
-
-#include <unordered_map>
 
 struct ui_layout_tree
 {
@@ -93,7 +77,7 @@ struct ui_layout_tree
     uint64_t          NodeCapacity;
     uint64_t          NodeCount;
     ui_layout_node   *Nodes;
-    ui_parent_list    ParentList;
+    uint32_t          RootIndex;
     uint32_t          CapturedNodeIndex;
 
     // WIP
@@ -112,6 +96,12 @@ struct ui_layout_tree
         return Result;
     }
 
+    ui_layout_node * GetRootNode()
+    {
+        ui_layout_node *Result = Nodes + RootIndex;
+        return Result;
+    }
+
     ui_layout_node * GetNode(uint32_t Index)
     {
         ui_layout_node *Result = 0;
@@ -124,12 +114,12 @@ struct ui_layout_tree
         return Result;
     }
 
-    ui_layout_node *GetFreeNode()
+    ui_layout_node * GetFreeNode()
     {
         ui_layout_node *Sentinel = GetSentinel();
         ui_layout_node *Result   = 0;
 
-        if (Sentinel->Next != InvalidLayoutNodeIndex)
+        if (Sentinel->Next != Layout::InvalidIndex)
         {
             VOID_ASSERT(NodeCount < NodeCapacity);
 
@@ -137,12 +127,17 @@ struct ui_layout_tree
             Result->Index  = Sentinel->Next;
             Sentinel->Next = Result->Next;
 
-            Result->First      = InvalidLayoutNodeIndex;
-            Result->Last       = InvalidLayoutNodeIndex;
-            Result->Prev       = InvalidLayoutNodeIndex;
-            Result->Next       = InvalidLayoutNodeIndex;
-            Result->Parent     = InvalidLayoutNodeIndex;
+            Result->First      = Layout::InvalidIndex;
+            Result->Last       = Layout::InvalidIndex;
+            Result->Prev       = Layout::InvalidIndex;
+            Result->Next       = Layout::InvalidIndex;
+            Result->Parent     = Layout::InvalidIndex;
             Result->ChildCount = 0;
+
+            if(NodeCount == 0)
+            {
+                RootIndex = Result->Index;
+            }
 
             ++NodeCount;
         }
@@ -190,11 +185,11 @@ struct ui_layout_tree
             Node->Next     = Sentinel->Next;
             Sentinel->Next = Node->Index;
 
-            Node->Index      = InvalidLayoutNodeIndex;
-            Node->First      = InvalidLayoutNodeIndex;
-            Node->Last       = InvalidLayoutNodeIndex;
-            Node->Prev       = InvalidLayoutNodeIndex;
-            Node->Parent     = InvalidLayoutNodeIndex;
+            Node->Index      = Layout::InvalidIndex;
+            Node->First      = Layout::InvalidIndex;
+            Node->Last       = Layout::InvalidIndex;
+            Node->Prev       = Layout::InvalidIndex;
+            Node->Parent     = Layout::InvalidIndex;
             Node->ChildCount = 0;
 
             --NodeCount;
@@ -229,8 +224,40 @@ struct ui_layout_tree
 };
 
 
+static void
+PrepareTreeForFrame(ui_layout_tree *Tree)
+{
+    VOID_ASSERT(ui_layout_tree::IsValid(Tree));
+
+    if(ui_layout_tree::IsValid(Tree))
+    {
+        Tree->NodeCount = 0;
+
+        for (uint64_t Idx = 0; Idx < Tree->NodeCapacity; Idx++)
+        {
+            ui_layout_node *Node = Tree->GetNode(Idx);
+            VOID_ASSERT(Node);
+
+            // These writes might be useless.
+            Node->Index      = Layout::InvalidIndex;
+            Node->First      = Layout::InvalidIndex;
+            Node->Last       = Layout::InvalidIndex;
+            Node->Parent     = Layout::InvalidIndex;
+            Node->Prev       = Layout::InvalidIndex;
+            Node->ChildCount = 0;
+
+            Node->Next = Idx + 1;
+        }
+
+        ui_layout_node *Sentinel = Tree->GetSentinel();
+        Sentinel->Next = 0;
+        Sentinel->Index = Layout::InvalidIndex;
+    }
+}
+
 // ==================================================================================
 // @Public : Tree/Node Public API.
+
 
 static rect_float
 GetNodeOuterRect(const ui_layout_node *Node)
@@ -268,7 +295,7 @@ static void
 SetNodeProperties(uint32_t NodeIndex, uint32_t StyleIndex, const ui_cached_style &Cached, ui_layout_tree *Tree)
 {
     VOID_ASSERT(ui_layout_tree::IsValid(Tree));       // Corruption
-    VOID_ASSERT(NodeIndex != InvalidLayoutNodeIndex); // Invalid
+    VOID_ASSERT(NodeIndex != Layout::InvalidIndex); // Invalid
 
     if(ui_layout_tree::IsValid(Tree))
     {
@@ -332,34 +359,23 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
         Result->NodeCount    = 0;
         Result->NodeCapacity = NodeCount;
 
-        for (uint64_t Idx = 0; Idx < Result->NodeCapacity; Idx++)
-        {
-            ui_layout_node *Node = Result->GetNode(Idx);
-            VOID_ASSERT(ui_layout_node::IsValid(Node));
-
-            Node->Index      = InvalidLayoutNodeIndex;
-            Node->First      = InvalidLayoutNodeIndex;
-            Node->Last       = InvalidLayoutNodeIndex;
-            Node->Parent     = InvalidLayoutNodeIndex;
-            Node->Prev       = InvalidLayoutNodeIndex;
-            Node->ChildCount = 0;
-
-            Node->Next = Idx + 1;
-        }
-
-        ui_layout_node *Sentinel = Result->GetSentinel();
-        Sentinel->Next = 0;
-        Sentinel->Index = InvalidLayoutNodeIndex;
+        PrepareTreeForFrame(Result);
     }
 
     return Result;
 }
 
+namespace Layout
+{
+
+
+// We need another rework of this API... Into a more general thingy.
+
 
 static uint32_t
-UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
+CreateNode(Layout::NodeFlags Flags, ui_layout_tree *Tree)
 {
-    uint32_t Result = InvalidLayoutNodeIndex;
+    uint32_t Result = Layout::InvalidIndex;
 
     if(ui_layout_tree::IsValid(Tree))
     {
@@ -367,23 +383,14 @@ UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
 
         if(ui_layout_node::IsValid(Node))
         {
-            VOID_ASSERT(Node->First  == InvalidLayoutNodeIndex);
-            VOID_ASSERT(Node->Last   == InvalidLayoutNodeIndex);
-            VOID_ASSERT(Node->Prev   == InvalidLayoutNodeIndex);
-            VOID_ASSERT(Node->Next   == InvalidLayoutNodeIndex);
-            VOID_ASSERT(Node->Parent == InvalidLayoutNodeIndex);
+            VOID_ASSERT(Node->First  == Layout::InvalidIndex);
+            VOID_ASSERT(Node->Last   == Layout::InvalidIndex);
+            VOID_ASSERT(Node->Prev   == Layout::InvalidIndex);
+            VOID_ASSERT(Node->Next   == Layout::InvalidIndex);
+            VOID_ASSERT(Node->Parent == Layout::InvalidIndex);
 
-            Node->Flags   = Flags;
-            Node->Touched = true;
+            Node->Flags = Flags;
     
-            if(Tree->ParentList.Last)
-            {
-                Node->Parent = Tree->GetNode(Tree->ParentList.Last->Index)->Index; // Weird.
-            }
-
-            ui_layout_node *Parent = Tree->GetNode(Node->Parent);
-            Tree->Append(Parent, Node);
-
             Result = Node->Index;
         }
     }
@@ -391,14 +398,11 @@ UICreateNode(LayoutNodeFlags Flags, ui_layout_tree *Tree)
     return Result;
 }
 
-// -----------------------------------------------------------------------------------
-// @Internal: Tree Queries
-
 
 static uint32_t
-UIFindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
+FindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
 {
-    uint32_t Result = InvalidLayoutNodeIndex;
+    uint32_t Result = Layout::InvalidIndex;
 
     if(ui_layout_tree::IsValid(Tree))
     {
@@ -425,7 +429,7 @@ UIFindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
 // TODO: We need a better check, because appending could cause some sort of circular dependency.
 
 static bool
-UIAppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
+AppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
 {
     bool Result = false;
 
@@ -445,7 +449,7 @@ UIAppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
 
 
 static void
-UISetOffset(uint32_t NodeIndex, float XOffset, float YOffset, ui_layout_tree *Tree)
+SetNodeOffset(uint32_t NodeIndex, float XOffset, float YOffset, ui_layout_tree *Tree)
 {
     if(ui_layout_tree::IsValid(Tree))
     {
@@ -458,79 +462,7 @@ UISetOffset(uint32_t NodeIndex, float XOffset, float YOffset, ui_layout_tree *Tr
     }
 }
 
-
-static bool
-UIIsNodeClicked(uint32_t NodeIndex, ui_layout_tree *Tree)
-{
-    bool Result = false;
-
-    if(ui_layout_tree::IsValid(Tree))
-    {
-        ui_layout_node *Node = Tree->GetNode(NodeIndex);
-        if(ui_layout_node::IsValid(Node))
-        {
-            Result = ((Node->State & NodeState::IsClicked) != NodeState::None);
-        }
-    }
-
-    return Result;
-}
-
-
-static bool
-UIPushLayoutParent(uint32_t Index, ui_layout_tree *Tree, memory_arena *Arena)
-{
-    bool Result = false;
-
-    if(Index != InvalidLayoutNodeIndex && ui_layout_tree::IsValid(Tree) && Arena)
-    {
-        ui_parent_node *Node = PushStruct(Arena, ui_parent_node);
-        if(Node)
-        {
-            ui_parent_list &List = Tree->ParentList;
-    
-            if(!List.First)
-            {
-                List.First = Node;
-            }
-    
-            Node->Index = Index;
-            Node->Prev  = List.Last;
-    
-            List.Last   = Node;
-            List.Count += 1;
-        }
-
-        Result = Node != 0;
-    }
-
-    return Result;
-}
-
-
-static bool
-UIPopLayoutParent(uint32_t Index, ui_layout_tree *Tree)
-{
-    bool Result = false;
-
-    if(ui_layout_tree::IsValid(Tree) && Tree->ParentList.Last && Index == Tree->ParentList.Last->Index)
-    {
-        ui_parent_list &List = Tree->ParentList;
-        ui_parent_node *Node = List.Last;
-
-        if(!Node->Prev)
-        {
-            List.First = 0;
-        }
-
-        List.Last   = Node->Prev;
-        List.Count -= 1;
-
-        Result = true;
-    }
-
-    return Result;
-}
+} // namespace Layout
 
 
 // -----------------------------------------------------------
@@ -751,7 +683,7 @@ HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint32_t NodeInde
         {
             Node->State &= ~(NodeState::HasCapturedPointer | NodeState::UseFocusedStyle);
 
-            Tree->CapturedNodeIndex = InvalidLayoutNodeIndex;
+            Tree->CapturedNodeIndex = Layout::InvalidIndex;
 
             return true;
         }
@@ -813,10 +745,11 @@ HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
         ui_layout_node *CapturedNode = Tree->GetNode(Tree->CapturedNodeIndex);
         if(ui_layout_node::IsValid(CapturedNode))
         {
-            if((CapturedNode->Flags & LayoutNodeFlags::IsDraggable) != LayoutNodeFlags::None)
+            // You can't just do that, it will cause a desync between the trees!
+
+            if((CapturedNode->Flags & Layout::NodeFlags::IsDraggable) != Layout::NodeFlags::None)
             {
-                CapturedNode->OutputPosition.X += Delta.X;
-                CapturedNode->OutputPosition.Y += Delta.Y;
+                CapturedNode->OutputPosition += Delta;
             }
         }
     }
@@ -959,6 +892,7 @@ ComputeNodeSize(ui_sizing Sizing, float ParentSize)
 
 
 // Same problem with input validation for recursive functions/asserts.
+// Also, isn't it hard to implement some sort of dirty nodes optimization on this code?
 
 static void
 ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_axes ParentBounds, ui_resource_table *ResourceTable, bool &Changed)
@@ -967,7 +901,7 @@ ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, ui_axes ParentBounds, 
     VOID_ASSERT(ui_layout_tree::IsValid(Tree));
 
     // Clear State (Unsure)
-    Node->OutputChildSize = {};
+    Node->OutputChildSize  = {};
 
     ui_axes LastSize = Node->OutputSize;
 
@@ -1113,14 +1047,15 @@ ComputeTreeLayout(ui_layout_tree *Tree)
 
     if(ui_layout_tree::IsValid(Tree))
     {
-        void_context   &Context = GetVoidContext();
-        ui_layout_node *Root    = Tree->GetNode(0); // Probably incorrect.
+        void_context &Context = GetVoidContext();
+
+        ui_layout_node *ActiveRoot = Tree->GetRootNode();
     
         while(true) // Set a maximum ?
         {
             bool Changed = false;
     
-            ComputeLayout(Root, Tree, Root->OutputSize, Context.ResourceTable, Changed);
+            ComputeLayout(ActiveRoot, Tree, ActiveRoot->OutputSize, Context.ResourceTable, Changed);
     
             if (!Changed)
             {
@@ -1128,7 +1063,7 @@ ComputeTreeLayout(ui_layout_tree *Tree)
             }
         }
 
-        PlaceLayout(Root, Tree, Context.ResourceTable);
+        PlaceLayout(ActiveRoot, Tree, Context.ResourceTable);
     }
 
 }
@@ -1196,16 +1131,6 @@ GeneratePaintBuffer(ui_layout_tree *Tree, ui_cached_style *CachedBuffer, memory_
                 for(ui_layout_node *Child = Tree->GetNode(Node->First); ui_layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
                 {
                     NodeBuffer[WriteIndex++] = Child->Index;
-                }
-
-                // Free the node if needed.
-
-                // This causes a lot of problem. Well. An immediate node's child must all be immediate as well.
-                // How do we track that? Really unsure. Is that even a good idea?
-
-                if((Node->Flags & LayoutNodeFlags::IsImmediate) != LayoutNodeFlags::None)
-                {
-                    Tree->FreeNode(Node);
                 }
             }
             else

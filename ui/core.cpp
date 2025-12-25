@@ -316,7 +316,7 @@ QueryNodeResource(UIResource_Type Type, uint32_t NodeIndex, ui_layout_tree *Tree
 
 bool ui_node::IsValid()
 {
-    bool Result = Index != InvalidLayoutNodeIndex;
+    bool Result = Index != Layout::InvalidIndex;
     return Result;
 }
 
@@ -330,25 +330,19 @@ void ui_node::SetStyle(uint32_t StyleIndex, ui_pipeline &Pipeline)
 
 ui_node ui_node::FindChild(uint32_t FindIndex, ui_pipeline &Pipeline)
 {
-    ui_node Result = { UIFindChild(Index, FindIndex, Pipeline.Tree) };
+    ui_node Result = { Layout::FindChild(Index, FindIndex, Pipeline.Tree) };
     return Result;
 }
 
 
 void ui_node::Append(ui_node Child, ui_pipeline &Pipeline)
 {
-    UIAppendChild(Index, Child.Index, Pipeline.Tree);
+    Layout::AppendChild(Index, Child.Index, Pipeline.Tree);
 }
 
 void ui_node::SetOffset(float XOffset, float YOffset, ui_pipeline &Pipeline)
 {
-    UISetOffset(Index, XOffset, YOffset, Pipeline.Tree);
-}
-
-bool ui_node::IsClicked(ui_pipeline &Pipeline)
-{
-    bool Result = UIIsNodeClicked(Index, Pipeline.Tree);
-    return Result;
+    Layout::SetNodeOffset(Index, XOffset, YOffset, Pipeline.Tree);
 }
 
 
@@ -603,11 +597,211 @@ CreateVoidContext(void)
     }
 }
 
+// -----------------------------------------------------------------------------
+// @Private Meta-Layout API
+// Functions intended for internal use.
+// -----------------------------------------------------------------------------
+
+
+constexpr uint32_t InvalidMetaNodeIndex = 0xFFFFFFFF;
+
+
+struct ui_meta_node
+{
+    // Frame State
+
+    NodeType          Type;
+    Layout::NodeFlags Flags;
+    uint64_t          Hint;
+    uint32_t          Index;
+    uint32_t          Parent;
+
+    // Persistent State (EXP)
+
+    uint32_t LayoutIndex;
+    
+    static bool IsValid(ui_meta_node *Node)
+    {
+        bool Result = Node && Node->Index != InvalidMetaNodeIndex;
+        return Result;
+    }
+};
+
+
+struct ui_meta_parent_node
+{
+    ui_meta_parent_node *Prev;
+    uint32_t             Value;
+};
+
+
+struct ui_meta_tree
+{
+    // Nodes
+
+    ui_meta_node *Nodes;
+    uint32_t      NodeCount;
+    uint32_t      NodeCapacity;
+
+    // Frame State
+
+    ui_meta_parent_node *Parent;
+
+    // Helpers
+    
+    static bool IsValid(ui_meta_tree *Tree)
+    {
+        bool Result = Tree && Tree->Nodes && Tree->NodeCount <= Tree->NodeCapacity;
+        return Result;
+    }
+};
+
+
+static uint64_t
+GetMetaTreeFootprint(uint64_t NodeCount)
+{
+    uint64_t NodeBuffer = NodeCount * sizeof(ui_meta_node);
+    uint64_t Result     = NodeBuffer + sizeof(ui_meta_tree);
+    return Result;
+}
+
+
+static ui_meta_tree *
+PlaceMetaTreeInMemory(uint64_t NodeCount, void *Memory)
+{
+    ui_meta_tree *Result = nullptr;
+    
+    if(Memory)
+    {
+        ui_meta_node *Nodes = static_cast<ui_meta_node*>(Memory);
+        Result = reinterpret_cast<ui_meta_tree*>(Nodes + NodeCount);
+        
+        Result->Nodes = Nodes;
+        Result->NodeCount = 0;
+        Result->NodeCapacity = NodeCount;
+        
+        for(uint32_t i = 0; i < NodeCount; ++i)
+        {
+            Nodes[i].Index = InvalidMetaNodeIndex;
+        }
+    }
+    
+    return Result;
+}
+
+
+static void
+MetaTreesEx(uint32_t ActiveIdx, ui_meta_tree *ActiveTree, uint32_t StaticIdx, ui_meta_tree *StaticTree, ui_layout_tree *LayoutTree)
+{
+    if(ActiveIdx >= ActiveTree->NodeCount)
+    {
+        return;
+    }
+    
+    ui_meta_node *ActiveNode = ActiveTree->Nodes + ActiveIdx;
+    ui_meta_node *StaticNode = (StaticIdx < StaticTree->NodeCount) ? StaticTree->Nodes + StaticIdx : nullptr;
+    
+    VOID_ASSERT(ui_meta_node::IsValid(ActiveNode));
+    
+    if(!ui_meta_node::IsValid(StaticNode) || ActiveNode->Type != StaticNode->Type)
+    {
+        ActiveNode->LayoutIndex = Layout::CreateNode(ActiveNode->Flags, LayoutTree);
+
+        if(ActiveNode->Parent != InvalidMetaNodeIndex)
+        {
+            ui_meta_node *Parent = ActiveTree->Nodes + ActiveNode->Parent;
+            Layout::AppendChild(Parent->LayoutIndex, ActiveNode->LayoutIndex, LayoutTree);
+        }
+    }
+    else
+    {
+        VOID_ASSERT(ui_meta_node::IsValid(StaticNode));
+
+        // If we reach this branch we want to update attributes. Now that is up to us to figure out
+        // which attributes make sense.
+
+        // I do not know if persisting state like this is the correct approach.
+        ActiveNode->LayoutIndex = StaticNode->LayoutIndex;
+    }
+}
+
+
+static void
+MetaTrees(ui_meta_tree *ActiveTree, ui_meta_tree *StaticTree, ui_layout_tree *LayoutTree)
+{
+    if(ui_meta_tree::IsValid(ActiveTree))
+    {
+        for(uint32_t i = 0; i < ActiveTree->NodeCount; ++i)
+        {
+            MetaTreesEx(i, ActiveTree, i, StaticTree, LayoutTree);
+        }
+    }
+}
+
+
+static uint32_t
+UICreateNode2(NodeType Type, Layout::NodeFlags Flags, ui_meta_tree *Tree)
+{
+    uint32_t Result = InvalidMetaNodeIndex;
+    
+    if(ui_meta_tree::IsValid(Tree) && Tree->NodeCount < Tree->NodeCapacity)
+    {
+        uint32_t      Index = Tree->NodeCount++;
+        ui_meta_node *Node  = Tree->Nodes + Index;
+        
+        Node->Parent = Tree->Parent ? Tree->Parent->Value : InvalidMetaNodeIndex;
+        Node->Index  = Index;
+        Node->Type   = Type;
+        Node->Flags  = Flags;
+        Node->Hint   = 0;
+        
+        Result = Index;
+    }
+    
+    return Result;
+}
+
+
+static bool
+UIPushLayoutParent2(uint32_t NodeIndex, ui_meta_tree *MetaTree, memory_arena *Arena)
+{
+    if(ui_meta_tree::IsValid(MetaTree) && Arena)
+    {
+        ui_meta_parent_node *ParentNode = PushStruct(Arena, ui_meta_parent_node);
+        if(ParentNode)
+        {
+            ParentNode->Value = NodeIndex;
+            ParentNode->Prev  = MetaTree->Parent;
+
+            MetaTree->Parent = ParentNode;
+        }
+    }
+
+    return true;
+}
+
+
+static bool
+UIPopLayoutParent2(uint32_t NodeIndex, ui_meta_tree *MetaTree)
+{
+    if(ui_meta_tree::IsValid(MetaTree))
+    {
+        if(MetaTree->Parent && MetaTree->Parent->Value == NodeIndex)
+        {
+            MetaTree->Parent = MetaTree->Parent->Prev;
+        }
+    }
+
+    return true;
+}
+
+
 static uint64_t
 GetPipelineStateFootprint(const ui_pipeline_params &Params)
 {
     uint64_t TreeSize = GetLayoutTreeFootprint(Params.NodeCount);
-    uint64_t Result   = TreeSize;
+    uint64_t MetaSize = GetMetaTreeFootprint(Params.NodeCount) * 2;
+    uint64_t Result   = TreeSize + MetaSize;
 
     return Result;
 }
@@ -633,10 +827,17 @@ UICreatePipeline(const ui_pipeline_params &Params)
 
     // UI State
     {
-        uint64_t TreeFootprint = GetLayoutTreeFootprint(Params.NodeCount);
-        void    *TreeMemory    = PushArena(Pipeline.StateArena, TreeFootprint, GetLayoutTreeAlignment());
+        uint64_t TreeFootprint  = GetLayoutTreeFootprint(Params.NodeCount);
+        void    *TreeMemory     = PushArena(Pipeline.StateArena, TreeFootprint, GetLayoutTreeAlignment());
 
         Pipeline.Tree = PlaceLayoutTreeInMemory(Params.NodeCount, TreeMemory);
+
+        uint64_t MetaFootprint = GetMetaTreeFootprint(Params.NodeCount);
+        void    *MetaMemory0   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(ui_meta_node));
+        void    *MetaMemory1   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(ui_meta_node));
+
+        Pipeline.MetaTrees[0] = PlaceMetaTreeInMemory(Params.NodeCount, MetaMemory0);
+        Pipeline.MetaTrees[1] = PlaceMetaTreeInMemory(Params.NodeCount, MetaMemory1);
 
         VOID_ASSERT(Pipeline.Tree);
     }
@@ -655,6 +856,9 @@ UICreatePipeline(const ui_pipeline_params &Params)
 }
 
 
+// This probably should be done in frame start. Idk about that whole bind/unbind stuff?
+
+
 static ui_pipeline &
 UIBindPipeline(UIPipeline UserPipeline)
 {
@@ -668,7 +872,15 @@ UIBindPipeline(UIPipeline UserPipeline)
             PopArenaTo(Pipeline.FrameArena, 0);
         }
 
-        Pipeline.Bound = true;
+        Pipeline.ActiveMetaTree = (Pipeline.ActiveMetaTree + 1) % 2;
+        Pipeline.Bound          = true;
+
+        // Experimental
+        ui_meta_tree *ActiveTree = Pipeline.GetActiveTree();
+        if (ui_meta_tree::IsValid(ActiveTree))
+        {
+            ActiveTree->NodeCount = 0;
+        }
     }
 
     return Pipeline;
@@ -683,6 +895,12 @@ UIUnbindPipeline(UIPipeline UserPipeline)
 
     if(Pipeline.Bound)
     {
+        // Experimental.
+        ui_meta_tree *ActiveTree = Pipeline.GetActiveTree();
+        ui_meta_tree *StaticTree = ActiveTree == Pipeline.MetaTrees[0] ? Pipeline.MetaTrees[1] : Pipeline.MetaTrees[0];
+
+        MetaTrees(ActiveTree, StaticTree, Pipeline.Tree);
+
         ComputeTreeLayout(Pipeline.Tree);
 
         ui_paint_buffer Buffer = GeneratePaintBuffer(Pipeline.Tree, Pipeline.StyleArray, Pipeline.FrameArena);
@@ -696,14 +914,4 @@ UIUnbindPipeline(UIPipeline UserPipeline)
 }
 
 
-static ui_pipeline_params
-UIGetDefaultPipelineParams(void)
-{
-    ui_pipeline_params Params =
-    {
-        .VtxShaderByteCode = byte_string(0, 0),
-        .PxlShaderByteCode = byte_string(0, 0),
-    };
 
-    return Params;
-}

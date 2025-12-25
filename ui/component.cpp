@@ -3,10 +3,10 @@ UIWindow(uint32_t StyleIndex, ui_pipeline &Pipeline)
 {
     ui_node Node = {};
 
-    LayoutNodeFlags Flags     = LayoutNodeFlags::ClipContent | LayoutNodeFlags::IsDraggable | LayoutNodeFlags::IsResizable;
-    uint32_t        NodeIndex = UICreateNode(Flags, Pipeline.Tree);
+    Layout::NodeFlags Flags     = Layout::NodeFlags::ClipContent | Layout::NodeFlags::IsDraggable | Layout::NodeFlags::IsResizable;
+    uint32_t        NodeIndex = UICreateNode2(NodeType::Container, Flags, Pipeline.GetActiveTree());
 
-    if(UIPushLayoutParent(NodeIndex, Pipeline.Tree, Pipeline.FrameArena))
+    if(UIPushLayoutParent2(NodeIndex, Pipeline.GetActiveTree(), Pipeline.FrameArena))
     {
         Node.Index = NodeIndex;
         Node.SetStyle(StyleIndex, Pipeline);
@@ -19,7 +19,7 @@ static void
 UIEndWindow(ui_node Node, ui_pipeline &Pipeline)
 {
     // NOTE: Should we check anything? I don't yet, but this pattern is nice.
-    UIPopLayoutParent(Node.Index, Pipeline.Tree);
+    UIPopLayoutParent2(Node.Index, Pipeline.GetActiveTree());
 }
 
 static ui_node
@@ -27,9 +27,9 @@ UIDummy(uint32_t StyleIndex, ui_pipeline &Pipeline)
 {
     ui_node Node = {};
 
-    uint32_t NodeIndex = UICreateNode(LayoutNodeFlags::None, Pipeline.Tree);
+    uint32_t NodeIndex = UICreateNode2(NodeType::None, Layout::NodeFlags::None, Pipeline.GetActiveTree());
 
-    if(UIPushLayoutParent(NodeIndex, Pipeline.Tree, Pipeline.FrameArena))
+    if(UIPushLayoutParent2(NodeIndex, Pipeline.GetActiveTree(), Pipeline.FrameArena))
     {
         Node.Index = NodeIndex;
         Node.SetStyle(StyleIndex, Pipeline);
@@ -42,5 +42,5 @@ static void
 UIEndDummy(ui_node Node, ui_pipeline &Pipeline)
 {
     // NOTE: Should we check anything? I don't yet, but this pattern is nice.
-    UIPopLayoutParent(Node.Index, Pipeline.Tree);
+    UIPopLayoutParent2(Node.Index, Pipeline.GetActiveTree());
 }

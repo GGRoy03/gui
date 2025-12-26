@@ -1,8 +1,10 @@
 #pragma once
 
 // =============================================================================
-// GLOBAL: Template Specializations
+// GLOBAL: Template Specializations & Includes
 // =============================================================================
+
+#include <unordered_map>
 
 namespace layout
 {
@@ -43,34 +45,34 @@ struct axes
 
 struct layout_node
 {
-    uint32_t Parent;
-    uint32_t First;
-    uint32_t Last;
-    uint32_t Next;
-    uint32_t Prev;
-    uint32_t ChildCount;
-    uint32_t Index;
+    uint32_t            Parent;
+    uint32_t            First;
+    uint32_t            Last;
+    uint32_t            Next;
+    uint32_t            Prev;
+    uint32_t            ChildCount;
+    uint32_t            Index;
 
-    vec2_float      OutputPosition;
-    axes         OutputSize;
-    axes         OutputChildSize;
+    vec2_float          OutputPosition;
+    axes                OutputSize;
+    axes                OutputChildSize;
 
-    size          Size;
-    size          MinSize;
-    size          MaxSize;
-    Alignment        XAlign;
-    Alignment        YAlign;
-    LayoutDirection  Direction;
-    core::padding Padding;
-    float            Spacing;
+    size                Size;
+    size                MinSize;
+    size                MaxSize;
+    Alignment           XAlign;
+    Alignment           YAlign;
+    LayoutDirection     Direction;
+    core::padding       Padding;
+    float               Spacing;
 
-    vec2_float VisualOffset;
-    vec2_float DragOffset;
-    vec2_float ScrollOffset;
+    vec2_float          VisualOffset;
+    vec2_float          DragOffset;
+    vec2_float          ScrollOffset;
 
-    NodeState  State;
-    NodeFlags  Flags;
-    uint32_t   StyleIndex;
+    NodeState           State;
+    NodeFlags           Flags;
+    const cached_style *CachedStyle;
 
     static bool IsValid(const layout_node *Node)
     {
@@ -78,14 +80,28 @@ struct layout_node
     }
 };
 
+// Obviously remove this from global. (Don't even want to use STD)
+std::unordered_map<uint64_t, uint32_t> KeyMap;
+
+
+struct layout_parent_node
+{
+    layout_parent_node *Prev;
+    uint32_t            Value;
+};
+
+
 struct layout_tree
 {
-    uint64_t          NodeCapacity;
-    uint64_t          NodeCount;
+    uint64_t       NodeCapacity;
+    uint64_t       NodeCount;
     layout_node   *Nodes;
-    uint32_t          RootIndex;
-    uint32_t          CapturedNodeIndex;
+    uint32_t       RootIndex;
+    uint32_t       CapturedNodeIndex;
     paint_command *PaintBuffer;
+
+
+    layout_parent_node *Parent;
 
     static bool IsValid(const layout_tree *Tree)
     {
@@ -200,6 +216,10 @@ struct layout_tree
     {
         if(layout_node::IsValid(Parent) && layout_node::IsValid(Child))
         {
+            Child->First  = InvalidIndex;
+            Child->Last   = InvalidIndex;
+            Child->Prev   = InvalidIndex;
+            Child->Next   = InvalidIndex;
             Child->Parent = Parent->Index;
 
             layout_node *First = GetNode(Parent->First);
@@ -275,30 +295,31 @@ static layout_tree * PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
     return Result;
 }
 
-static void UpdateLayoutInput(uint32_t NodeIndex, uint32_t StyleIndex, const cached_style &Cached, layout_tree *Tree)
+static void
+UpdateInput(uint32_t NodeIndex, const cached_style *Cached, layout_tree *Tree)
 {
-    if(layout_tree::IsValid(Tree))
+    if(layout_tree::IsValid(Tree) && Cached)
     {
         layout_node *Node = Tree->GetNode(NodeIndex);
         if(layout_node::IsValid(Node))
         {
-            Node->StyleIndex  = StyleIndex;
+            Node->CachedStyle = Cached;
+
+            Node->Size      = Cached->Default.Size.Value;
+            Node->MinSize   = Cached->Default.MinSize.Value;
+            Node->MaxSize   = Cached->Default.MaxSize.Value;
+            Node->Direction = Cached->Default.Direction.Value;
+            Node->XAlign    = Cached->Default.XAlign.Value;
+            Node->YAlign    = Cached->Default.YAlign.Value;
+            Node->Padding   = Cached->Default.Padding.Value;
+            Node->Spacing   = Cached->Default.Spacing.Value;
     
-            Node->Size      = Cached.Default.Size.Value;
-            Node->MinSize   = Cached.Default.MinSize.Value;
-            Node->MaxSize   = Cached.Default.MaxSize.Value;
-            Node->Direction = Cached.Default.Direction.Value;
-            Node->XAlign    = Cached.Default.XAlign.Value;
-            Node->YAlign    = Cached.Default.YAlign.Value;
-            Node->Padding   = Cached.Default.Padding.Value;
-            Node->Spacing   = Cached.Default.Spacing.Value;
-    
-            if(!Cached.Default.MinSize.IsSet)
+            if(!Cached->Default.MinSize.IsSet)
             {
                 Node->MinSize = Node->Size;
             }
     
-            if(!Cached.Default.MaxSize.IsSet)
+            if(!Cached->Default.MaxSize.IsSet)
             {
                 Node->MaxSize = Node->Size;
             }
@@ -335,24 +356,36 @@ static rect_float GetNodeContentRect(layout_node *Node)
     return Result;
 }
 
-static uint32_t CreateNode(NodeFlags Flags, layout_tree *Tree)
+
+static uint32_t
+CreateNode(uint64_t Key, NodeFlags Flags, const cached_style *Style, layout_tree *Tree)
 {
     uint32_t Result = InvalidIndex;
 
     if(layout_tree::IsValid(Tree))
     {
-        layout_node *Node = Tree->GetFreeNode();
-
+        auto         Iter = KeyMap.find(Key);
+        layout_node *Node = nullptr;
+    
+        if (Iter != KeyMap.end())
+        {
+            Node = Tree->GetNode(Iter->second);
+        }
+        else
+        {
+            Node = Tree->GetFreeNode();
+            KeyMap.emplace(Key, Node->Index);
+        }
+    
         if(layout_node::IsValid(Node))
         {
-            VOID_ASSERT(Node->First  == InvalidIndex);
-            VOID_ASSERT(Node->Last   == InvalidIndex);
-            VOID_ASSERT(Node->Prev   == InvalidIndex);
-            VOID_ASSERT(Node->Next   == InvalidIndex);
-            VOID_ASSERT(Node->Parent == InvalidIndex);
+            Node->ChildCount  = 0;
+            Node->CachedStyle = Style;
+            Node->Flags       = Flags;
 
-            Node->Flags = Flags;
-    
+            uint32_t ParentIndex = Tree->Parent ? Tree->Parent->Value : InvalidIndex;
+            Tree->Append(Tree->GetNode(ParentIndex), Node);
+
             Result = Node->Index;
         }
     }
@@ -360,7 +393,36 @@ static uint32_t CreateNode(NodeFlags Flags, layout_tree *Tree)
     return Result;
 }
 
-static uint32_t FindChild(uint32_t NodeIndex, uint32_t FindIndex, layout_tree *Tree)
+
+static void
+PushParent(uint32_t NodeIndex, layout_tree *Tree, memory_arena *Arena)
+{
+    if(layout_tree::IsValid(Tree) && Arena)
+    {
+        layout_parent_node *Node = PushStruct(Arena, layout_parent_node);
+        if(Node)
+        {
+            Node->Prev  = Tree->Parent;
+            Node->Value = NodeIndex;
+
+            Tree->Parent = Node;
+        }
+    }
+}
+
+
+static void
+PopParent(uint32_t NodeIndex, layout_tree *Tree)
+{
+    if(layout_tree::IsValid(Tree) && Tree->Parent)
+    {
+        Tree->Parent = Tree->Parent->Prev;
+    }
+}
+
+
+static uint32_t
+FindChild(uint32_t NodeIndex, uint32_t FindIndex, layout_tree *Tree)
 {
     uint32_t Result = InvalidIndex;
 
@@ -382,7 +444,9 @@ static uint32_t FindChild(uint32_t NodeIndex, uint32_t FindIndex, layout_tree *T
     return Result;
 }
 
-static bool AppendChild(uint32_t ParentIndex, uint32_t ChildIndex, layout_tree *Tree)
+
+static bool
+AppendChild(uint32_t ParentIndex, uint32_t ChildIndex, layout_tree *Tree)
 {
     bool Result = false;
 
@@ -400,7 +464,8 @@ static bool AppendChild(uint32_t ParentIndex, uint32_t ChildIndex, layout_tree *
     return Result;
 }
 
-static void SetNodeOffset(uint32_t NodeIndex, float XOffset, float YOffset, layout_tree *Tree)
+static void
+SetNodeOffset(uint32_t NodeIndex, float XOffset, float YOffset, layout_tree *Tree)
 {
     if(layout_tree::IsValid(Tree))
     {
@@ -847,8 +912,6 @@ ComputeLayout(layout_node *Node, layout_tree *Tree, axes ParentBounds, core::res
         Node->OutputChildSize.Height += Child->OutputSize.Height;
     }
 
-
-
     text *Text = static_cast<text *>(QueryNodeResource(core::ResourceType::Text, Node->Index, Tree, ResourceTable));
     if(Text)
     {
@@ -962,15 +1025,12 @@ static void ComputeTreeLayout(layout_tree *Tree)
 
 // --- Public API ---
 
-static paint_buffer GeneratePaintBuffer(layout_tree *Tree, cached_style *CachedBuffer, memory_arena *Arena)
+static paint_buffer
+GeneratePaintBuffer(layout_tree *Tree, memory_arena *Arena)
 {
-    VOID_ASSERT(layout_tree::IsValid(Tree));
-    VOID_ASSERT(CachedBuffer);
-    VOID_ASSERT(Arena);
-
     uint32_t CommandCount = 0;
 
-    if(layout_tree::IsValid(Tree) && CachedBuffer && Arena)
+    if(layout_tree::IsValid(Tree) && Arena)
     {
         uint32_t *NodeBuffer = PushArray(Arena, uint32_t, Tree->NodeCount);
         uint32_t  WriteIndex = 0;
@@ -980,22 +1040,21 @@ static paint_buffer GeneratePaintBuffer(layout_tree *Tree, cached_style *CachedB
     
         while (NodeBuffer && ReadIndex < WriteIndex)
         {
-            uint32_t        NodeIndex = NodeBuffer[ReadIndex++];
+            uint32_t     NodeIndex = NodeBuffer[ReadIndex++];
             layout_node *Node      = Tree->GetNode(NodeIndex);
     
-            if(layout_node::IsValid(Node))
+            if(layout_node::IsValid(Node) && Node->CachedStyle)
             {
-                paint_command   &Command = Tree->PaintBuffer[CommandCount++];
-                cached_style    *Cached  = CachedBuffer + Node->StyleIndex;
-                paint_properties Paint   = Cached->Default.MakePaintProperties();
+                paint_command    &Command = Tree->PaintBuffer[CommandCount++];
+                paint_properties Paint    = Node->CachedStyle->Default.MakePaintProperties();
     
                 if ((Node->State & NodeState::UseFocusedStyle) != NodeState::None)
                 {
-                    Paint = Cached->Focused.InheritPaintProperties(Paint);
+                    Paint = Node->CachedStyle->Focused.InheritPaintProperties(Paint);
                 } else
                 if ((Node->State & NodeState::UseHoveredStyle) != NodeState::None)
                 {
-                    Paint = Cached->Hovered.InheritPaintProperties(Paint);
+                    Paint = Node->CachedStyle->Hovered.InheritPaintProperties(Paint);
     
                     Node->State &= ~NodeState::UseHoveredStyle;
                 }

@@ -21,15 +21,23 @@ enum class NodeFlags : uint32_t
 
 // --- Node Manipulation ---
 
-static uint32_t CreateNode     (NodeFlags Flags, layout_tree *Tree);
+
+static uint32_t CreateNode     (uint64_t Key, NodeFlags Flags, const cached_style *Style, layout_tree *Tree);
 static bool     AppendChild    (uint32_t ParentIndex, uint32_t ChildIndex, layout_tree *Tree);
+static void     PushParent     (uint32_t NodeIndex, layout_tree *Tree, memory_arena *Arena);
+static void     PopParent      (uint32_t NodeIndex, layout_tree *Tree);
+
 
 // --- Node Queries ---
 
+
 static uint32_t FindChild      (uint32_t ParentIndex, uint32_t ChildIndex, layout_tree *Tree);
+
 
 // --- Node Properties ---
 
+
+static void     UpdateInput    (uint32_t NodeIndex, const cached_style *Cached, layout_tree *Tree);
 static void     SetNodeOffset  (uint32_t NodeIndex, float X, float Y, layout_tree *Tree);
 
 
@@ -46,7 +54,7 @@ static void     SetNodeOffset  (uint32_t NodeIndex, float X, float Y, layout_tre
 // Memory and construction helpers for layout trees.
 static uint64_t         GetLayoutTreeAlignment  (void);
 static uint64_t         GetLayoutTreeFootprint  (uint64_t NodeCount);
-static layout_tree * PlaceLayoutTreeInMemory (uint64_t NodeCount, void *Memory);
+static layout_tree *    PlaceLayoutTreeInMemory (uint64_t NodeCount, void *Memory);
 static void             PrepareTreeForFrame     (layout_tree *Tree);
 
 // Compute layout for the entire tree.
@@ -59,8 +67,7 @@ static bool             HandlePointerHover      (vec2_float Position, uint32_t N
 static void             HandlePointerMove       (vec2_float Delta, layout_tree *Tree);
 
 // Rendering and styling helpers.
-static paint_buffer  GeneratePaintBuffer     (layout_tree *Tree, cached_style *Cached, memory_arena *Arena);
-static void             UpdateLayoutInput       (uint32_t NodeIndex, uint32_t StyleIndex, const cached_style &Cached, layout_tree *Tree);
+static paint_buffer  GeneratePaintBuffer     (layout_tree *Tree, memory_arena *Arena);
 
 // ------------------------------------------------------------------------------------
 // @internal: Layout Resources

@@ -2,6 +2,5 @@
 #include "text.cpp"
 #include "layout.cpp"
 #include "paint.cpp"
-#include "component.cpp"
 
 #include "inspector.cpp"

@@ -1,13 +1,6 @@
 namespace Inspector
 {
 
-enum class InspectorStyle : uint32_t
-{
-    Window    = 0,
-    TreePanel = 1,
-    TreeNode  = 2,
-};
-
 constexpr core::color MainOrange        = core::color(0.9765f, 0.4510f, 0.0863f, 1.0f);
 constexpr core::color WhiteOrange       = core::color(1.0000f, 0.9686f, 0.9294f, 1.0f);
 constexpr core::color SurfaceOrange     = core::color(0.9961f, 0.8431f, 0.6667f, 1.0f);
@@ -25,69 +18,66 @@ constexpr core::color Success           = core::color(0.1333f, 0.7725f, 0.3686f,
 constexpr core::color Error             = core::color(0.9373f, 0.2667f, 0.2667f, 1.0f);
 constexpr core::color Warning           = core::color(0.9608f, 0.6196f, 0.0431f, 1.0f);
 
-static cached_style InspectorStyleArray[] =
+static cached_style WindowStyle =
 {
-    // Window
+    .Default =
     {
-        .Default =
-        {
-            .Size         = size({1000.f, LayoutSizing::Fixed}, {1000.f, LayoutSizing::Fixed}),
-            .Direction    = LayoutDirection::Horizontal,
-            .XAlign       = Alignment::Start,
-            .YAlign       = Alignment::Center,
+        .Size         = size({1000.f, LayoutSizing::Fixed}, {1000.f, LayoutSizing::Fixed}),
+        .Direction    = LayoutDirection::Horizontal,
+        .XAlign       = Alignment::Start,
+        .YAlign       = Alignment::Center,
 
-            .Padding      = core::padding(20.f, 20.f, 20.f, 20.f),
-            .Spacing      = 10.f,
+        .Padding      = core::padding(20.f, 20.f, 20.f, 20.f),
+        .Spacing      = 10.f,
 
-            .Color        = Background,
-            .BorderColor  = BorderOrDivider,
+        .Color        = Background,
+        .BorderColor  = BorderOrDivider,
 
-            .BorderWidth  = 2.f,
-            .Softness     = 2.f,
-            .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
-        },
-
-        .Hovered =
-        {
-            .BorderColor = HoverOrange,
-        },
-
-        .Focused =
-        {
-            .BorderColor = Success,
-        },
+        .BorderWidth  = 2.f,
+        .Softness     = 2.f,
+        .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
     },
 
-    // Tree Panel
+    .Hovered =
     {
-        .Default =
-        {
-            .Size         = size({50.f, LayoutSizing::Percent}, {100.f, LayoutSizing::Percent}),
-
-            .Padding      = core::padding(20.f, 20.f, 20.f, 20.f),
-
-            .Color        = SurfaceBackground,
-            .BorderColor  = BorderOrDivider,
-
-            .BorderWidth  = 2.f,
-            .Softness     = 2.f,
-            .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
-        },
+        .BorderColor = HoverOrange,
     },
 
-    // Tree Node
+    .Focused =
     {
-        .Default =
-        {
-            .Size         = size({50.f, LayoutSizing::Fixed}, {50.f, LayoutSizing::Fixed}),
+        .BorderColor = Success,
+    },
+};
 
-            .Color        = SurfaceBackground,
-            .BorderColor  = HoverOrange,
+static cached_style TreePanelStyle =
+{
+    .Default =
+    {
+        .Size         = size({50.f, LayoutSizing::Percent}, {100.f, LayoutSizing::Percent}),
 
-            .BorderWidth  = 2.f,
-            .Softness     = 2.f,
-            .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
-        },
+        .Padding      = core::padding(20.f, 20.f, 20.f, 20.f),
+
+        .Color        = SurfaceBackground,
+        .BorderColor  = BorderOrDivider,
+
+        .BorderWidth  = 2.f,
+        .Softness     = 2.f,
+        .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
+    },
+};
+
+static cached_style TreeNodeStyle =
+{
+    .Default =
+    {
+        .Size         = size({50.f, LayoutSizing::Fixed}, {50.f, LayoutSizing::Fixed}),
+
+        .Color        = SurfaceBackground,
+        .BorderColor  = HoverOrange,
+
+        .BorderWidth  = 2.f,
+        .Softness     = 2.f,
+        .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
     },
 };
 
@@ -106,42 +96,32 @@ struct visible_list
 
 struct inspector_ui
 {
-    // UI Static State
     bool          IsInitialized = false;
     memory_arena *FrameArena    = 0;
 
-    // UI Transient State
-    uint32_t        SelectedNodeIndex = layout::InvalidIndex;
-    uint32_t        HoveredNodeIndex  = layout::InvalidIndex;
-    node_state     *Nodes             = 0;
-    uint32_t        NodeCount         = 0;
-    layout::layout_tree *CurrentTree       = 0;
+    uint32_t SelectedNodeIndex = layout::InvalidIndex;
+    uint32_t HoveredNodeIndex  = layout::InvalidIndex;
+    node_state *Nodes          = 0;
+    uint32_t NodeCount         = 0;
+    layout::layout_tree *CurrentTree = 0;
 
-    // UI Resources
     core::resource_key Font;
 };
-
-// ------------------------------------------------------------------------------------
-// Rendering A Hierarchical Tree View
-// ------------------------------------------------------------------------------------
 
 static void
 BuildVisibleListEx(layout::layout_node *Node, layout::layout_tree *Tree, uint32_t Depth, visible_list &List)
 {
+    if(List.Count >= Tree->NodeCount) return;
+    
     node_state &State = List.Nodes[List.Count++];
     State.Index = Node->Index;
     State.Depth = Depth;
 
-    // If the node is not expanded, stop collection. Where do I store that?
-    // I need some sort of persistent state?
-
-
-    for (auto *Child = Tree->GetNode(Node->First); layout::layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+    for(auto *Child = Tree->GetNode(Node->First); layout::layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
     {
         BuildVisibleListEx(Child, Tree, Depth + 1, List);
     }
 }
-
 
 static visible_list
 BuildVisibleList(layout::layout_node *Root, layout::layout_tree *Tree, memory_arena *Arena)
@@ -160,93 +140,46 @@ BuildVisibleList(layout::layout_node *Root, layout::layout_tree *Tree, memory_ar
     return List;
 }
 
-
-static core::node
-TreeNode(core::pipeline &Pipeline)
-{
-    core::node Node = {.Index = UICreateNode2(static_cast<uint32_t>(InspectorStyle::TreeNode), core::NodeType::None, layout::NodeFlags::None, Pipeline.GetActiveTree())};
-    return Node;
-}
-
-
 static void
 RenderLayoutNodes(core::pipeline &Pipeline, const visible_list &List)
 {
     for(uint32_t Idx = 0; Idx < List.Count; ++Idx)
     {
-        uint32_t LayoutIndex = List.Nodes[Idx].Index;
-        uint32_t LayoutDepth = List.Nodes[Idx].Depth;
-
-        core::node Row = TreeNode(Pipeline);
-
-        if(!Row.IsValid())
-        {
-            continue;
-        }
-
-        // This simply cannot work with the current architecture. Can we find something else?
-
-        if(Row.IsClicked(Pipeline))
-        {
-            VOID_ASSERT(!"Crash");
-        }
-
-        Row.SetOffset(LayoutDepth * 10.f, 0.f, Pipeline);
+        // Render tree nodes
     }
 }
-
-// ------------------------------------------------------------------------------------
-// @Private : Inspector Helpers
 
 static bool
 InitializeInspector(inspector_ui &Inspector, core::pipeline &Pipeline)
 {
-    // UI Pipeline
+    Inspector.FrameArena = AllocateArena({.ReserveSize = VOID_KILOBYTE(128)});
+    Inspector.Font       = UILoadSystemFont(str8_comp("Consolas"), 16.f, 1024, 1024);
+
     {
         core::pipeline_params Params =
         {
             .NodeCount     = 128,
             .FrameBudget   = VOID_KILOBYTE(128),
             .Pipeline      = core::Pipeline::Default,
-            .StyleArray    = InspectorStyleArray,
-            .StyleIndexMin = static_cast<uint32_t>(InspectorStyle::Window  ),
-            .StyleIndexMax = static_cast<uint32_t>(InspectorStyle::TreeNode),
         };
 
         UICreatePipeline(Params);
     }
 
-    // UI State
-    {
-        Inspector.FrameArena = AllocateArena({.ReserveSize = VOID_KILOBYTE(128)});
-    }
-
-    // UI Resource
-    {
-        Inspector.Font = UILoadSystemFont(str8_comp("Consolas"), 16.f, 1024, 1024);
-    }
-
     return true;
 }
-
-
-// ------------------------------------------------------------------------------------
-// @Public : Inspector API
 
 static void
 ShowUI(void)
 {
     static inspector_ui Inspector;
 
-    // It is weird that we allow binding before it's even created. Perhaps we rename these functions?
-    
     core::pipeline &Pipeline = UIBindPipeline(core::Pipeline::Default);
 
     if(!Inspector.IsInitialized)
     {
         Inspector.IsInitialized = InitializeInspector(Inspector, Pipeline);
-
-        Inspector.CurrentTree = Pipeline.Tree; // Lazy! Might cause some weird recursive issues.
+        Inspector.CurrentTree = Pipeline.Tree;
     }
 
     if(Inspector.IsInitialized)
@@ -256,24 +189,28 @@ ShowUI(void)
         layout::layout_tree *Tree = Inspector.CurrentTree;
         if(layout::layout_tree::IsValid(Tree))
         {
-            core::node Window = UIWindow(static_cast<uint32_t>(InspectorStyle::Window), Pipeline);
-            {
-                core::node TreePanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
-                {
-                }
-                UIEndDummy(TreePanel, Pipeline);
+            layout::NodeFlags WindowFlags = layout::NodeFlags::ClipContent | layout::NodeFlags::IsDraggable | layout::NodeFlags::IsResizable;
 
-                core::node OtherPanel = UIDummy(static_cast<uint32_t>(InspectorStyle::TreePanel), Pipeline);
+            core::component Window("window", WindowFlags, &WindowStyle, Pipeline.Tree);
+            if(Window.Push(Pipeline.FrameArena))
+            {
+                core::component TreePanel("tree_panel", layout::NodeFlags::None, &TreePanelStyle, Pipeline.Tree);
+                if(TreePanel.Push(Pipeline.FrameArena))
                 {
+                    TreePanel.Pop();
                 }
-                UIEndDummy(OtherPanel, Pipeline);
+
+                core::component OtherPanel("other_panel", layout::NodeFlags::None, &TreePanelStyle, Pipeline.Tree);
+                if(OtherPanel.Push(Pipeline.FrameArena))
+                {
+                    OtherPanel.Pop();
+                }
             }
-            UIEndWindow(Window, Pipeline);
+            Window.Pop();
         }
     }
 
     UIUnbindPipeline(core::Pipeline::Default);
 }
-
 
 }

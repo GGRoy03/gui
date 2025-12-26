@@ -317,108 +317,108 @@ QueryNodeResource(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tr
 // -------------------------------------------------------------
 // @Public: Frame Node API
 
-bool node::IsValid()
-{
-    bool Result = Index != ::layout::InvalidIndex;
-    return Result;
-}
-
-
-node node::FindChild(uint32_t FindIndex, pipeline &Pipeline)
-{
-    node Result = { ::layout::FindChild(Index, FindIndex, Pipeline.Tree) };
-    return Result;
-}
-
-
-void node::Append(node Child, pipeline &Pipeline)
-{
-    ::layout::AppendChild(Index, Child.Index, Pipeline.Tree);
-}
-
-
-void node::SetOffset(float XOffset, float YOffset, pipeline &Pipeline)
-{
-    ::layout::SetNodeOffset(Index, XOffset, YOffset, Pipeline.Tree);
-}
-
-
-// There are so many indirections. This is unusual.
-
-void node::SetText(byte_string UserText, resource_key FontKey, pipeline &Pipeline)
-{
-    void_context      &Context       = GetVoidContext();
-    resource_table *ResourceTable = Context.ResourceTable;
-
-    auto  TextKey   = MakeNodeResourceKey(ResourceType::Text, Index, Pipeline.Tree);
-    auto  TextState = FindResourceByKey(TextKey, FindResourceFlag::AddIfNotFound, ResourceTable);
-    auto *Text      = static_cast<text *>(TextState.Resource);
-
-    if(!Text)
-    {
-        auto  FontState = FindResourceByKey(FontKey, FindResourceFlag::None, Context.ResourceTable);
-        auto *Font      = static_cast<font *>(FontState.Resource);
-
-        if(Font)
-        {
-            ntext::TextAnalysis Flags = ntext::TextAnalysis::GenerateWordSlices;
-
-            auto Analysed = ntext::AnalyzeText(UserText.String, UserText.Size, Flags, Font->Generator);
-            auto GlyphRun = ntext::FillAtlas(Analysed, Font->Generator);
-
-            uint64_t Footprint = GetTextFootprint(Analysed, GlyphRun);
-            void    *Memory    = AllocateUIResource(Footprint, &ResourceTable->Allocator);
-
-            Text = PlaceTextInMemory(Analysed, GlyphRun, Font, Memory);
-            if(Text)
-            {
-                UpdateResourceTable(TextState.Id, TextKey, Text, Context.ResourceTable);
-            }
-        }
-    }
-    else
-    {
-        VOID_ASSERT(!"Unsure");
-    }
-}
-
-void node::SetTextInput(uint8_t *Buffer, uint64_t BufferSize, pipeline &Pipeline)
-{
-}
-
-// This is badly implemented.
-
-void node::SetScroll(float ScrollSpeed, AxisType Axis, pipeline &Pipeline)
-{
-    void_context &Context  = GetVoidContext();
-
-    resource_key   Key   = MakeNodeResourceKey(ResourceType::ScrollRegion, Index, Pipeline.Tree);
-    resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
-
-    uint64_t Size   = layout::GetScrollRegionFootprint();
-    void    *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);
-
-    layout::scroll_region_params Params =
-    {
-        .PixelPerLine = ScrollSpeed,
-        .Axis         = Axis,
-    };
-
-    layout::scroll_region *ScrollRegion = layout::PlaceScrollRegionInMemory(Params, Memory);
-    if(ScrollRegion)
-    {
-        UpdateResourceTable(State.Id, Key, ScrollRegion, Context.ResourceTable);
-    }
-}
-
-void node::SetImage(byte_string Path, byte_string Group, pipeline &Pipeline)
-{
-    // TODO: Reimplement.
-}
-
-void node::DebugBox(uint32_t Flag, bool Draw, pipeline &Pipeline)
-{
-}
+//bool node::IsValid()
+//{
+//    bool Result = Index != ::layout::InvalidIndex;
+//    return Result;
+//}
+//
+//
+//node node::FindChild(uint32_t FindIndex, pipeline &Pipeline)
+//{
+//    node Result = { ::layout::FindChild(Index, FindIndex, Pipeline.Tree) };
+//    return Result;
+//}
+//
+//
+//void node::Append(node Child, pipeline &Pipeline)
+//{
+//    ::layout::AppendChild(Index, Child.Index, Pipeline.Tree);
+//}
+//
+//
+//void node::SetOffset(float XOffset, float YOffset, pipeline &Pipeline)
+//{
+//    ::layout::SetNodeOffset(Index, XOffset, YOffset, Pipeline.Tree);
+//}
+//
+//
+//// There are so many indirections. This is unusual.
+//
+//void node::SetText(byte_string UserText, resource_key FontKey, pipeline &Pipeline)
+//{
+//    void_context      &Context       = GetVoidContext();
+//    resource_table *ResourceTable = Context.ResourceTable;
+//
+//    auto  TextKey   = MakeNodeResourceKey(ResourceType::Text, Index, Pipeline.Tree);
+//    auto  TextState = FindResourceByKey(TextKey, FindResourceFlag::AddIfNotFound, ResourceTable);
+//    auto *Text      = static_cast<text *>(TextState.Resource);
+//
+//    if(!Text)
+//    {
+//        auto  FontState = FindResourceByKey(FontKey, FindResourceFlag::None, Context.ResourceTable);
+//        auto *Font      = static_cast<font *>(FontState.Resource);
+//
+//        if(Font)
+//        {
+//            ntext::TextAnalysis Flags = ntext::TextAnalysis::GenerateWordSlices;
+//
+//            auto Analysed = ntext::AnalyzeText(UserText.String, UserText.Size, Flags, Font->Generator);
+//            auto GlyphRun = ntext::FillAtlas(Analysed, Font->Generator);
+//
+//            uint64_t Footprint = GetTextFootprint(Analysed, GlyphRun);
+//            void    *Memory    = AllocateUIResource(Footprint, &ResourceTable->Allocator);
+//
+//            Text = PlaceTextInMemory(Analysed, GlyphRun, Font, Memory);
+//            if(Text)
+//            {
+//                UpdateResourceTable(TextState.Id, TextKey, Text, Context.ResourceTable);
+//            }
+//        }
+//    }
+//    else
+//    {
+//        VOID_ASSERT(!"Unsure");
+//    }
+//}
+//
+//void node::SetTextInput(uint8_t *Buffer, uint64_t BufferSize, pipeline &Pipeline)
+//{
+//}
+//
+//// This is badly implemented.
+//
+//void node::SetScroll(float ScrollSpeed, AxisType Axis, pipeline &Pipeline)
+//{
+//    void_context &Context  = GetVoidContext();
+//
+//    resource_key   Key   = MakeNodeResourceKey(ResourceType::ScrollRegion, Index, Pipeline.Tree);
+//    resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
+//
+//    uint64_t Size   = layout::GetScrollRegionFootprint();
+//    void    *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);
+//
+//    layout::scroll_region_params Params =
+//    {
+//        .PixelPerLine = ScrollSpeed,
+//        .Axis         = Axis,
+//    };
+//
+//    layout::scroll_region *ScrollRegion = layout::PlaceScrollRegionInMemory(Params, Memory);
+//    if(ScrollRegion)
+//    {
+//        UpdateResourceTable(State.Id, Key, ScrollRegion, Context.ResourceTable);
+//    }
+//}
+//
+//void node::SetImage(byte_string Path, byte_string Group, pipeline &Pipeline)
+//{
+//    // TODO: Reimplement.
+//}
+//
+//void node::DebugBox(uint32_t Flag, bool Draw, pipeline &Pipeline)
+//{
+//}
 
 // ----------------------------------------------------------------------------------
 // Context Public API Implementation
@@ -599,203 +599,39 @@ CreateVoidContext(void)
 // Functions intended for internal use.
 // -----------------------------------------------------------------------------
 
-
-constexpr uint32_t InvalidMetaNodeIndex = 0xFFFFFFFF;
-
-
-struct meta_node
+component::component(const char *Name, layout::NodeFlags Flags, const cached_style *Style, layout::layout_tree *Tree)
+    : component(str8_comp(Name), Flags, Style, Tree)
 {
-    // Frame State
+}
 
-    NodeType          Type;
-    layout::NodeFlags Flags;
-    uint64_t          Hint;
-    uint32_t          Index;
-    uint32_t          Style;
-    uint32_t          Parent;
-
-    // Persistent State (EXP)
-
-    uint32_t LayoutIndex;
-    
-    static bool IsValid(meta_node *Node)
-    {
-        bool Result = Node && Node->Index != InvalidMetaNodeIndex;
-        return Result;
-    }
-};
-
-
-struct meta_parent_node
+component::component(byte_string Name, layout::NodeFlags Flags, const cached_style *Style, layout::layout_tree *Tree)
 {
-    meta_parent_node *Prev;
-    uint32_t             Value;
-};
-
-
-struct meta_tree
-{
-    // Nodes
-
-    meta_node *Nodes;
-    uint32_t      NodeCount;
-    uint32_t      NodeCapacity;
-
-    // Frame State
-
-    meta_parent_node *Parent;
-
-    // Helpers
-    
-    static bool IsValid(meta_tree *Tree)
-    {
-        bool Result = Tree && Tree->Nodes && Tree->NodeCount <= Tree->NodeCapacity;
-        return Result;
-    }
-};
-
-
-static uint64_t
-GetMetaTreeFootprint(uint64_t NodeCount)
-{
-    uint64_t NodeBuffer = NodeCount * sizeof(meta_node);
-    uint64_t Result     = NodeBuffer + sizeof(meta_tree);
-    return Result;
+    LayoutIndex = layout::CreateNode(HashByteString(Name), Flags, Style, Tree);
+    LayoutTree  = Tree;
+    layout::UpdateInput(LayoutIndex, Style, Tree);
 }
 
 
-static meta_tree *
-PlaceMetaTreeInMemory(uint64_t NodeCount, void *Memory)
+void component::SetStyle(const cached_style *Style)
 {
-    meta_tree *Result = nullptr;
-    
-    if(Memory)
-    {
-        meta_node *Nodes = static_cast<meta_node*>(Memory);
-        Result = reinterpret_cast<meta_tree*>(Nodes + NodeCount);
-        
-        Result->Nodes = Nodes;
-        Result->NodeCount = 0;
-        Result->NodeCapacity = NodeCount;
-        
-        for(uint32_t i = 0; i < NodeCount; ++i)
-        {
-            Nodes[i].Index = InvalidMetaNodeIndex;
-        }
-    }
-    
-    return Result;
+    layout::UpdateInput(LayoutIndex, Style, LayoutTree);
 }
 
 
-static void
-MetaTreesEx(uint32_t ActiveIdx, meta_tree *ActiveTree, uint32_t StaticIdx, meta_tree *StaticTree, layout::layout_tree *LayoutTree, cached_style *StyleArray)
+bool component::Push(memory_arena *Arena)
 {
-    if(ActiveIdx >= ActiveTree->NodeCount)
-    {
-        return;
-    }
-
-    meta_node *ActiveNode = ActiveTree->Nodes + ActiveIdx;
-    meta_node *StaticNode = (StaticIdx < StaticTree->NodeCount) ? StaticTree->Nodes + StaticIdx : nullptr;
-    
-    VOID_ASSERT(meta_node::IsValid(ActiveNode));
-    
-    if(!meta_node::IsValid(StaticNode) || ActiveNode->Type != StaticNode->Type)
-    {
-        ActiveNode->LayoutIndex = layout::CreateNode(ActiveNode->Flags, LayoutTree);
-
-        layout::UpdateLayoutInput(ActiveNode->LayoutIndex, ActiveNode->Style, StyleArray[ActiveNode->Style], LayoutTree);
-
-        if(ActiveNode->Parent != InvalidMetaNodeIndex)
-        {
-            meta_node *Parent = ActiveTree->Nodes + ActiveNode->Parent;
-            layout::AppendChild(Parent->LayoutIndex, ActiveNode->LayoutIndex, LayoutTree);
-        }
-    }
-    else
-    {
-        VOID_ASSERT(meta_node::IsValid(StaticNode));
-
-        // If we reach this branch we want to update attributes. Now that is up to us to figure out
-        // which attributes make sense.
-
-        // I do not know if persisting state like this is the correct approach.
-        ActiveNode->LayoutIndex = StaticNode->LayoutIndex;
-    }
-}
-
-
-static void
-MetaTrees(meta_tree *ActiveTree, meta_tree *StaticTree, layout::layout_tree *LayoutTree, cached_style *StyleArray)
-{
-    if(meta_tree::IsValid(ActiveTree))
-    {
-        for(uint32_t i = 0; i < ActiveTree->NodeCount; ++i)
-        {
-            MetaTreesEx(i, ActiveTree, i, StaticTree, LayoutTree, StyleArray);
-        }
-    }
-}
-
-
-static uint32_t
-UICreateNode2(uint32_t StyleIndex, NodeType Type, layout::NodeFlags Flags, meta_tree *Tree)
-{
-    uint32_t Result = InvalidMetaNodeIndex;
-    
-    if(meta_tree::IsValid(Tree) && Tree->NodeCount < Tree->NodeCapacity)
-    {
-        uint32_t      Index = Tree->NodeCount++;
-        meta_node *Node  = Tree->Nodes + Index;
-        
-        Node->Parent = Tree->Parent ? Tree->Parent->Value : InvalidMetaNodeIndex;
-        Node->Index  = Index;
-        Node->Style  = StyleIndex;
-        Node->Type   = Type;
-        Node->Flags  = Flags;
-        Node->Hint   = 0;
-        
-        Result = Index;
-    }
-    
-    return Result;
-}
-
-
-static bool
-UIPushLayoutParent2(uint32_t NodeIndex, meta_tree *MetaTree, memory_arena *Arena)
-{
-    if(meta_tree::IsValid(MetaTree) && Arena)
-    {
-        meta_parent_node *ParentNode = PushStruct(Arena, meta_parent_node);
-        if(ParentNode)
-        {
-            ParentNode->Value = NodeIndex;
-            ParentNode->Prev  = MetaTree->Parent;
-
-            MetaTree->Parent = ParentNode;
-        }
-    }
+    layout::PushParent(LayoutIndex, LayoutTree, Arena);
 
     return true;
 }
 
 
-static bool
-UIPopLayoutParent2(uint32_t NodeIndex, meta_tree *MetaTree)
+bool component::Pop()
 {
-    if(meta_tree::IsValid(MetaTree))
-    {
-        if(MetaTree->Parent && MetaTree->Parent->Value == NodeIndex)
-        {
-            MetaTree->Parent = MetaTree->Parent->Prev;
-        }
-    }
+    layout::PopParent(LayoutIndex, LayoutTree);
 
     return true;
 }
-
 
 // --------
 
@@ -804,8 +640,7 @@ static uint64_t
 GetPipelineStateFootprint(const pipeline_params &Params)
 {
     uint64_t TreeSize = layout::GetLayoutTreeFootprint(Params.NodeCount);
-    uint64_t MetaSize = GetMetaTreeFootprint(Params.NodeCount) * 2;
-    uint64_t Result   = TreeSize + MetaSize;
+    uint64_t Result   = TreeSize;
 
     return Result;
 }
@@ -836,24 +671,13 @@ UICreatePipeline(const pipeline_params &Params)
 
         Pipeline.Tree = layout::PlaceLayoutTreeInMemory(Params.NodeCount, TreeMemory);
 
-        uint64_t MetaFootprint = GetMetaTreeFootprint(Params.NodeCount);
-        void    *MetaMemory0   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(meta_node));
-        void    *MetaMemory1   = PushArena(Pipeline.StateArena, MetaFootprint, AlignOf(meta_node));
-
-        Pipeline.MetaTrees[0] = PlaceMetaTreeInMemory(Params.NodeCount, MetaMemory0);
-        Pipeline.MetaTrees[1] = PlaceMetaTreeInMemory(Params.NodeCount, MetaMemory1);
-
         VOID_ASSERT(Pipeline.Tree);
     }
 
     // User State
     {
-        Pipeline.Type          = Params.Pipeline;
-        Pipeline.StyleArray    = Params.StyleArray;
-        Pipeline.StyleIndexMin = Params.StyleIndexMin;
-        Pipeline.StyleIndexMax = Params.StyleIndexMax;
+        Pipeline.Type = Params.Pipeline;
 
-        VOID_ASSERT(Pipeline.StyleArray && Pipeline.StyleIndexMin <= Pipeline.StyleIndexMax);
     }
 
     ++Context.PipelineCount;
@@ -876,15 +700,7 @@ UIBindPipeline(Pipeline UserPipeline)
             PopArenaTo(Pipeline.FrameArena, 0);
         }
 
-        Pipeline.ActiveMetaTree = (Pipeline.ActiveMetaTree + 1) % 2;
-        Pipeline.Bound          = true;
-
-        // Experimental
-        meta_tree *ActiveTree = Pipeline.GetActiveTree();
-        if (meta_tree::IsValid(ActiveTree))
-        {
-            ActiveTree->NodeCount = 0;
-        }
+        Pipeline.Bound = true;
     }
 
     return Pipeline;
@@ -899,15 +715,9 @@ UIUnbindPipeline(Pipeline UserPipeline)
 
     if(Pipeline.Bound)
     {
-        // Experimental.
-        meta_tree *ActiveTree = Pipeline.GetActiveTree();
-        meta_tree *StaticTree = ActiveTree == Pipeline.MetaTrees[0] ? Pipeline.MetaTrees[1] : Pipeline.MetaTrees[0];
-
-        MetaTrees(ActiveTree, StaticTree, Pipeline.Tree, Pipeline.StyleArray);
-
         layout::ComputeTreeLayout(Pipeline.Tree);
 
-        paint_buffer Buffer = layout::GeneratePaintBuffer(Pipeline.Tree, Pipeline.StyleArray, Pipeline.FrameArena);
+        paint_buffer Buffer = layout::GeneratePaintBuffer(Pipeline.Tree, Pipeline.FrameArena);
         if(Buffer.Commands && Buffer.Size)
         {
             ExecutePaintCommands(Buffer, Pipeline.FrameArena);

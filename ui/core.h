@@ -5,6 +5,8 @@
 namespace layout
 {
     struct layout_tree;
+
+    enum class NodeFlags : uint32_t;
 }
 
 
@@ -139,28 +141,6 @@ static void           * QueryNodeResource           (ResourceType Type, uint32_t
 // DOMAIN:  Node
 // =============================================================================
 
-struct pipeline;
-
-struct node
-{
-    uint32_t Index;
-
-    node FindChild(uint32_t Index, pipeline &Pipeline);
-    void Append(node Child, pipeline &Pipeline);
-    void SetOffset(float XOffset, float YOffset, pipeline &Pipeline);
-
-    bool IsClicked(pipeline &Pipeline);
-
-    void SetText(byte_string Text, resource_key FontKey, pipeline &Pipeline);
-    void SetTextInput(uint8_t *Buffer, uint64_t BufferSize, pipeline &Pipeline);
-    void SetScroll(float ScrollSpeed, AxisType Axis, pipeline &Pipeline);
-    void SetImage(byte_string Path, byte_string Group, pipeline &Pipeline);
-
-    void DebugBox(uint32_t Flag, bool Draw, pipeline &Pipeline);
-
-    bool IsValid();
-};
-
 // =============================================================================
 // DOMAIN: Pipeline
 // =============================================================================
@@ -188,24 +168,13 @@ struct meta_tree;
 struct pipeline
 {
     layout::layout_tree    *Tree;
-    meta_tree              *MetaTrees[2];
-    uint32_t                ActiveMetaTree;
-
     Pipeline                Type;
-    cached_style           *StyleArray;
-    uint32_t                StyleIndexMin;
-    uint32_t                StyleIndexMax;
 
     memory_arena           *StateArena;
     memory_arena           *FrameArena;
 
     bool                    Bound;
     uint64_t                NodeCount;
-
-    meta_tree * GetActiveTree()
-    {
-        return MetaTrees[ActiveMetaTree];
-    }
 };
 
 // --- Public API ---
@@ -242,22 +211,31 @@ static void_context GlobalVoidContext;
 
 // --- Public API ---
 
-static void_context & GetVoidContext();
-static void CreateVoidContext();
+static void_context & GetVoidContext     ();
+static void           CreateVoidContext  ();
 
 // =============================================================================
 // DOMAIN: Meta Tree
 // =============================================================================
 
-enum class NodeType
+struct component
 {
-    None      = 0,
-    Container = 1,
+    uint32_t              LayoutIndex;
+    layout::layout_tree * LayoutTree;
+
+    // Attributes
+
+    void SetStyle  (const cached_style *Style);
+
+    // Layout
+
+    bool Push      (memory_arena *Arena);
+    bool Pop       ();
+
+    // Helpers
+
+    component(const char *Name, layout::NodeFlags Flags, const cached_style *Style, layout::layout_tree *Tree);
+    component(byte_string Name, layout::NodeFlags Flags, const cached_style *Style, layout::layout_tree *Tree);
 };
-
-// --- Public API ---
-
-static uint64_t GetMetaTreeFootprint(uint64_t NodeCount);
-static uint64_t PlaceMetaTreeInMemory(uint64_t NodeCount);
 
 } // namespace core

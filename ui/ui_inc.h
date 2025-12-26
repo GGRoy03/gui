@@ -2,6 +2,4 @@
 #include "text.h"
 #include "paint.h"
 #include "layout.h"
-#include "component.h"
-
 #include "inspector.h"

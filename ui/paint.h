@@ -116,7 +116,7 @@ struct default_properties
     style_property<float>                  Softness;
     style_property<core::corner_radius> CornerRadius;
 
-    paint_properties MakePaintProperties(void)
+    paint_properties MakePaintProperties(void) const
     {
         paint_properties Result = {};
 
@@ -138,7 +138,7 @@ struct hovered_properties
     style_property<float>                  Softness;
     style_property<core::corner_radius> CornerRadius;
 
-    paint_properties InheritPaintProperties(const paint_properties &Default)
+    paint_properties InheritPaintProperties(const paint_properties &Default) const
     {
         paint_properties Result = Default;
 
@@ -161,7 +161,7 @@ struct focused_properties
     style_property<float>               Softness;
     style_property<core::corner_radius> CornerRadius;
 
-    paint_properties InheritPaintProperties(const paint_properties &Default)
+    paint_properties InheritPaintProperties(const paint_properties &Default) const
     {
         paint_properties Result = Default;
 

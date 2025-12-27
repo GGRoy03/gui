@@ -74,9 +74,6 @@ static bool IsInRange(float Min, float Max, float Value);
 
 static bool Mat3x3AreEqual    (matrix_3x3 *m1, matrix_3x3 *m2);
 
-namespace void_math
-{
-
 template <typename T>
 struct vector2_generic
 {
@@ -231,5 +228,3 @@ typedef struct rect_sdf_params
     vec2_float HalfSize;
     vec2_float PointPosition;
 } rect_sdf_params;
-
-}

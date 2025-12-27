@@ -84,9 +84,9 @@ struct layout_node
 std::unordered_map<uint64_t, uint32_t> KeyMap;
 
 
-struct layout_parent_node
+struct parent_node
 {
-    layout_parent_node *Prev;
+    parent_node *Prev;
     uint32_t            Value;
 };
 
@@ -101,7 +101,7 @@ struct layout_tree
     paint_command *PaintBuffer;
 
 
-    layout_parent_node *Parent;
+    parent_node *Parent;
 
     static bool IsValid(const layout_tree *Tree)
     {
@@ -243,13 +243,9 @@ struct layout_tree
 
 // --- Private Helpers ---
 
-static uint64_t GetLayoutTreeAlignment(void)
-{
-    uint64_t Result = AlignOf(layout_node);
-    return Result;
-}
 
-static uint64_t GetLayoutTreeFootprint(uint64_t NodeCount)
+static uint64_t
+GetLayoutTreeFootprint(uint64_t NodeCount)
 {
     uint64_t ArraySize = (NodeCount + 1) * sizeof(layout_node);
     uint64_t PaintSize = NodeCount * sizeof(paint_command);
@@ -257,7 +253,9 @@ static uint64_t GetLayoutTreeFootprint(uint64_t NodeCount)
     return Result;
 }
 
-static layout_tree * PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
+
+static layout_tree *
+PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
 {
     layout_tree *Result = 0;
 
@@ -395,18 +393,14 @@ CreateNode(uint64_t Key, NodeFlags Flags, const cached_style *Style, layout_tree
 
 
 static void
-PushParent(uint32_t NodeIndex, layout_tree *Tree, memory_arena *Arena)
+PushParent(uint32_t NodeIndex, layout_tree *Tree, parent_node *ParentNode)
 {
-    if(layout_tree::IsValid(Tree) && Arena)
+    if(layout_tree::IsValid(Tree) && ParentNode)
     {
-        layout_parent_node *Node = PushStruct(Arena, layout_parent_node);
-        if(Node)
-        {
-            Node->Prev  = Tree->Parent;
-            Node->Value = NodeIndex;
+        ParentNode->Prev  = Tree->Parent;
+        ParentNode->Value = NodeIndex;
 
-            Tree->Parent = Node;
-        }
+        Tree->Parent = ParentNode;
     }
 }
 
@@ -700,7 +694,6 @@ static bool HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint3
 static bool HandlePointerHover(vec2_float Position, uint32_t NodeIndex, layout_tree *Tree)
 {
     VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
-    VOID_ASSERT(layout_tree::IsValid(Tree));
 
     if(layout_tree::IsValid(Tree))
     {
@@ -1025,69 +1018,69 @@ static void ComputeTreeLayout(layout_tree *Tree)
 
 // --- Public API ---
 
-static paint_buffer
-GeneratePaintBuffer(layout_tree *Tree, memory_arena *Arena)
-{
-    uint32_t CommandCount = 0;
-
-    if(layout_tree::IsValid(Tree) && Arena)
-    {
-        uint32_t *NodeBuffer = PushArray(Arena, uint32_t, Tree->NodeCount);
-        uint32_t  WriteIndex = 0;
-        uint32_t  ReadIndex  = 0;
-    
-        NodeBuffer[WriteIndex++] = 0;
-    
-        while (NodeBuffer && ReadIndex < WriteIndex)
-        {
-            uint32_t     NodeIndex = NodeBuffer[ReadIndex++];
-            layout_node *Node      = Tree->GetNode(NodeIndex);
-    
-            if(layout_node::IsValid(Node) && Node->CachedStyle)
-            {
-                paint_command    &Command = Tree->PaintBuffer[CommandCount++];
-                paint_properties Paint    = Node->CachedStyle->Default.MakePaintProperties();
-    
-                if ((Node->State & NodeState::UseFocusedStyle) != NodeState::None)
-                {
-                    Paint = Node->CachedStyle->Focused.InheritPaintProperties(Paint);
-                } else
-                if ((Node->State & NodeState::UseHoveredStyle) != NodeState::None)
-                {
-                    Paint = Node->CachedStyle->Hovered.InheritPaintProperties(Paint);
-    
-                    Node->State &= ~NodeState::UseHoveredStyle;
-                }
-
-                Node->State &= ~NodeState::IsClicked;
-    
-                Command.Rectangle     = GetNodeOuterRect(Node);
-                Command.RectangleClip = {};
-    
-                Command.TextKey       = MakeNodeResourceKey(core::ResourceType::Text , Node->Index, Tree);
-                Command.ImageKey      = MakeNodeResourceKey(core::ResourceType::Image, Node->Index, Tree);
-    
-                Command.CornerRadius  = Paint.CornerRadius.Value;
-                Command.Softness      = Paint.Softness.Value;
-                Command.BorderWidth   = Paint.BorderWidth.Value;
-                Command.Color         = Paint.Color.Value;
-                Command.BorderColor   = Paint.BorderColor.Value;
-                Command.TextColor     = Paint.TextColor.Value;
-
-                for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
-                {
-                    NodeBuffer[WriteIndex++] = Child->Index;
-                }
-            }
-            else
-            {
-                break;
-            }
-        }
-    }
-
-    paint_buffer Result = {.Commands = Tree->PaintBuffer, .Size = CommandCount};
-    return Result;
-}
+//static paint_buffer
+//GeneratePaintBuffer(layout_tree *Tree, memory_arena *Arena)
+//{
+//    uint32_t CommandCount = 0;
+//
+//    if(layout_tree::IsValid(Tree) && Arena)
+//    {
+//        uint32_t *NodeBuffer = PushArray(Arena, uint32_t, Tree->NodeCount);
+//        uint32_t  WriteIndex = 0;
+//        uint32_t  ReadIndex  = 0;
+//    
+//        NodeBuffer[WriteIndex++] = 0;
+//    
+//        while (NodeBuffer && ReadIndex < WriteIndex)
+//        {
+//            uint32_t     NodeIndex = NodeBuffer[ReadIndex++];
+//            layout_node *Node      = Tree->GetNode(NodeIndex);
+//    
+//            if(layout_node::IsValid(Node) && Node->CachedStyle)
+//            {
+//                paint_command    &Command = Tree->PaintBuffer[CommandCount++];
+//                paint_properties Paint    = Node->CachedStyle->Default.MakePaintProperties();
+//    
+//                if ((Node->State & NodeState::UseFocusedStyle) != NodeState::None)
+//                {
+//                    Paint = Node->CachedStyle->Focused.InheritPaintProperties(Paint);
+//                } else
+//                if ((Node->State & NodeState::UseHoveredStyle) != NodeState::None)
+//                {
+//                    Paint = Node->CachedStyle->Hovered.InheritPaintProperties(Paint);
+//    
+//                    Node->State &= ~NodeState::UseHoveredStyle;
+//                }
+//
+//                Node->State &= ~NodeState::IsClicked;
+//    
+//                Command.Rectangle     = GetNodeOuterRect(Node);
+//                Command.RectangleClip = {};
+//    
+//                Command.TextKey       = MakeNodeResourceKey(core::ResourceType::Text , Node->Index, Tree);
+//                Command.ImageKey      = MakeNodeResourceKey(core::ResourceType::Image, Node->Index, Tree);
+//    
+//                Command.CornerRadius  = Paint.CornerRadius.Value;
+//                Command.Softness      = Paint.Softness.Value;
+//                Command.BorderWidth   = Paint.BorderWidth.Value;
+//                Command.Color         = Paint.Color.Value;
+//                Command.BorderColor   = Paint.BorderColor.Value;
+//                Command.TextColor     = Paint.TextColor.Value;
+//
+//                for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+//                {
+//                    NodeBuffer[WriteIndex++] = Child->Index;
+//                }
+//            }
+//            else
+//            {
+//                break;
+//            }
+//        }
+//    }
+//
+//    paint_buffer Result = {.Commands = Tree->PaintBuffer, .Size = CommandCount};
+//    return Result;
+//}
 
 } // namespace layout

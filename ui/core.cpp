@@ -108,18 +108,7 @@ GetResourceTypeFromKey(resource_key Key)
 static void *
 AllocateUIResource(uint64_t Size, resource_allocator *Allocator)
 {
-    void *Result = OSReserveMemory(Size);
-
-    if(Result)
-    {
-        bool Committed = OSCommitMemory(Result, Size);
-        VOID_ASSERT(Committed);
-
-        Allocator->AllocatedCount += 1;
-        Allocator->AllocatedBytes += Size;
-    }
-
-    return Result;
+    return 0;
 }
 
 // ----------------------------------------------------------------------------------
@@ -292,7 +281,8 @@ UpdateResourceTable(uint32_t Id, resource_key Key, void *Memory, resource_table 
     // This is weird. Kind of.
     if(Entry->Memory && Entry->Memory != Memory)
     {
-        OSRelease(Entry->Memory);
+        VOID_ASSERT(!"...");
+        // OSRelease(Entry->Memory);
     }
 
     Entry->Key          = Key;
@@ -326,20 +316,20 @@ QueryNodeResource(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tr
 //
 //node node::FindChild(uint32_t FindIndex, pipeline &Pipeline)
 //{
-//    node Result = { ::layout::FindChild(Index, FindIndex, Pipeline.Tree) };
+//    node Result = { ::layout::FindChild(Index, FindIndex, Tree) };
 //    return Result;
 //}
 //
 //
 //void node::Append(node Child, pipeline &Pipeline)
 //{
-//    ::layout::AppendChild(Index, Child.Index, Pipeline.Tree);
+//    ::layout::AppendChild(Index, Child.Index, Tree);
 //}
 //
 //
 //void node::SetOffset(float XOffset, float YOffset, pipeline &Pipeline)
 //{
-//    ::layout::SetNodeOffset(Index, XOffset, YOffset, Pipeline.Tree);
+//    ::layout::SetNodeOffset(Index, XOffset, YOffset, Tree);
 //}
 //
 //
@@ -350,7 +340,7 @@ QueryNodeResource(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tr
 //    void_context      &Context       = GetVoidContext();
 //    resource_table *ResourceTable = Context.ResourceTable;
 //
-//    auto  TextKey   = MakeNodeResourceKey(ResourceType::Text, Index, Pipeline.Tree);
+//    auto  TextKey   = MakeNodeResourceKey(ResourceType::Text, Index, Tree);
 //    auto  TextState = FindResourceByKey(TextKey, FindResourceFlag::AddIfNotFound, ResourceTable);
 //    auto *Text      = static_cast<text *>(TextState.Resource);
 //
@@ -392,7 +382,7 @@ QueryNodeResource(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tr
 //{
 //    void_context &Context  = GetVoidContext();
 //
-//    resource_key   Key   = MakeNodeResourceKey(ResourceType::ScrollRegion, Index, Pipeline.Tree);
+//    resource_key   Key   = MakeNodeResourceKey(ResourceType::ScrollRegion, Index, Tree);
 //    resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 //
 //    uint64_t Size   = layout::GetScrollRegionFootprint();
@@ -432,27 +422,77 @@ struct pointer_state
 
     // Targets?
     bool     IsCaptured; // This might be, uhhh, a state flag with some other states.
-    Pipeline PipelineSource;
-
-    // Other Stuff
 };
 
-static void
-BeginFrame(vec2_int WindowSize)
-{
-    void_context       &Context   = GetVoidContext();
-    pointer_event_list &EventList = OSGetInputs()->PointerEventList;
 
+static void
+PushPointerEvent(pointer_event_list *List, pointer_event_node *Node, PointerEvent Type)
+{
+    VOID_ASSERT(Node);
+
+    if(List && Type != PointerEvent::None)
+    {
+        Node->Next = 0;
+        Node->Prev = 0;
+        Node->Value.Type = Type;
+
+        AppendToDoublyLinkedList(List, Node, List->Count);
+    }
+}
+
+
+static void
+PushPointerMoveEvent(pointer_event_list *List, pointer_event_node *Node, vec2_float Position, vec2_float Delta)
+{
+    if(Node)
+    {
+        Node->Value.Position = Position;
+        Node->Value.Delta = Delta;
+
+        PushPointerEvent(List, Node, PointerEvent::Move);
+    }
+}
+
+
+static void
+PushPointerClickEvent(pointer_event_list *List, pointer_event_node *Node, uint32_t Button, vec2_float Position)
+{
+    PushPointerEvent(List, Node, PointerEvent::Click);
+
+    if(Node)
+    {
+        Node->Value.ButtonMask = Button;
+        Node->Value.Position = Position;
+    }
+}
+
+
+static void
+PushPointerReleaseEvent(pointer_event_list *List, pointer_event_node *Node, uint32_t Button, vec2_float Position)
+{
+    if(Node)
+    {
+        Node->Value.ButtonMask = Button;
+        Node->Value.Position = Position;
+
+        PushPointerEvent(List, Node, PointerEvent::Release);
+    }
+}
+
+
+// We take this tree parameter for simplicity while we refactor this part
+
+static void
+BeginFrame(float Width, float Height, const pointer_event_list &EventList, layout::layout_tree *Tree)
+{
+    void_context &Context = GetVoidContext();
+
+    // Obviously this is temporary. Unsure how I want to structure this yet.
     static pointer_state PointerStates[1];
 
-    // It seems like processing the pointer events here is the better idea.
-    // But we need some kind of UI side state. Which maps to some pointer.
-    // One bad thing that can probably be fixed with better logic is that
-    // there is a decent amount of shared state.
-
-    IterateLinkedList((&EventList), pointer_event_node *, EventNode)
+    for(pointer_event_node *EventNode = EventList.First; EventNode != 0; EventNode = EventNode->Next)
     {
-        pointer_event &Event = EventNode->Value;
+        const pointer_event &Event = EventNode->Value;
 
         switch(Event.Type)
         {
@@ -460,56 +500,30 @@ BeginFrame(vec2_int WindowSize)
         case PointerEvent::Move:
         {
             pointer_state &State = PointerStates[0];
-
             State.LastPosition = State.Position;
             State.Position     = Event.Position;
 
             if(State.IsCaptured)
             {
-                // Not great.
-                pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
-
-                layout::HandlePointerMove(Event.Delta, Pipeline.Tree);
+                layout::HandlePointerMove(Event.Delta, Tree);
             }
         } break;
 
         case PointerEvent::Click:
         {
             pointer_state &State = PointerStates[0];
-
             State.ButtonMask |= Event.ButtonMask;
-
-            for(uint32_t Idx = 0; Idx < Context.PipelineCount; ++Idx)
-            {
-                pipeline &Pipeline = Context.PipelineArray[Idx];
-
-                // So here, we'd call something like: IsMouseOverPipeline
-                if(true)
-                {
-                    State.IsCaptured     = layout::HandlePointerClick(State.Position, State.ButtonMask, 0, Pipeline.Tree);
-                    State.PipelineSource = Pipeline.Type;
-                }
-
-                if(State.IsCaptured)
-                {
-                    break;
-                }
-            }
+            State.IsCaptured  = layout::HandlePointerClick(State.Position, State.ButtonMask, 0, Tree);
         } break;
 
         case PointerEvent::Release:
         {
             pointer_state &State = PointerStates[0];
-
             State.ButtonMask &= ~Event.ButtonMask;
 
             if(State.IsCaptured)
             {
-                // Not great.
-                pipeline &Pipeline = Context.PipelineArray[static_cast<uint32_t>(State.PipelineSource)];
-
-                layout::HandlePointerRelease(State.Position, State.ButtonMask, 0, Pipeline.Tree);
-
+                layout::HandlePointerRelease(State.Position, State.ButtonMask, 0, Tree);
                 State.IsCaptured = false;
             }
         } break;
@@ -531,20 +545,12 @@ BeginFrame(vec2_int WindowSize)
 
         if(State.ButtonMask == 0)
         {
-            for(uint32_t Idx = 0; Idx < Context.PipelineCount; ++Idx)
-            {
-                pipeline &Pipeline = Context.PipelineArray[Idx];
-
-                bool Handled = layout::HandlePointerHover(State.Position, 0, Pipeline.Tree);
-                if(Handled)
-                {
-                    break;
-                }
-            }
+            layout::HandlePointerHover(State.Position, 0, Tree);
         }
     }
 
-    Context.WindowSize = WindowSize;
+    Context.Width  = Width;
+    Context.Height = Height;
 }
 
 static void
@@ -568,29 +574,22 @@ GetVoidContext(void)
 static void
 CreateVoidContext(void)
 {
-    void_context &Context = GetVoidContext();
-
-    // Memory
-    {
-        Context.StateArena = AllocateArena({});
-
-        VOID_ASSERT(Context.StateArena);
-    }
+    // void_context &Context = GetVoidContext();
 
     // State
     {
-        resource_table_params TableParams =
-        {
-            .HashSlotCount = 512,
-            .EntryCount    = 2048,
-        };
+        // resource_table_params TableParams =
+        //{
+        //    .HashSlotCount = 512,
+        //    .EntryCount    = 2048,
+        //};
 
-        uint64_t TableFootprint = GetResourceTableFootprint(TableParams);
-        void    *TableMemory    = PushArena(Context.StateArena, TableFootprint, 0);
+        //uint64_t TableFootprint = GetResourceTableFootprint(TableParams);
+        //void    *TableMemory    = PushArena(Context.StateArena, TableFootprint, 0);
 
-        Context.ResourceTable =  PlaceResourceTableInMemory(TableParams, TableMemory);
+        //Context.ResourceTable =  PlaceResourceTableInMemory(TableParams, TableMemory);
 
-        VOID_ASSERT(Context.ResourceTable);
+        //VOID_ASSERT(Context.ResourceTable);
     }
 }
 
@@ -618,11 +617,17 @@ void component::SetStyle(const cached_style *Style)
 }
 
 
-bool component::Push(memory_arena *Arena)
+bool component::Push(layout::parent_node *Node)
 {
-    layout::PushParent(LayoutIndex, LayoutTree, Arena);
+    bool Result = false;
 
-    return true;
+    if(Node)
+    {
+        layout::PushParent(LayoutIndex, LayoutTree, Node);
+        Result = true;
+    }
+
+    return Result;
 }
 
 
@@ -632,100 +637,5 @@ bool component::Pop()
 
     return true;
 }
-
-// --------
-
-
-static uint64_t
-GetPipelineStateFootprint(const pipeline_params &Params)
-{
-    uint64_t TreeSize = layout::GetLayoutTreeFootprint(Params.NodeCount);
-    uint64_t Result   = TreeSize;
-
-    return Result;
-}
-
-// ==================================================================================
-// @Public : Pipeline API
-
-// TODO: Error check.
-
-static void
-UICreatePipeline(const pipeline_params &Params)
-{
-    void_context &Context  = GetVoidContext();
-    pipeline  &Pipeline = Context.PipelineArray[static_cast<uint32_t>(Params.Pipeline)];
-
-    // Memory
-    {
-        Pipeline.StateArena = AllocateArena({.ReserveSize = GetPipelineStateFootprint(Params)});
-        Pipeline.FrameArena = AllocateArena({.ReserveSize = Params.FrameBudget});
-
-        VOID_ASSERT(Pipeline.StateArena && Pipeline.FrameArena);
-    }
-
-    // UI State
-    {
-        uint64_t TreeFootprint  = layout::GetLayoutTreeFootprint(Params.NodeCount);
-        void    *TreeMemory     = PushArena(Pipeline.StateArena, TreeFootprint, layout::GetLayoutTreeAlignment());
-
-        Pipeline.Tree = layout::PlaceLayoutTreeInMemory(Params.NodeCount, TreeMemory);
-
-        VOID_ASSERT(Pipeline.Tree);
-    }
-
-    // User State
-    {
-        Pipeline.Type = Params.Pipeline;
-
-    }
-
-    ++Context.PipelineCount;
-}
-
-
-// This probably should be done in frame start. Idk about that whole bind/unbind stuff?
-
-
-static pipeline &
-UIBindPipeline(Pipeline UserPipeline)
-{
-    void_context &Context  = GetVoidContext();
-    pipeline  &Pipeline = Context.PipelineArray[static_cast<uint32_t>(UserPipeline)];
-
-    if(!Pipeline.Bound)
-    {
-        if(Pipeline.FrameArena)
-        {
-            PopArenaTo(Pipeline.FrameArena, 0);
-        }
-
-        Pipeline.Bound = true;
-    }
-
-    return Pipeline;
-}
-
-
-static void
-UIUnbindPipeline(Pipeline UserPipeline)
-{
-    void_context &Context  = GetVoidContext();
-    pipeline     &Pipeline = Context.PipelineArray[static_cast<uint32_t>(UserPipeline)];
-
-    if(Pipeline.Bound)
-    {
-        layout::ComputeTreeLayout(Pipeline.Tree);
-
-        paint_buffer Buffer = layout::GeneratePaintBuffer(Pipeline.Tree, Pipeline.FrameArena);
-        if(Buffer.Commands && Buffer.Size)
-        {
-            ExecutePaintCommands(Buffer, Pipeline.FrameArena);
-        }
-
-        Pipeline.Bound = false;
-    }
-}
-
 
 } // namespace core

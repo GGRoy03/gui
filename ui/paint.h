@@ -184,4 +184,4 @@ struct cached_style
     focused_properties Focused;
 };
 
-static void ExecutePaintCommands(paint_buffer Buffer, memory_arena *Arena);
+// static void ExecutePaintCommands(paint_buffer Buffer, memory_arena *Arena);

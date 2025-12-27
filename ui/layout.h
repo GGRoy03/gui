@@ -5,6 +5,7 @@ namespace layout
 
 struct layout_tree;
 
+
 constexpr uint32_t InvalidIndex = 0xFFFFFFFFu; // TODO: HIDE
 
 
@@ -19,12 +20,18 @@ enum class NodeFlags : uint32_t
     Indestructible = 1 << 4, // Node cannot be destroyed by normal cleanup paths
 };
 
+// --- Tree Manipulation ---
+
+static uint64_t         GetLayoutTreeFootprint  (uint64_t NodeCount);
+static layout_tree *    PlaceLayoutTreeInMemory (uint64_t NodeCount, void *Memory);
+
 // --- Node Manipulation ---
 
+struct parent_node;
 
 static uint32_t CreateNode     (uint64_t Key, NodeFlags Flags, const cached_style *Style, layout_tree *Tree);
 static bool     AppendChild    (uint32_t ParentIndex, uint32_t ChildIndex, layout_tree *Tree);
-static void     PushParent     (uint32_t NodeIndex, layout_tree *Tree, memory_arena *Arena);
+static void     PushParent     (uint32_t NodeIndex, layout_tree *Tree, parent_node *Node);
 static void     PopParent      (uint32_t NodeIndex, layout_tree *Tree);
 
 
@@ -51,12 +58,6 @@ static void     SetNodeOffset  (uint32_t NodeIndex, float X, float Y, layout_tre
 // Most users should not call these directly.
 // -----------------------------------------------------------------------------
 
-// Memory and construction helpers for layout trees.
-static uint64_t         GetLayoutTreeAlignment  (void);
-static uint64_t         GetLayoutTreeFootprint  (uint64_t NodeCount);
-static layout_tree *    PlaceLayoutTreeInMemory (uint64_t NodeCount, void *Memory);
-static void             PrepareTreeForFrame     (layout_tree *Tree);
-
 // Compute layout for the entire tree.
 static void             ComputeTreeLayout       (layout_tree *Tree);
 
@@ -67,30 +68,10 @@ static bool             HandlePointerHover      (vec2_float Position, uint32_t N
 static void             HandlePointerMove       (vec2_float Delta, layout_tree *Tree);
 
 // Rendering and styling helpers.
-static paint_buffer  GeneratePaintBuffer     (layout_tree *Tree, memory_arena *Arena);
-
+// static paint_buffer  GeneratePaintBuffer     (layout_tree *Tree, memory_arena *Arena);
 // ------------------------------------------------------------------------------------
 // @internal: Layout Resources
-//
-// scroll_region:
-//  Opaque pointers the user shouldn't care about.
-//
-// scroll_region_params:
-//  Parameters structure used when calling PlaceScrollRegionInMemory.
-//  PixelPerLine: Specifies the speed at which the content will scroll.
-//  Axis:         Specifies the axis along which the content scrolls.
-//
-// GetScrollRegionFootprint & PlaceScrollRegionInMemory
-//   Used to initilialize in memory a scroll region. You may specify parameters to modify the behavior of the scroll region.
-//   Note that you may re-use the same memory with different parameters to modify the scroll-region.
-//
-//   Example Usage:
-//   uint64_t   Size   = GetScrollRegionFootprint(); -> Get the size needed to allocate
-//   void *Memory = malloc(Size);               -> Allocate (Do not check for null yet!)
-//
-//   scroll_region_params Params = {.PixelPerLine = ScrollSpeed, .Axis = Axis};  -> Prepare the params
-//   scroll_region *ScrollRegion = PlaceScrollRegionInMemory(Params, Memory); -> Initialize
-//   if(ScrollRegion)                                                            -> Now check if it succeeded
+
 
 struct scroll_region;
 
@@ -100,7 +81,7 @@ struct scroll_region_params
     core::AxisType Axis;
 };
 
-static uint64_t           GetScrollRegionFootprint   (void);
+static uint64_t        GetScrollRegionFootprint   (void);
 static scroll_region * PlaceScrollRegionInMemory  (scroll_region_params Params, void *Memory);
 
 

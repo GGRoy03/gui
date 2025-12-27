@@ -5,6 +5,7 @@
 namespace layout
 {
     struct layout_tree;
+    struct parent_node;
 
     enum class NodeFlags : uint32_t;
 }
@@ -137,54 +138,71 @@ static void             UpdateResourceTable         (uint32_t Id, resource_key K
 
 static void           * QueryNodeResource           (ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tree, resource_table *Table);
 
-// =============================================================================
-// DOMAIN:  Node
-// =============================================================================
+// 
 
-// =============================================================================
-// DOMAIN: Pipeline
-// =============================================================================
+// 
 
-enum class Pipeline
+enum class PointerSource
 {
-    Default = 0,
-    Count   = 1,
+    None       = 0,
+    Mouse      = 1,
+    Touch      = 2,
+    Pen        = 3,
+    Controller = 4,
 };
 
-constexpr uint32_t PipelineCount = static_cast<uint32_t>(Pipeline::Count);
-
-struct pipeline_params
+enum class PointerEvent
 {
-    uint64_t      NodeCount;
-    uint64_t      FrameBudget;
-    Pipeline      Pipeline;
-    cached_style *StyleArray;
-    uint32_t      StyleIndexMin;
-    uint32_t      StyleIndexMax;
+    None    = 0,
+    Move    = 1,
+    Click   = 2,
+    Release = 3,
 };
 
-struct meta_tree;
+constexpr uint32_t BUTTON_NONE      = 0;
+constexpr uint32_t BUTTON_PRIMARY   = 1u << 0;
+constexpr uint32_t BUTTON_SECONDARY = 1u << 1;
 
-struct pipeline
+struct input_pointer
 {
-    layout::layout_tree    *Tree;
-    Pipeline                Type;
-
-    memory_arena           *StateArena;
-    memory_arena           *FrameArena;
-
-    bool                    Bound;
-    uint64_t                NodeCount;
+    uint32_t      Id;
+    PointerSource Source;
+    vec2_float    Position;
+    vec2_float    Delta;
+    uint32_t      ButtonMask;
+    uint32_t      LastButtonMask;
 };
 
-// --- Public API ---
+struct pointer_event
+{
+    PointerEvent Type;
+    uint32_t     PointerId;
+    vec2_float   Position;
+    vec2_float   Delta;
+    uint32_t     ButtonMask;
+};
 
-static void       BeginFrame      (vec2_int WindowSize);
-static void       EndFrame        ();
+struct pointer_event_node
+{
+    pointer_event_node *Prev;
+    pointer_event_node *Next;
+    pointer_event       Value;
+};
 
-static void       CreatePipeline  (const pipeline_params &Params);
-static pipeline & BindPipeline    (Pipeline Pipeline);
-static void       UnbindPipeline  (Pipeline Pipeline);
+struct pointer_event_list
+{
+    pointer_event_node *First;
+    pointer_event_node *Last;
+    uint32_t            Count;
+};
+
+static void
+PushPointerMoveEvent(pointer_event_list *List, pointer_event_node *Node, vec2_float Position, vec2_float Delta);
+static void
+PushPointerClickEvent(pointer_event_list *List, pointer_event_node *Node, uint32_t Button, vec2_float Position);
+static void
+PushPointerReleaseEvent(pointer_event_list *List, pointer_event_node *Node, uint32_t Button, vec2_float Position);
+
 
 // =============================================================================
 // DOMAIN: Fonts & Context
@@ -199,17 +217,22 @@ struct font_list
 
 struct void_context
 {
-    memory_arena   *StateArena;
     resource_table *ResourceTable;
-    pipeline        PipelineArray[PipelineCount];
-    uint32_t        PipelineCount;
     font_list       Fonts;
-    vec2_int        WindowSize;
+
+    // Frame State
+
+    float Width;
+    float Height;
 };
 
 static void_context GlobalVoidContext;
 
 // --- Public API ---
+
+
+static void BeginFrame  (float Width, float Height, const pointer_event_list &EventList, layout::layout_tree *Tree);
+static void EndFrame    (void);
 
 static void_context & GetVoidContext     ();
 static void           CreateVoidContext  ();
@@ -229,7 +252,7 @@ struct component
 
     // Layout
 
-    bool Push      (memory_arena *Arena);
+    bool Push      (layout::parent_node *ParentNode);
     bool Pop       ();
 
     // Helpers

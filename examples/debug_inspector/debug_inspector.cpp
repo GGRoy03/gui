@@ -292,6 +292,7 @@ struct rect_group_params
     rect_float Clip;
 };
 
+
 struct rect_group_node
 {
     rect_group_node  *Next;
@@ -343,6 +344,7 @@ PushDataInBatchList(memory_arena *Arena, render_batch_list &BatchList)
         Node = PushArray<render_batch_node>(Arena, 1);
         if(Node)
         {
+            Node->Next               = 0;
             Node->Value.ByteCount    = 0;
             Node->Value.ByteCapacity = VOID_KILOBYTE(10);
             Node->Value.Memory       = PushArray<uint8_t>(Arena, Node->Value.ByteCapacity);
@@ -357,12 +359,11 @@ PushDataInBatchList(memory_arena *Arena, render_batch_list &BatchList)
                 BatchList.Last->Next = Node;
                 BatchList.Last       = Node;
             }
-
-
-            BatchList.ByteCount  += BatchList.BytesPerInstance;
-            BatchList.BatchCount += 1;
         }
     }
+
+    BatchList.ByteCount += BatchList.BytesPerInstance;
+    BatchList.BatchCount += 1;
 
     if(Node)
     {
@@ -385,6 +386,9 @@ GetRenderPass(memory_arena *Arena, RenderPassType Type, render_pass_list &PassLi
     if (!Result || Result->Value.Type != Type)
     {
         Result = PushStruct<render_pass_node>(Arena);
+        Result->Value.Params.UI.First = 0;
+        Result->Value.Params.UI.Last  = 0;
+        Result->Value.Params.UI.Count = 0;
         Result->Value.Type = Type;
 
         if (!PassList.First)
@@ -419,7 +423,7 @@ struct d3d11_renderer
     ID3D11DeviceContext    *DeviceContext;
     IDXGISwapChain1        *SwapChain;
     ID3D11RenderTargetView *RenderView;
-    ID3D11BlendState       *DefaultBlendState;
+    ID3D11BlendState       *BlendState;
     ID3D11SamplerState     *AtlasSamplerState;
 
     // UI Objects
@@ -455,7 +459,7 @@ D3D11Initialize(HWND HWindow)
     {
         UINT CreateFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
         #ifndef NDEBUG
-        CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
+        // CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
         #endif
         D3D_FEATURE_LEVEL Levels[] = { D3D_FEATURE_LEVEL_11_0 };
         D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
@@ -565,6 +569,8 @@ D3D11Initialize(HWND HWindow)
         BlendDesc.RenderTarget[0].DestBlendAlpha        = D3D11_BLEND_ZERO;
         BlendDesc.RenderTarget[0].BlendOpAlpha          = D3D11_BLEND_OP_ADD;
         BlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+        Result.Device->CreateBlendState(&BlendDesc, &Result.BlendState);
     }
 
     // Samplers
@@ -595,6 +601,145 @@ D3D11Initialize(HWND HWindow)
 
     return Result;
 }
+
+
+static void
+D3D11RenderFrame(d3d11_renderer &Renderer, float Width, float Height)
+{
+    const render_pass_list &PassList = Renderer.PassList;
+
+    float ClearColor[4] = {0.f, 0.f, 0.f, 1.f};
+    Renderer.DeviceContext->ClearRenderTargetView(Renderer.RenderView, ClearColor);
+
+    for(render_pass_node *PassNode = PassList.First; PassNode != 0; PassNode = PassNode->Next)
+    {
+        render_pass Pass = PassNode->Value;
+
+        switch(Pass.Type)
+        {
+
+        case RenderPassType::UI:
+        {
+            render_pass_params_ui Params = Pass.Params.UI;
+
+            // Rasterizer
+            D3D11_VIEWPORT Viewport = {0.f, 0.f, Width, Height, 0.f, 1.f};
+            Renderer.DeviceContext->RSSetState(Renderer.RasterState);
+            Renderer.DeviceContext->RSSetViewports(1, &Viewport);
+
+            for(rect_group_node *RectNode = Params.First; RectNode != 0; RectNode = RectNode->Next)
+            {
+                render_batch_list BatchList  = RectNode->BatchList;
+                rect_group_params RectParams = RectNode->Params;
+
+                // Upload Data
+                ID3D11Buffer *VtxBuffer = Renderer.VtxBuffer;
+                {
+                    D3D11_MAPPED_SUBRESOURCE Resource = {0};
+                    Renderer.DeviceContext->Map(static_cast<ID3D11Resource *>(VtxBuffer), 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
+
+                    uint8_t *WritePointer = static_cast<uint8_t *>(Resource.pData);
+                    uint64_t WriteOffset  = 0;
+
+                    for(render_batch_node *BatchNode = BatchList.First; BatchNode != 0; BatchNode = BatchNode->Next)
+                    {
+                        render_batch Batch = BatchNode->Value;
+
+                        uint64_t WriteSize = Batch.ByteCount;
+                        MemoryCopy(WritePointer + WriteOffset, Batch.Memory, WriteSize);
+                        WriteOffset += WriteSize;
+                    }
+
+                    Renderer.DeviceContext->Unmap(static_cast<ID3D11Resource *>(VtxBuffer), 0);
+                }
+
+                // Uniform Buffers
+                ID3D11Buffer *UniformBuffer = Renderer.UniformBuffer;
+                {
+                    d3d11_rect_uniform_buffer Uniform = {};
+                    Uniform.Transform[0]        = {{1.f, 0.f, 0.f, 0.f}};
+                    Uniform.Transform[1]        = {{0.f, 1.f, 0.f, 0.f}};
+                    Uniform.Transform[2]        = {{0.f, 0.f, 1.f, 0.f}};
+                    Uniform.ViewportSizeInPixel = {Width, Height};
+                    Uniform.AtlasSizeInPixel    = {};
+
+                    D3D11_MAPPED_SUBRESOURCE Resource = {};
+                    Renderer.DeviceContext->Map(static_cast<ID3D11Resource *>(UniformBuffer), 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
+                    MemoryCopy(Resource.pData, &Uniform, sizeof(Uniform));
+                    Renderer.DeviceContext->Unmap(static_cast<ID3D11Resource *>(UniformBuffer), 0);
+                }
+
+                // Output Merger
+                {
+                    Renderer.DeviceContext->OMSetRenderTargets(1, &Renderer.RenderView, 0);
+                    Renderer.DeviceContext->OMSetBlendState(Renderer.BlendState, 0, 0xFFFFFFFF);
+                }
+
+                // Input Assembler
+                {
+                    uint32_t Stride = BatchList.BytesPerInstance;
+                    uint32_t Offset = 0;
+
+                    Renderer.DeviceContext->IASetVertexBuffers(0, 1, &VtxBuffer, &Stride, &Offset);
+                    Renderer.DeviceContext->IASetInputLayout(Renderer.InputLayout);
+                    Renderer.DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+                }
+
+                // Vertex Shader
+                {
+                    Renderer.DeviceContext->VSSetShader(Renderer.VtxShader, 0, 0);
+                    Renderer.DeviceContext->VSSetConstantBuffers(0, 1, &UniformBuffer);
+                }
+
+                // Pixel Shader
+                {
+                    Renderer.DeviceContext->PSSetShader(Renderer.PxlShader, 0, 0);
+                }
+
+                // Scissor
+                {
+                    rect_float Clip = RectParams.Clip;
+                    D3D11_RECT Rect = {};
+
+                    if(Clip.Left == 0 && Clip.Top == 0 && Clip.Right == 0 && Clip.Bottom == 0)
+                    {
+                        Rect.left   = 0;
+                        Rect.right  = Width;
+                        Rect.top    = 0;
+                        Rect.bottom = Height;
+                    } else
+                    if(Clip.Left > Clip.Right || Clip.Top > Clip.Bottom)
+                    {
+                        // No Op
+                    }
+                    else
+                    {
+                        Rect.left   = Clip.Left;
+                        Rect.top    = Clip.Top;
+                        Rect.right  = Clip.Right;
+                        Rect.bottom = Clip.Bottom;
+                    }
+
+                    Renderer.DeviceContext->RSSetScissorRects(1, &Rect);
+                }
+
+                uint32_t InstanceCount = BatchList.ByteCount / BatchList.BytesPerInstance;
+                Renderer.DeviceContext->DrawInstanced(4, InstanceCount, 0, 0);
+            }
+
+        } break;
+
+        default: break;
+
+        }
+    }
+
+    Renderer.SwapChain->Present(0, 0);
+
+    Renderer.PassList.First = 0;
+    Renderer.PassList.Last = 0;
+}
+
 
 // ====================================================
 // Core UI Logic
@@ -750,7 +895,11 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
             if(!GroupNode)
             {
                 GroupNode = PushStruct<rect_group_node>(Renderer.FrameArena);
-                GroupNode->BatchList.BytesPerInstance = sizeof(0);
+                GroupNode->BatchList.First            = nullptr;
+                GroupNode->BatchList.Last             = nullptr;
+                GroupNode->BatchList.BatchCount       = 0;
+                GroupNode->BatchList.ByteCount        = 0;
+                GroupNode->BatchList.BytesPerInstance = sizeof(render_rect);
                 GroupNode->Params                     = GroupParams;
 
                 if(!UIParams.First)
@@ -777,31 +926,31 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
                 case RenderCommandType::Rectangle:
                 {
                     auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Renderer.FrameArena, BatchList));
-                    Rect->RectBounds    = {};
+                    Rect->RectBounds    = Command.Box;
                     Rect->TextureSource = {};
-                    Rect->ColorTL       = {};
-                    Rect->ColorBL       = {};
-                    Rect->ColorTR       = {};
-                    Rect->ColorBR       = {};
-                    Rect->CornerRadius  = {};
-                    Rect->BorderWidth   = {};
-                    Rect->Softness      = {};
-                    Rect->SampleTexture = {};
+                    Rect->ColorTL       = Command.Rect.Color;
+                    Rect->ColorBL       = Command.Rect.Color;
+                    Rect->ColorTR       = Command.Rect.Color;
+                    Rect->ColorBR       = Command.Rect.Color;
+                    Rect->CornerRadius  = Command.Rect.CornerRadius;
+                    Rect->BorderWidth   = 0;
+                    Rect->Softness      = 2;
+                    Rect->SampleTexture = 0;
                 } break;
 
                 case RenderCommandType::Border:
                 {
                     auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Renderer.FrameArena, BatchList));
-                    Rect->RectBounds    = {};
+                    Rect->RectBounds    = Command.Box;
                     Rect->TextureSource = {};
-                    Rect->ColorTL       = {};
-                    Rect->ColorBL       = {};
-                    Rect->ColorTR       = {};
-                    Rect->ColorBR       = {};
-                    Rect->CornerRadius  = {};
-                    Rect->BorderWidth   = {};
-                    Rect->Softness      = {};
-                    Rect->SampleTexture = {};
+                    Rect->ColorTL       = Command.Border.Color;
+                    Rect->ColorBL       = Command.Border.Color;
+                    Rect->ColorTR       = Command.Border.Color;
+                    Rect->ColorBR       = Command.Border.Color;
+                    Rect->CornerRadius  = Command.Border.CornerRadius;
+                    Rect->BorderWidth   = Command.Border.Width;
+                    Rect->Softness      = 2;
+                    Rect->SampleTexture = 0;
                 } break;
 
                 default: break;
@@ -854,12 +1003,22 @@ WinMain(HINSTANCE HInstance, HINSTANCE PrevInstance, LPSTR CmdLine, int CmdShow)
 
     ShowWindow(WindowState.Handle, CmdShow);
 
-    inspector                Inspector = {};
+    inspector          Inspector = {};
     pointer_event_list EventList = {};
-    d3d11_renderer           Renderer  = D3D11Initialize(WindowState.Handle);
+    d3d11_renderer     Renderer  = D3D11Initialize(WindowState.Handle);
 
     while (WindowState.Running)
     {
+        if (Inspector.FrameArena)
+        {
+            PopArenaTo(Inspector.FrameArena, 0);
+        }
+
+        if (Renderer.FrameArena)
+        {
+            PopArenaTo(Renderer.FrameArena, 0);
+        }
+
         MSG Message;
         while (PeekMessageA(&Message, 0, 0, 0, PM_REMOVE))
         {
@@ -874,16 +1033,12 @@ WinMain(HINSTANCE HInstance, HINSTANCE PrevInstance, LPSTR CmdLine, int CmdShow)
 
         BeginFrame(1901.f, 1041.f, EventList, Inspector.LayoutTree);
 
-        float Color[4] = {0.f, 0.f, 0.f, 1.f};
-        Renderer.DeviceContext->ClearRenderTargetView(Renderer.RenderView, Color);
-
         RenderInspectorUI(Inspector, Renderer);
-
-        Renderer.SwapChain->Present(1, 0);
+        D3D11RenderFrame(Renderer, 1901.f, 1041.f);
 
         EndFrame();
 
-        Sleep(5);
+        Sleep(10);
     }
 
     return 0;

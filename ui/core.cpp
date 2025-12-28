@@ -541,15 +541,15 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, ui_la
     // If the ButtonMask is 0 then it means the pointer is in a hover state.
     // We look for that hover target in any of the pipelines.
 
-    for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
-    {
-        pointer_state &State = PointerStates[PointerIdx];
+    //for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
+    //{
+    //    pointer_state &State = PointerStates[PointerIdx];
 
-        if(State.ButtonMask == 0)
-        {
-            HandlePointerHover(State.Position, 0, Tree);
-        }
-    }
+    //    if(State.ButtonMask == 0)
+    //    {
+    //        HandlePointerHover(State.Position, 0, Tree);
+    //    }
+    //}
 
     Context.Width  = Width;
     Context.Height = Height;

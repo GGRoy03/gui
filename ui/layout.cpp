@@ -6,26 +6,20 @@
 
 #include <unordered_map>
 
-namespace layout
-{
-
 enum class NodeState : uint32_t;
 
-}
+template<>
+struct enable_bitmask_operators<NodeState> : std::true_type {};
 
 template<>
-struct enable_bitmask_operators<layout::NodeState> : std::true_type {};
-
-template<>
-struct enable_bitmask_operators<layout::NodeFlags> : std::true_type {};
-
-namespace layout
-{
+struct enable_bitmask_operators<NodeFlags> : std::true_type {};
 
 // =============================================================================
 // DOMAIN: Layout Tree & Nodes
 // =============================================================================
 
+// Obviously remove this from global. (Don't even want to use STD)
+std::unordered_map<uint64_t, uint32_t> KeyMap;
 
 enum class NodeState : uint32_t
 {
@@ -36,6 +30,7 @@ enum class NodeState : uint32_t
     IsClicked          = 1 << 3,
 };
 
+
 struct axes
 {
     float Width;
@@ -43,7 +38,7 @@ struct axes
 };
 
 
-struct layout_node
+struct ui_layout_node
 {
     uint32_t            Parent;
     uint32_t            First;
@@ -63,7 +58,7 @@ struct layout_node
     Alignment           XAlign;
     Alignment           YAlign;
     LayoutDirection     Direction;
-    core::padding       Padding;
+    padding             Padding;
     float               Spacing;
 
     vec2_float          VisualOffset;
@@ -72,207 +67,167 @@ struct layout_node
 
     NodeState           State;
     NodeFlags           Flags;
-    const cached_style *CachedStyle;
-
-    static bool IsValid(const layout_node *Node)
-    {
-        return Node && Node->Index != InvalidIndex;
-    }
 };
-
-// Obviously remove this from global. (Don't even want to use STD)
-std::unordered_map<uint64_t, uint32_t> KeyMap;
 
 
 struct parent_node
 {
     parent_node *Prev;
-    uint32_t            Value;
+    uint32_t     Value;
 };
 
 
-struct layout_tree
+struct ui_node_buffer
 {
-    uint64_t       NodeCapacity;
-    uint64_t       NodeCount;
-    layout_node   *Nodes;
-    uint32_t       RootIndex;
-    uint32_t       CapturedNodeIndex;
-    paint_command *PaintBuffer;
-
-
-    parent_node *Parent;
-
-    static bool IsValid(const layout_tree *Tree)
-    {
-        return Tree && Tree->Nodes && Tree->NodeCount <= Tree->NodeCapacity && Tree->PaintBuffer;
-    }
-
-    layout_node * GetSentinel()
-    {
-        layout_node *Result = Nodes + NodeCapacity;
-        return Result;
-    }
-
-    layout_node * GetRootNode()
-    {
-        layout_node *Result = Nodes + RootIndex;
-        return Result;
-    }
-
-    layout_node * GetNode(uint32_t Index)
-    {
-        layout_node *Result = 0;
-        if(Index < NodeCapacity)
-        {
-            Result = Nodes + Index;
-        }
-        return Result;
-    }
-
-    layout_node * GetFreeNode()
-    {
-        layout_node *Sentinel = GetSentinel();
-        layout_node *Result   = 0;
-
-        if (Sentinel->Next != InvalidIndex)
-        {
-            VOID_ASSERT(NodeCount < NodeCapacity);
-
-            Result = GetNode(Sentinel->Next);
-            Result->Index  = Sentinel->Next;
-            Sentinel->Next = Result->Next;
-
-            Result->First      = InvalidIndex;
-            Result->Last       = InvalidIndex;
-            Result->Prev       = InvalidIndex;
-            Result->Next       = InvalidIndex;
-            Result->Parent     = InvalidIndex;
-            Result->ChildCount = 0;
-
-            if(NodeCount == 0)
-            {
-                RootIndex = Result->Index;
-            }
-
-            ++NodeCount;
-        }
-
-        return Result;
-    }
-
-    void FreeNode(layout_node *Node)
-    {
-        VOID_ASSERT(layout_node::IsValid(Node));
-
-        if(layout_node::IsValid(Node))
-        {
-            layout_node *Sentinel = GetSentinel();
-            VOID_ASSERT(Sentinel);
-
-            layout_node *Prev = GetNode(Node->Prev);
-            if(layout_node::IsValid(Prev))
-            {
-                Prev->Next = Node->Next;
-            }
-
-            layout_node *Next = GetNode(Node->Next);
-            if(layout_node::IsValid(Next))
-            {
-                Next->Prev = Node->Prev;
-            }
-
-            layout_node *Parent = GetNode(Node->Parent);
-            if(layout_node::IsValid(Parent))
-            {
-                if(Parent->First == Node->Index)
-                {
-                    Parent->First = Node->Next;
-                }
-
-                if(Parent->Last == Node->Index)
-                {
-                    Parent->Last = Node->Prev;
-                }
-
-                --Parent->ChildCount;
-            }
-
-            Node->Next     = Sentinel->Next;
-            Sentinel->Next = Node->Index;
-
-            Node->Index      = InvalidIndex;
-            Node->First      = InvalidIndex;
-            Node->Last       = InvalidIndex;
-            Node->Prev       = InvalidIndex;
-            Node->Parent     = InvalidIndex;
-            Node->ChildCount = 0;
-
-            --NodeCount;
-        }
-    }
-
-    void Append(layout_node *Parent, layout_node *Child)
-    {
-        if(layout_node::IsValid(Parent) && layout_node::IsValid(Child))
-        {
-            Child->First  = InvalidIndex;
-            Child->Last   = InvalidIndex;
-            Child->Prev   = InvalidIndex;
-            Child->Next   = InvalidIndex;
-            Child->Parent = Parent->Index;
-
-            layout_node *First = GetNode(Parent->First);
-            if(!layout_node::IsValid(First))
-            {
-                Parent->First = Child->Index;
-            }
-
-            layout_node *Last = GetNode(Parent->Last);
-            if(layout_node::IsValid(Last))
-            {
-                Last->Next  = Child->Index;
-            }
-
-            Child->Prev         = Parent->Last;
-            Parent->Last        = Child->Index;
-            Parent->ChildCount += 1;
-        }
-    }
+    ui_layout_node *Nodes;
+    uint64_t        Count;
+    uint64_t        Capacity;
 };
 
-// --- Private Helpers ---
+
+struct ui_layout_tree
+{
+    ui_node_buffer    NodeBuffer;
+    paint_properties *PaintBuffer;
+    uint64_t          RootIndex;
+    uint64_t          CapturedNodeIndex;
+    parent_node      *Parent;
+};
+
+
+static bool
+IsValidLayoutNode(ui_layout_node *Node)
+{
+    bool Result = Node && Node->Index != InvalidIndex;
+    return Result;
+}
+
+
+static ui_layout_node *
+GetSentinelNode(ui_node_buffer NodeBuffer)
+{
+    ui_layout_node *Result = NodeBuffer.Nodes + NodeBuffer.Capacity;
+    return Result;
+}
+
+
+static ui_layout_node *
+GetLayoutNode(ui_node_buffer NodeBuffer, uint64_t Index)
+{
+    ui_layout_node *Result = 0;
+
+    if (Index < NodeBuffer.Capacity)
+    {
+        Result = NodeBuffer.Nodes + Index;
+    }
+
+    return Result;
+}
+
+
+static ui_layout_node *
+GetFreeLayoutNode(ui_node_buffer &NodeBuffer)
+{
+    ui_layout_node *Sentinel = GetSentinelNode(NodeBuffer);
+    ui_layout_node *Result   = 0;
+
+    if (Sentinel->Next != InvalidIndex)
+    {
+        VOID_ASSERT(NodeBuffer.Count < NodeBuffer.Capacity);
+
+        Result = GetLayoutNode(NodeBuffer, Sentinel->Next);
+        Result->Index  = Sentinel->Next;
+        Sentinel->Next = Result->Next;
+
+        Result->First      = InvalidIndex;
+        Result->Last       = InvalidIndex;
+        Result->Prev       = InvalidIndex;
+        Result->Next       = InvalidIndex;
+        Result->Parent     = InvalidIndex;
+        Result->ChildCount = 0;
+
+        // if(NodeBuffer.Count == 0)
+        // {
+            // RootIndex = Result->Index;
+        // }
+
+        ++NodeBuffer.Count;
+    }
+
+    return Result;
+}
+
+
+static void
+AppendLayoutNode(ui_node_buffer NodeBuffer, uint32_t ParentIndex, uint32_t ChildIndex)
+{
+    ui_layout_node *Parent = GetLayoutNode(NodeBuffer, ParentIndex);
+    ui_layout_node *Child  = GetLayoutNode(NodeBuffer, ChildIndex );
+
+    if(IsValidLayoutNode(Parent) && IsValidLayoutNode(Child))
+    {
+        Child->First  = InvalidIndex;
+        Child->Last   = InvalidIndex;
+        Child->Prev   = InvalidIndex;
+        Child->Next   = InvalidIndex;
+        Child->Parent = Parent->Index;
+
+        ui_layout_node *First = GetLayoutNode(NodeBuffer, Parent->First);
+        if(!IsValidLayoutNode(First))
+        {
+            Parent->First = Child->Index;
+        }
+
+        ui_layout_node *Last  = GetLayoutNode(NodeBuffer, Parent->Last);
+        if(IsValidLayoutNode(Last))
+        {
+            Last->Next  = Child->Index;
+        }
+
+        Child->Prev         = Parent->Last;
+        Parent->Last        = Child->Index;
+        Parent->ChildCount += 1;
+    }
+}
+
+
+static bool
+IsValidLayoutTree(const ui_layout_tree *Tree)
+{
+    bool Result = (Tree && Tree->NodeBuffer.Nodes && Tree->NodeBuffer.Count <= Tree->NodeBuffer.Capacity);
+    return Result;
+}
 
 
 static uint64_t
 GetLayoutTreeFootprint(uint64_t NodeCount)
 {
-    uint64_t ArraySize = (NodeCount + 1) * sizeof(layout_node);
-    uint64_t PaintSize = NodeCount * sizeof(paint_command);
-    uint64_t Result    = sizeof(layout_tree) + ArraySize + PaintSize;
+    uint64_t ArraySize = (NodeCount + 1) * sizeof(ui_layout_node);
+    uint64_t PaintSize = (NodeCount + 0) * sizeof(paint_properties);  
+    uint64_t Result    = sizeof(ui_layout_tree) + ArraySize + PaintSize;
     return Result;
 }
 
 
-static layout_tree *
+static ui_layout_tree *
 PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
 {
-    layout_tree *Result = 0;
+    ui_layout_tree *Result = 0;
 
     if (Memory)
     {
-        layout_node   *Nodes       = static_cast<layout_node*>(Memory);
-        paint_command *PaintBuffer = reinterpret_cast<paint_command *>(Nodes + NodeCount + 1);
+        ui_layout_node   *Nodes       = static_cast<ui_layout_node*>(Memory);
+        paint_properties *PaintBuffer = (paint_properties *)(Nodes + (NodeCount + 1));
 
-        Result = reinterpret_cast<layout_tree *>(PaintBuffer + NodeCount);
-        Result->Nodes        = Nodes;
-        Result->PaintBuffer  = PaintBuffer;
-        Result->NodeCount    = 0;
-        Result->NodeCapacity = NodeCount;
+        Result = reinterpret_cast<ui_layout_tree *>(PaintBuffer + NodeCount);
+        Result->NodeBuffer.Nodes    = Nodes;
+        Result->NodeBuffer.Count    = 0;
+        Result->NodeBuffer.Capacity = NodeCount;
+        Result->PaintBuffer         = PaintBuffer;
 
-        for (uint64_t Idx = 0; Idx < Result->NodeCapacity; Idx++)
+        for (uint64_t Idx = 0; Idx < Result->NodeBuffer.Capacity; Idx++)
         {
-            layout_node *Node = Result->GetNode(Idx);
+            ui_layout_node *Node = GetLayoutNode(Result->NodeBuffer, Idx);
             VOID_ASSERT(Node);
 
             Node->Index      = InvalidIndex;
@@ -285,7 +240,7 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
             Node->Next = Idx + 1;
         }
 
-        layout_node *Sentinel = Result->GetSentinel();
+        ui_layout_node *Sentinel = GetSentinelNode(Result->NodeBuffer);
         Sentinel->Next  = 0;
         Sentinel->Index = InvalidIndex;
     }
@@ -294,44 +249,74 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
 }
 
 static void
-UpdateInput(uint32_t NodeIndex, const cached_style *Cached, layout_tree *Tree)
+UpdateInput(uint32_t NodeIndex, cached_style *Cached, ui_layout_tree *Tree)
 {
-    if(layout_tree::IsValid(Tree) && Cached)
+    if(IsValidLayoutTree(Tree) && Cached)
     {
-        layout_node *Node = Tree->GetNode(NodeIndex);
-        if(layout_node::IsValid(Node))
+        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        if(IsValidLayoutNode(Node))
         {
-            Node->CachedStyle = Cached;
-
-            Node->Size      = Cached->Default.Size.Value;
-            Node->MinSize   = Cached->Default.MinSize.Value;
-            Node->MaxSize   = Cached->Default.MaxSize.Value;
-            Node->Direction = Cached->Default.Direction.Value;
-            Node->XAlign    = Cached->Default.XAlign.Value;
-            Node->YAlign    = Cached->Default.YAlign.Value;
-            Node->Padding   = Cached->Default.Padding.Value;
-            Node->Spacing   = Cached->Default.Spacing.Value;
-    
-            if(!Cached->Default.MinSize.IsSet)
+            // Write the layout inputs
             {
-                Node->MinSize = Node->Size;
+                Node->Size      = Cached->Layout.Size.Value;
+                Node->MinSize   = Cached->Layout.MinSize.Value;
+                Node->MaxSize   = Cached->Layout.MaxSize.Value;
+                Node->Direction = Cached->Layout.Direction.Value;
+                Node->XAlign    = Cached->Layout.XAlign.Value;
+                Node->YAlign    = Cached->Layout.YAlign.Value;
+                Node->Padding   = Cached->Layout.Padding.Value;
+                Node->Spacing   = Cached->Layout.Spacing.Value;
+        
+                if(!Cached->Layout.MinSize.IsSet)
+                {
+                    Node->MinSize = Node->Size;
+                }
+        
+                if(!Cached->Layout.MaxSize.IsSet)
+                {
+                
+                    Node->MaxSize = Node->Size;
+                }
             }
-    
-            if(!Cached->Default.MaxSize.IsSet)
+
+            // Write the paint properties
             {
-                Node->MaxSize = Node->Size;
+                paint_properties &Paint = Tree->PaintBuffer[NodeIndex];
+            
+                Paint.Color               = Cached->Default.Color.Value;
+                Paint.BorderColor         = Cached->Default.BorderColor.Value;
+                Paint.BorderWidth         = Cached->Default.BorderWidth.Value;
+                Paint.TextColor           = Cached->Default.TextColor.Value;
+                Paint.CornerRadius        = Cached->Default.CornerRadius.Value;
+                Paint.Softness            = Cached->Default.Softness.Value;
+            
+                Paint.HoveredColor        = Cached->Hovered.Color.IsSet        ? Cached->Hovered.Color.Value        : Paint.Color;
+                Paint.HoveredBorderColor  = Cached->Hovered.BorderColor.IsSet  ? Cached->Hovered.BorderColor.Value  : Paint.BorderColor;
+                Paint.HoveredBorderWidth  = Cached->Hovered.BorderWidth.IsSet  ? Cached->Hovered.BorderWidth.Value  : Paint.BorderWidth;
+                Paint.HoveredTextColor    = Cached->Hovered.TextColor.IsSet    ? Cached->Hovered.TextColor.Value    : Paint.TextColor;
+                Paint.HoveredCornerRadius = Cached->Hovered.CornerRadius.IsSet ? Cached->Hovered.CornerRadius.Value : Paint.CornerRadius;
+                Paint.HoveredSoftness     = Cached->Hovered.Softness.IsSet     ? Cached->Hovered.Softness.Value     : Paint.Softness;
+            
+                Paint.FocusedColor        = Cached->Focused.Color.IsSet        ? Cached->Focused.Color.Value        : Paint.Color;
+                Paint.FocusedBorderColor  = Cached->Focused.BorderColor.IsSet  ? Cached->Focused.BorderColor.Value  : Paint.BorderColor;
+                Paint.FocusedBorderWidth  = Cached->Focused.BorderWidth.IsSet  ? Cached->Focused.BorderWidth.Value  : Paint.BorderWidth;
+                Paint.FocusedTextColor    = Cached->Focused.TextColor.IsSet    ? Cached->Focused.TextColor.Value    : Paint.TextColor;
+                Paint.FocusedCornerRadius = Cached->Focused.CornerRadius.IsSet ? Cached->Focused.CornerRadius.Value : Paint.CornerRadius;
+                Paint.FocusedSoftness     = Cached->Focused.Softness.IsSet     ? Cached->Focused.Softness.Value     : Paint.Softness;
+            
+                Paint.CaretColor = Cached->Focused.CaretColor.Value;
+                Paint.CaretWidth = Cached->Focused.CaretWidth.Value;
             }
         }
     }
 }
 
-// --- Public API ---
 
-static rect_float GetNodeOuterRect(const layout_node *Node)
+static rect_float GetLayoutNodeOuterRect(ui_layout_node *Node)
 {
     rect_float Result = {};
 
-    if(layout_node::IsValid(Node))
+    if(IsValidLayoutNode(Node))
     {
         vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
         Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
@@ -340,14 +325,16 @@ static rect_float GetNodeOuterRect(const layout_node *Node)
     return Result;
 }
 
-static rect_float GetNodeInnerRect(layout_node *Node)
+
+static rect_float GetLayoutNodeInnerRect(ui_layout_node *Node)
 {
     vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
     rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
     return Result;
 }
 
-static rect_float GetNodeContentRect(layout_node *Node)
+
+static rect_float GetLayoutNodeContentRect(ui_layout_node *Node)
 {
     vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
     rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
@@ -356,33 +343,32 @@ static rect_float GetNodeContentRect(layout_node *Node)
 
 
 static uint32_t
-CreateNode(uint64_t Key, NodeFlags Flags, const cached_style *Style, layout_tree *Tree)
+CreateNode(uint64_t Key, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree)
 {
     uint32_t Result = InvalidIndex;
 
-    if(layout_tree::IsValid(Tree))
+    if(IsValidLayoutTree(Tree))
     {
         auto         Iter = KeyMap.find(Key);
-        layout_node *Node = nullptr;
+        ui_layout_node *Node = nullptr;
     
         if (Iter != KeyMap.end())
         {
-            Node = Tree->GetNode(Iter->second);
+            Node = GetLayoutNode(Tree->NodeBuffer, Iter->second);
         }
         else
         {
-            Node = Tree->GetFreeNode();
+            Node = GetFreeLayoutNode(Tree->NodeBuffer);
             KeyMap.emplace(Key, Node->Index);
         }
     
-        if(layout_node::IsValid(Node))
+        if(IsValidLayoutNode(Node))
         {
-            Node->ChildCount  = 0;
-            Node->CachedStyle = Style;
-            Node->Flags       = Flags;
+            Node->ChildCount = 0;
+            Node->Flags      = Flags;
 
             uint32_t ParentIndex = Tree->Parent ? Tree->Parent->Value : InvalidIndex;
-            Tree->Append(Tree->GetNode(ParentIndex), Node);
+            AppendLayoutNode(Tree->NodeBuffer, ParentIndex, Node->Index);
 
             Result = Node->Index;
         }
@@ -393,9 +379,9 @@ CreateNode(uint64_t Key, NodeFlags Flags, const cached_style *Style, layout_tree
 
 
 static void
-PushParent(uint32_t NodeIndex, layout_tree *Tree, parent_node *ParentNode)
+PushParent(uint32_t NodeIndex, ui_layout_tree *Tree, parent_node *ParentNode)
 {
-    if(layout_tree::IsValid(Tree) && ParentNode)
+    if(IsValidLayoutTree(Tree) && ParentNode)
     {
         ParentNode->Prev  = Tree->Parent;
         ParentNode->Value = NodeIndex;
@@ -406,9 +392,9 @@ PushParent(uint32_t NodeIndex, layout_tree *Tree, parent_node *ParentNode)
 
 
 static void
-PopParent(uint32_t NodeIndex, layout_tree *Tree)
+PopParent(uint32_t NodeIndex, ui_layout_tree *Tree)
 {
-    if(layout_tree::IsValid(Tree) && Tree->Parent)
+    if(IsValidLayoutTree(Tree) && Tree->Parent)
     {
         Tree->Parent = Tree->Parent->Prev;
     }
@@ -416,19 +402,19 @@ PopParent(uint32_t NodeIndex, layout_tree *Tree)
 
 
 static uint32_t
-FindChild(uint32_t NodeIndex, uint32_t FindIndex, layout_tree *Tree)
+FindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
 {
     uint32_t Result = InvalidIndex;
 
-    if(layout_tree::IsValid(Tree))
+    if(IsValidLayoutTree(Tree))
     {
-        layout_node *Node = Tree->GetNode(NodeIndex);
-        if(layout_node::IsValid(Node))
+        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        if(IsValidLayoutNode(Node))
         {
-            layout_node *Child = Tree->GetNode(Node->First);
-            while(layout_node::IsValid(Child) && FindIndex--)
+            ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First);
+            while(IsValidLayoutNode(Child) && FindIndex--)
             {
-                Child = Tree->GetNode(Child->Next);
+                Child = GetLayoutNode(Tree->NodeBuffer, Child->Next);
             }
 
             Result = Child->Index;
@@ -440,31 +426,26 @@ FindChild(uint32_t NodeIndex, uint32_t FindIndex, layout_tree *Tree)
 
 
 static bool
-AppendChild(uint32_t ParentIndex, uint32_t ChildIndex, layout_tree *Tree)
+AppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
 {
     bool Result = false;
 
-    if(layout_tree::IsValid(Tree) && ParentIndex != ChildIndex)
+    if(IsValidLayoutTree(Tree) && ParentIndex != ChildIndex)
     {
-        layout_node *Parent = Tree->GetNode(ParentIndex);
-        layout_node *Child  = Tree->GetNode(ChildIndex);
-
-        if(layout_node::IsValid(Parent) && layout_node::IsValid(Child))
-        {
-            Tree->Append(Parent, Child);
-        }
+        AppendLayoutNode(Tree->NodeBuffer, ParentIndex, ChildIndex);
     }
 
     return Result;
 }
 
+
 static void
-SetNodeOffset(uint32_t NodeIndex, float XOffset, float YOffset, layout_tree *Tree)
+SetNodeOffset(uint32_t NodeIndex, float XOffset, float YOffset, ui_layout_tree *Tree)
 {
-    if(layout_tree::IsValid(Tree))
+    if(IsValidLayoutTree(Tree))
     {
-        layout_node *Node = Tree->GetNode(NodeIndex);
-        if(layout_node::IsValid(Node))
+        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        if(IsValidLayoutNode(Node))
         {
             Node->VisualOffset.X = XOffset;
             Node->VisualOffset.Y = YOffset;
@@ -481,22 +462,22 @@ struct scroll_region
     vec2_float     ContentSize;
     float          ScrollOffset;
     float          PixelPerLine;
-    core::AxisType Axis;
+    AxisType Axis;
 };
 
 // --- Private Helpers ---
 
-static void UpdateScrollNode(float ScrolledLines, layout_node *Node, layout_tree *Tree, scroll_region *Region)
+static void UpdateScrollNode(float ScrolledLines, ui_layout_node *Node, ui_layout_tree *Tree, scroll_region *Region)
 {
     float      ScrolledPixels = ScrolledLines * Region->PixelPerLine;
     vec2_float WindowSize     = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height);
 
     float ScrollLimit = 0.f;
-    if (Region->Axis == core::AxisType::X)
+    if (Region->Axis == AxisType::X)
     {
         ScrollLimit = -(Region->ContentSize.X - WindowSize.X);
     } else
-    if (Region->Axis == core::AxisType::Y)
+    if (Region->Axis == AxisType::Y)
     {
         ScrollLimit = -(Region->ContentSize.Y - WindowSize.Y);
     }
@@ -505,22 +486,22 @@ static void UpdateScrollNode(float ScrolledLines, layout_node *Node, layout_tree
     Region->ScrollOffset  = ClampTop(ClampBot(ScrollLimit, Region->ScrollOffset), 0);
 
     vec2_float ScrollDelta = vec2_float(0.f, 0.f);
-    if(Region->Axis == core::AxisType::X)
+    if(Region->Axis == AxisType::X)
     {
         ScrollDelta.X = -1.f * Region->ScrollOffset;
     } else
-    if(Region->Axis == core::AxisType::Y)
+    if(Region->Axis == AxisType::Y)
     {
         ScrollDelta.Y = -1.f * Region->ScrollOffset;
     }
 
-    rect_float WindowContent = GetNodeOuterRect(Node);
-    for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+    rect_float WindowContent = GetLayoutNodeOuterRect(Node);
+    for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
     {
         Child->ScrollOffset = vec2_float(-ScrollDelta.X, -ScrollDelta.Y);
 
         vec2_float FixedContentSize = vec2_float(Child->OutputSize.Width, Child->OutputSize.Height);
-        rect_float ChildContent     = GetNodeOuterRect(Child);
+        rect_float ChildContent     = GetLayoutNodeOuterRect(Child);
 
         if (FixedContentSize.X > 0.0f && FixedContentSize.Y > 0.0f) 
         {
@@ -564,11 +545,11 @@ static vec2_float GetScrollNodeTranslation(scroll_region *Region)
 {
     vec2_float Result = vec2_float(0.f, 0.f);
 
-    if (Region->Axis == core::AxisType::X)
+    if (Region->Axis == AxisType::X)
     {
         Result = vec2_float(Region->ScrollOffset, 0.f);
     } else
-    if (Region->Axis == core::AxisType::Y)
+    if (Region->Axis == AxisType::Y)
     {
         Result = vec2_float(0.f, Region->ScrollOffset);
     }
@@ -582,10 +563,10 @@ static vec2_float GetScrollNodeTranslation(scroll_region *Region)
 
 // --- Private Helpers ---
 
-static bool IsMouseInsideOuterBox(vec2_float MousePosition, layout_node *Node)
+static bool IsMouseInsideOuterBox(vec2_float MousePosition, ui_layout_node *Node)
 {
     VOID_ASSERT(MousePosition.X >= 0.f && MousePosition.Y >= 0.f);
-    VOID_ASSERT(layout_node::IsValid(Node));
+    VOID_ASSERT(IsValidLayoutNode(Node));
 
     vec2_float OuterSize  = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height);
     vec2_float OuterPos   = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
@@ -601,10 +582,10 @@ static bool IsMouseInsideOuterBox(vec2_float MousePosition, layout_node *Node)
     return Distance <= 0.f;
 }
 
-static bool IsMouseInsideBorder(vec2_float MousePosition, layout_node *Node)
+static bool IsMouseInsideBorder(vec2_float MousePosition, ui_layout_node *Node)
 {
     VOID_ASSERT(MousePosition.X >= 0.f && MousePosition.Y >= 0.f);
-    VOID_ASSERT(layout_node::IsValid(Node));
+    VOID_ASSERT(IsValidLayoutNode(Node));
 
     vec2_float InnerSize   = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height) - vec2_float(0.f, 0.f);
     vec2_float InnerPos    = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y ) - vec2_float(0.f, 0.f) + Node->ScrollOffset;
@@ -622,24 +603,23 @@ static bool IsMouseInsideBorder(vec2_float MousePosition, layout_node *Node)
 
 // --- Public API ---
 
-static bool HandlePointerClick(vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, layout_tree *Tree)
+static bool HandlePointerClick(vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree)
 {
     VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
-    VOID_ASSERT(layout_tree::IsValid(Tree));
+    VOID_ASSERT(IsValidLayoutTree(Tree));
 
-    if(layout_tree::IsValid(Tree))
+    if(IsValidLayoutTree(Tree))
     {
-        layout_node *Node = Tree->GetNode(NodeIndex);
-        VOID_ASSERT(layout_node::IsValid(Node));
+        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        VOID_ASSERT(IsValidLayoutNode(Node));
 
-        if(layout_node::IsValid(Node))
+        if(IsValidLayoutNode(Node))
         {
             if(IsMouseInsideOuterBox(Position, Node))
             {
-                for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+                for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
                 {
                     bool IsHandled = HandlePointerClick(Position, ClickMask, Child->Index, Tree);
-    
                     if(IsHandled)
                     {
                         return true;
@@ -660,17 +640,17 @@ static bool HandlePointerClick(vec2_float Position, uint32_t ClickMask, uint32_t
     return false;
 }
 
-static bool HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint32_t NodeIndex, layout_tree *Tree)
+static bool HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint32_t NodeIndex, ui_layout_tree *Tree)
 {
     VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
-    VOID_ASSERT(layout_tree::IsValid(Tree));
+    VOID_ASSERT(IsValidLayoutTree(Tree));
 
-    if(layout_tree::IsValid(Tree))
+    if(IsValidLayoutTree(Tree))
     {
-        layout_node *Node = Tree->GetNode(NodeIndex);
-        VOID_ASSERT(layout_node::IsValid(Node));
+        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        VOID_ASSERT(IsValidLayoutNode(Node));
 
-        for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+        for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
         {
             if(HandlePointerRelease(Position, ButtonMask, Child->Index, Tree))
             {
@@ -691,18 +671,18 @@ static bool HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint3
     return false;
 }
 
-static bool HandlePointerHover(vec2_float Position, uint32_t NodeIndex, layout_tree *Tree)
+static bool HandlePointerHover(vec2_float Position, uint32_t NodeIndex, ui_layout_tree *Tree)
 {
     VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
 
-    if(layout_tree::IsValid(Tree))
+    if(IsValidLayoutTree(Tree))
     {
-        layout_node *Node = Tree->GetNode(NodeIndex);
-        VOID_ASSERT(layout_node::IsValid(Node));
+        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        VOID_ASSERT(IsValidLayoutNode(Node));
 
         if(IsMouseInsideOuterBox(Position, Node))
         {
-            for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+            for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
             {
                 bool IsHandled = HandlePointerHover(Position, Child->Index, Tree);
                 if(IsHandled)
@@ -720,14 +700,14 @@ static bool HandlePointerHover(vec2_float Position, uint32_t NodeIndex, layout_t
     return false;
 }
 
-static void HandlePointerMove(vec2_float Delta, layout_tree *Tree)
+static void HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
 {
-    VOID_ASSERT(layout_tree::IsValid(Tree));
+    VOID_ASSERT(IsValidLayoutTree(Tree));
     
-    if(layout_tree::IsValid(Tree))
+    if(IsValidLayoutTree(Tree))
     {
-        layout_node *CapturedNode = Tree->GetNode(Tree->CapturedNodeIndex);
-        if(layout_node::IsValid(CapturedNode))
+        ui_layout_node *CapturedNode = GetLayoutNode(Tree->NodeBuffer, Tree->CapturedNodeIndex);
+        if(IsValidLayoutNode(CapturedNode))
         {
             if((CapturedNode->Flags & NodeFlags::IsDraggable) != NodeFlags::None)
             {
@@ -773,10 +753,10 @@ static float GetAlignmentOffset(Alignment AlignmentType, float FreeSpace)
     return Result;
 }
 
-static uint32_t WrapText(text *Text, layout_node *Node)
+static uint32_t WrapText(text *Text, ui_layout_node *Node)
 {
     VOID_ASSERT(Text);
-    VOID_ASSERT(layout_node::IsValid(Node));
+    VOID_ASSERT(IsValidLayoutNode(Node));
 
     uint32_t LineCount = 1;
     float    LineWidth = 0.f;
@@ -850,10 +830,10 @@ static float ComputeNodeSize(sizing Sizing, float ParentSize)
 }
 
 static void
-ComputeLayout(layout_node *Node, layout_tree *Tree, axes ParentBounds, core::resource_table *ResourceTable, bool &Changed)
+ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, axes ParentBounds, resource_table *ResourceTable, bool &Changed)
 {
-    VOID_ASSERT(layout_node::IsValid(Node));
-    VOID_ASSERT(layout_tree::IsValid(Tree));
+    VOID_ASSERT(IsValidLayoutNode(Node));
+    VOID_ASSERT(IsValidLayoutTree(Tree));
 
     Node->OutputChildSize  = {};
     axes LastSize = Node->OutputSize;
@@ -897,7 +877,7 @@ ComputeLayout(layout_node *Node, layout_tree *Tree, axes ParentBounds, core::res
 
     VOID_ASSERT(ContentBounds.Width >= 0 && ContentBounds.Height >= 0);
 
-    for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+    for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
     {
         ComputeLayout(Child, Tree, ContentBounds, ResourceTable, Changed);
 
@@ -905,14 +885,14 @@ ComputeLayout(layout_node *Node, layout_tree *Tree, axes ParentBounds, core::res
         Node->OutputChildSize.Height += Child->OutputSize.Height;
     }
 
-    text *Text = static_cast<text *>(QueryNodeResource(core::ResourceType::Text, Node->Index, Tree, ResourceTable));
+    text *Text = static_cast<text *>(QueryNodeResource(ResourceType::Text, Node->Index, Tree, ResourceTable));
     if(Text)
     {
         WrapText(Text, Node);
     }
 }
 
-static void PlaceLayout(layout_node *Node, layout_tree *Tree, core::resource_table *ResourceTable)
+static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_table *ResourceTable)
 {
     vec2_float Cursor = {
         Node->OutputPosition.X + Node->Padding.Left,
@@ -937,7 +917,7 @@ static void PlaceLayout(layout_node *Node, layout_tree *Tree, core::resource_tab
         Cursor.Y += MajorOffset;
     }
 
-    for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
+    for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
     {
         Child->OutputPosition = Cursor;
 
@@ -957,7 +937,7 @@ static void PlaceLayout(layout_node *Node, layout_tree *Tree, core::resource_tab
         PlaceLayout(Child, Tree, ResourceTable);
     }
 
-    auto *Text = static_cast<text *>(QueryNodeResource(core::ResourceType::Text, Node->Index, Tree, ResourceTable));
+    auto *Text = static_cast<text *>(QueryNodeResource(ResourceType::Text, Node->Index, Tree, ResourceTable));
     if(Text)
     {
         VOID_ASSERT(Node->ChildCount == 0);
@@ -987,14 +967,12 @@ static void PlaceLayout(layout_node *Node, layout_tree *Tree, core::resource_tab
 
 // --- Public API ---
 
-static void ComputeTreeLayout(layout_tree *Tree)
+static void ComputeTreeLayout(ui_layout_tree *Tree)
 {
-    VOID_ASSERT(layout_tree::IsValid(Tree));
-
-    if(layout_tree::IsValid(Tree))
+    if(IsValidLayoutTree(Tree))
     {
-        core::void_context &Context = core::GetVoidContext();
-        layout_node *ActiveRoot = Tree->GetRootNode();
+        void_context   &Context    = GetVoidContext();
+        ui_layout_node *ActiveRoot = GetLayoutNode(Tree->NodeBuffer, Tree->RootIndex);
     
         while(true)
         {
@@ -1011,76 +989,3 @@ static void ComputeTreeLayout(layout_tree *Tree)
         PlaceLayout(ActiveRoot, Tree, Context.ResourceTable);
     }
 }
-
-// =============================================================================
-// DOMAIN: Paint & Rendering
-// =============================================================================
-
-// --- Public API ---
-
-//static paint_buffer
-//GeneratePaintBuffer(layout_tree *Tree, memory_arena *Arena)
-//{
-//    uint32_t CommandCount = 0;
-//
-//    if(layout_tree::IsValid(Tree) && Arena)
-//    {
-//        uint32_t *NodeBuffer = PushArray(Arena, uint32_t, Tree->NodeCount);
-//        uint32_t  WriteIndex = 0;
-//        uint32_t  ReadIndex  = 0;
-//    
-//        NodeBuffer[WriteIndex++] = 0;
-//    
-//        while (NodeBuffer && ReadIndex < WriteIndex)
-//        {
-//            uint32_t     NodeIndex = NodeBuffer[ReadIndex++];
-//            layout_node *Node      = Tree->GetNode(NodeIndex);
-//    
-//            if(layout_node::IsValid(Node) && Node->CachedStyle)
-//            {
-//                paint_command    &Command = Tree->PaintBuffer[CommandCount++];
-//                paint_properties Paint    = Node->CachedStyle->Default.MakePaintProperties();
-//    
-//                if ((Node->State & NodeState::UseFocusedStyle) != NodeState::None)
-//                {
-//                    Paint = Node->CachedStyle->Focused.InheritPaintProperties(Paint);
-//                } else
-//                if ((Node->State & NodeState::UseHoveredStyle) != NodeState::None)
-//                {
-//                    Paint = Node->CachedStyle->Hovered.InheritPaintProperties(Paint);
-//    
-//                    Node->State &= ~NodeState::UseHoveredStyle;
-//                }
-//
-//                Node->State &= ~NodeState::IsClicked;
-//    
-//                Command.Rectangle     = GetNodeOuterRect(Node);
-//                Command.RectangleClip = {};
-//    
-//                Command.TextKey       = MakeNodeResourceKey(core::ResourceType::Text , Node->Index, Tree);
-//                Command.ImageKey      = MakeNodeResourceKey(core::ResourceType::Image, Node->Index, Tree);
-//    
-//                Command.CornerRadius  = Paint.CornerRadius.Value;
-//                Command.Softness      = Paint.Softness.Value;
-//                Command.BorderWidth   = Paint.BorderWidth.Value;
-//                Command.Color         = Paint.Color.Value;
-//                Command.BorderColor   = Paint.BorderColor.Value;
-//                Command.TextColor     = Paint.TextColor.Value;
-//
-//                for(layout_node *Child = Tree->GetNode(Node->First); layout_node::IsValid(Child); Child = Tree->GetNode(Child->Next))
-//                {
-//                    NodeBuffer[WriteIndex++] = Child->Index;
-//                }
-//            }
-//            else
-//            {
-//                break;
-//            }
-//        }
-//    }
-//
-//    paint_buffer Result = {.Commands = Tree->PaintBuffer, .Size = CommandCount};
-//    return Result;
-//}
-
-} // namespace layout

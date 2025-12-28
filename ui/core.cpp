@@ -1,6 +1,3 @@
-namespace core
-{
-
 // ----------------------------------------------------------------------------------
 // UI Resource Cache Private Implementation
 
@@ -166,7 +163,7 @@ PlaceResourceTableInMemory(resource_table_params Params, void *Memory)
 }
 
 static resource_key
-MakeNodeResourceKey(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tree)
+MakeNodeResourceKey(ResourceType Type, uint32_t NodeIndex, ui_layout_tree *Tree)
 {
     uint64_t Low  = (uint64_t)Tree;
     uint64_t High = ((uint64_t)Type << 32) | NodeIndex;
@@ -194,79 +191,84 @@ MakeFontResourceKey(byte_string Name, float Size)
 static resource_state
 FindResourceByKey(resource_key Key, FindResourceFlag Flags, resource_table *Table)
 {
-    resource_entry *FoundEntry = 0;
+    resource_state Result = {};
 
-    uint32_t *Slot       = GetResourceSlotPointer(Key, Table);
-    uint32_t  EntryIndex = Slot[0];
-
-    while(EntryIndex)
+    if (Table)
     {
-        resource_entry *Entry = GetResourceEntry(EntryIndex, Table);
-        if(ResourceKeyAreEqual(Entry->Key, Key))
+        resource_entry *FoundEntry = 0;
+
+        uint32_t *Slot       = GetResourceSlotPointer(Key, Table);
+        uint32_t  EntryIndex = Slot[0];
+        
+        while(EntryIndex)
         {
-            FoundEntry = Entry;
-            break;
+            resource_entry *Entry = GetResourceEntry(EntryIndex, Table);
+            if(ResourceKeyAreEqual(Entry->Key, Key))
+            {
+                FoundEntry = Entry;
+                break;
+            }
+        
+            EntryIndex = Entry->NextWithSameHashSlot;
         }
-
-        EntryIndex = Entry->NextWithSameHashSlot;
+        
+        if(FoundEntry)
+        {
+            // If we hit an already existing entry we must pop it off the LRU chain.
+            // (Prev) -> (Entry) -> (Next)
+            // (Prev) -> (Next)
+        
+            resource_entry *Prev = GetResourceEntry(FoundEntry->PrevLRU, Table);
+            resource_entry *Next = GetResourceEntry(FoundEntry->NextLRU, Table);
+        
+            Prev->NextLRU = FoundEntry->NextLRU;
+            Next->PrevLRU = FoundEntry->PrevLRU;
+        
+            ++Table->Stats.CacheHitCount;
+        }
+        else if((Flags & FindResourceFlag::AddIfNotFound) != FindResourceFlag::None)
+        {
+            // If we miss an entry we have to first allocate a new one.
+            // If we have some hash slot at X: Hash[X]
+            // Hash[X] -> (Index) -> (Index)
+            // (Entry) -> Hash[X] -> (Index) -> (Index)
+            // Hash[X] -> (Index) -> (Index) -> (Index)
+        
+            EntryIndex = PopFreeResourceEntry(Table);
+            VOID_ASSERT(EntryIndex);
+        
+            FoundEntry = GetResourceEntry(EntryIndex, Table);
+            FoundEntry->NextWithSameHashSlot = Slot[0];
+            FoundEntry->Key                  = Key;
+        
+            Slot[0] = EntryIndex;
+        
+            ++Table->Stats.CacheMissCount;
+        }
+        
+        if(FoundEntry)
+        {
+            // If we find an entry we must assure that this new entry is now
+            // the most recent one in the LRU chain.
+            // What we have: (Sentinel) -> (Entry)    -> (Entry) -> (Entry)
+            // What we want: (Sentinel) -> (NewEntry) -> (Entry) -> (Entry) -> (Entry)
+        
+            resource_entry *Sentinel = GetResourceSentinel(Table);
+            FoundEntry->NextLRU = Sentinel->NextLRU;
+            FoundEntry->PrevLRU = 0;
+        
+            resource_entry *NextLRU = GetResourceEntry(Sentinel->NextLRU, Table);
+            NextLRU->PrevLRU  = EntryIndex;
+            Sentinel->NextLRU = EntryIndex;
+        }
+        
+        Result =
+        {
+            .Id           = EntryIndex,
+            .ResourceType = FoundEntry ? FoundEntry->ResourceType : ResourceType::None,
+            .Resource     = FoundEntry ? FoundEntry->Memory       : 0,
+        };
     }
-
-    if(FoundEntry)
-    {
-        // If we hit an already existing entry we must pop it off the LRU chain.
-        // (Prev) -> (Entry) -> (Next)
-        // (Prev) -> (Next)
-
-        resource_entry *Prev = GetResourceEntry(FoundEntry->PrevLRU, Table);
-        resource_entry *Next = GetResourceEntry(FoundEntry->NextLRU, Table);
-
-        Prev->NextLRU = FoundEntry->NextLRU;
-        Next->PrevLRU = FoundEntry->PrevLRU;
-
-        ++Table->Stats.CacheHitCount;
-    }
-    else if((Flags & FindResourceFlag::AddIfNotFound) != FindResourceFlag::None)
-    {
-        // If we miss an entry we have to first allocate a new one.
-        // If we have some hash slot at X: Hash[X]
-        // Hash[X] -> (Index) -> (Index)
-        // (Entry) -> Hash[X] -> (Index) -> (Index)
-        // Hash[X] -> (Index) -> (Index) -> (Index)
-
-        EntryIndex = PopFreeResourceEntry(Table);
-        VOID_ASSERT(EntryIndex);
-
-        FoundEntry = GetResourceEntry(EntryIndex, Table);
-        FoundEntry->NextWithSameHashSlot = Slot[0];
-        FoundEntry->Key                  = Key;
-
-        Slot[0] = EntryIndex;
-
-        ++Table->Stats.CacheMissCount;
-    }
-
-    if(FoundEntry)
-    {
-        // If we find an entry we must assure that this new entry is now
-        // the most recent one in the LRU chain.
-        // What we have: (Sentinel) -> (Entry)    -> (Entry) -> (Entry)
-        // What we want: (Sentinel) -> (NewEntry) -> (Entry) -> (Entry) -> (Entry)
-
-        resource_entry *Sentinel = GetResourceSentinel(Table);
-        FoundEntry->NextLRU = Sentinel->NextLRU;
-        FoundEntry->PrevLRU = 0;
-    
-        resource_entry *NextLRU = GetResourceEntry(Sentinel->NextLRU, Table);
-        NextLRU->PrevLRU  = EntryIndex;
-        Sentinel->NextLRU = EntryIndex;
-    }
-
-    resource_state Result =
-    {
-        .Id           = EntryIndex,
-        .ResourceType = FoundEntry ? FoundEntry->ResourceType : ResourceType::None,
-        .Resource     = FoundEntry ? FoundEntry->Memory       : 0,
-    };
 
     return Result;
 }
@@ -294,7 +296,7 @@ UpdateResourceTable(uint32_t Id, resource_key Key, void *Memory, resource_table 
 
 
 static void *
-QueryNodeResource(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tree, resource_table *Table)
+QueryNodeResource(ResourceType Type, uint32_t NodeIndex, ui_layout_tree *Tree, resource_table *Table)
 {
     resource_key   Key   = MakeNodeResourceKey(Type, NodeIndex, Tree);
     resource_state State = FindResourceByKey(Key, FindResourceFlag::None, Table);
@@ -309,27 +311,27 @@ QueryNodeResource(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tr
 
 //bool node::IsValid()
 //{
-//    bool Result = Index != ::layout::InvalidIndex;
+//    bool Result = Index != ::InvalidIndex;
 //    return Result;
 //}
 //
 //
 //node node::FindChild(uint32_t FindIndex, pipeline &Pipeline)
 //{
-//    node Result = { ::layout::FindChild(Index, FindIndex, Tree) };
+//    node Result = { ::FindChild(Index, FindIndex, Tree) };
 //    return Result;
 //}
 //
 //
 //void node::Append(node Child, pipeline &Pipeline)
 //{
-//    ::layout::AppendChild(Index, Child.Index, Tree);
+//    ::AppendChild(Index, Child.Index, Tree);
 //}
 //
 //
 //void node::SetOffset(float XOffset, float YOffset, pipeline &Pipeline)
 //{
-//    ::layout::SetNodeOffset(Index, XOffset, YOffset, Tree);
+//    ::SetNodeOffset(Index, XOffset, YOffset, Tree);
 //}
 //
 //
@@ -385,16 +387,16 @@ QueryNodeResource(ResourceType Type, uint32_t NodeIndex, layout::layout_tree *Tr
 //    resource_key   Key   = MakeNodeResourceKey(ResourceType::ScrollRegion, Index, Tree);
 //    resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
 //
-//    uint64_t Size   = layout::GetScrollRegionFootprint();
+//    uint64_t Size   = GetScrollRegionFootprint();
 //    void    *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);
 //
-//    layout::scroll_region_params Params =
+//    scroll_region_params Params =
 //    {
 //        .PixelPerLine = ScrollSpeed,
 //        .Axis         = Axis,
 //    };
 //
-//    layout::scroll_region *ScrollRegion = layout::PlaceScrollRegionInMemory(Params, Memory);
+//    scroll_region *ScrollRegion = PlaceScrollRegionInMemory(Params, Memory);
 //    if(ScrollRegion)
 //    {
 //        UpdateResourceTable(State.Id, Key, ScrollRegion, Context.ResourceTable);
@@ -483,7 +485,7 @@ PushPointerReleaseEvent(pointer_event_list *List, pointer_event_node *Node, uint
 // We take this tree parameter for simplicity while we refactor this part
 
 static void
-BeginFrame(float Width, float Height, const pointer_event_list &EventList, layout::layout_tree *Tree)
+BeginFrame(float Width, float Height, const pointer_event_list &EventList, ui_layout_tree *Tree)
 {
     void_context &Context = GetVoidContext();
 
@@ -505,7 +507,7 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, layou
 
             if(State.IsCaptured)
             {
-                layout::HandlePointerMove(Event.Delta, Tree);
+                HandlePointerMove(Event.Delta, Tree);
             }
         } break;
 
@@ -513,7 +515,7 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, layou
         {
             pointer_state &State = PointerStates[0];
             State.ButtonMask |= Event.ButtonMask;
-            State.IsCaptured  = layout::HandlePointerClick(State.Position, State.ButtonMask, 0, Tree);
+            State.IsCaptured  = HandlePointerClick(State.Position, State.ButtonMask, 0, Tree);
         } break;
 
         case PointerEvent::Release:
@@ -523,7 +525,7 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, layou
 
             if(State.IsCaptured)
             {
-                layout::HandlePointerRelease(State.Position, State.ButtonMask, 0, Tree);
+                HandlePointerRelease(State.Position, State.ButtonMask, 0, Tree);
                 State.IsCaptured = false;
             }
         } break;
@@ -545,7 +547,7 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, layou
 
         if(State.ButtonMask == 0)
         {
-            layout::HandlePointerHover(State.Position, 0, Tree);
+            HandlePointerHover(State.Position, 0, Tree);
         }
     }
 
@@ -598,32 +600,32 @@ CreateVoidContext(void)
 // Functions intended for internal use.
 // -----------------------------------------------------------------------------
 
-component::component(const char *Name, layout::NodeFlags Flags, const cached_style *Style, layout::layout_tree *Tree)
+component::component(const char *Name, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree)
     : component(str8_comp(Name), Flags, Style, Tree)
 {
 }
 
-component::component(byte_string Name, layout::NodeFlags Flags, const cached_style *Style, layout::layout_tree *Tree)
+component::component(byte_string Name, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree)
 {
-    LayoutIndex = layout::CreateNode(HashByteString(Name), Flags, Style, Tree);
+    LayoutIndex = CreateNode(HashByteString(Name), Flags, Style, Tree);
     LayoutTree  = Tree;
-    layout::UpdateInput(LayoutIndex, Style, Tree);
+    UpdateInput(LayoutIndex, Style, Tree);
 }
 
 
-void component::SetStyle(const cached_style *Style)
+void component::SetStyle(cached_style *Style)
 {
-    layout::UpdateInput(LayoutIndex, Style, LayoutTree);
+    UpdateInput(LayoutIndex, Style, LayoutTree);
 }
 
 
-bool component::Push(layout::parent_node *Node)
+bool component::Push(parent_node *Node)
 {
     bool Result = false;
 
     if(Node)
     {
-        layout::PushParent(LayoutIndex, LayoutTree, Node);
+        PushParent(LayoutIndex, LayoutTree, Node);
         Result = true;
     }
 
@@ -633,9 +635,7 @@ bool component::Push(layout::parent_node *Node)
 
 bool component::Pop()
 {
-    layout::PopParent(LayoutIndex, LayoutTree);
+    PopParent(LayoutIndex, LayoutTree);
 
     return true;
 }
-
-} // namespace core

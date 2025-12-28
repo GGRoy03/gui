@@ -244,6 +244,22 @@ enum class RenderPassType
 };
 
 
+struct render_rect
+{
+    rect_float    RectBounds;
+    rect_float    TextureSource;
+    color         ColorTL;
+    color         ColorBL;
+    color         ColorTR;
+    color         ColorBR;
+    corner_radius CornerRadius;
+    float         BorderWidth;
+    float         Softness;
+    float         SampleTexture;
+    float        _Padding0;
+};
+
+
 struct render_batch
 {
     uint8_t *Memory;
@@ -358,27 +374,30 @@ PushDataInBatchList(memory_arena *Arena, render_batch_list &BatchList)
     return Result;
 }
 
+
+// Unsafe Code!
+
 static render_pass *
-GetRenderPass(memory_arena *Arena, RenderPassType Type, render_pass_list &BatchList)
+GetRenderPass(memory_arena *Arena, RenderPassType Type, render_pass_list &PassList)
 {
-    render_pass_node *Result = BatchList.Last;
+    render_pass_node *Result = PassList.Last;
 
     if (!Result || Result->Value.Type != Type)
     {
         Result = PushStruct<render_pass_node>(Arena);
         Result->Value.Type = Type;
 
-        if (!BatchList.First)
+        if (!PassList.First)
         {
-            BatchList.First = Result;
+            PassList.First = Result;
         }
 
-        if (BatchList.Last)
+        if (PassList.Last)
         {
-            BatchList.Last->Next = Result;
+            PassList.Last->Next = Result;
         }
 
-        BatchList.Last = Result;
+        PassList.Last = Result;
     }
 
     return &Result->Value;
@@ -586,7 +605,7 @@ struct inspector
 {
     // UI
 
-    layout::layout_tree *LayoutTree;
+    ui_layout_tree *LayoutTree;
 
     // Static State
 
@@ -599,42 +618,43 @@ struct inspector
 };
 
 
-constexpr core::color MainOrange        = core::color(0.9765f, 0.4510f, 0.0863f, 1.0f);
-constexpr core::color WhiteOrange       = core::color(1.0000f, 0.9686f, 0.9294f, 1.0f);
-constexpr core::color SurfaceOrange     = core::color(0.9961f, 0.8431f, 0.6667f, 1.0f);
-constexpr core::color HoverOrange       = core::color(0.9176f, 0.3451f, 0.0471f, 1.0f);
-constexpr core::color SubtleOrange      = core::color(0.1686f, 0.1020f, 0.0627f, 1.0f);
+// constexpr color MainOrange        = color(0.9765f, 0.4510f, 0.0863f, 1.0f);
+// constexpr color WhiteOrange       = color(1.0000f, 0.9686f, 0.9294f, 1.0f);
+// constexpr color SurfaceOrange     = color(0.9961f, 0.8431f, 0.6667f, 1.0f);
+constexpr color HoverOrange       = color(0.9176f, 0.3451f, 0.0471f, 1.0f);
+// constexpr color SubtleOrange      = color(0.1686f, 0.1020f, 0.0627f, 1.0f);
 
-constexpr core::color Background        = core::color(0.0588f, 0.0588f, 0.0627f, 1.0f);
-constexpr core::color SurfaceBackground = core::color(0.1020f, 0.1098f, 0.1176f, 1.0f);
-constexpr core::color BorderOrDivider   = core::color(0.1804f, 0.1961f, 0.2118f, 1.0f);
+constexpr color Background        = color(0.0588f, 0.0588f, 0.0627f, 1.0f);
+constexpr color SurfaceBackground = color(0.1020f, 0.1098f, 0.1176f, 1.0f);
+constexpr color BorderOrDivider   = color(0.1804f, 0.1961f, 0.2118f, 1.0f);
 
-constexpr core::color TextPrimary       = core::color(0.9765f, 0.9804f, 0.9843f, 1.0f);
-constexpr core::color TextSecondary     = core::color(0.6118f, 0.6392f, 0.6863f, 1.0f);
+// constexpr color TextPrimary       = color(0.9765f, 0.9804f, 0.9843f, 1.0f);
+// constexpr color TextSecondary     = color(0.6118f, 0.6392f, 0.6863f, 1.0f);
 
-constexpr core::color Success           = core::color(0.1333f, 0.7725f, 0.3686f, 1.0f);
-constexpr core::color Error             = core::color(0.9373f, 0.2667f, 0.2667f, 1.0f);
-constexpr core::color Warning           = core::color(0.9608f, 0.6196f, 0.0431f, 1.0f);
+constexpr color Success           = color(0.1333f, 0.7725f, 0.3686f, 1.0f);
+// constexpr color Error             = color(0.9373f, 0.2667f, 0.2667f, 1.0f);
+// constexpr color Warning           = color(0.9608f, 0.6196f, 0.0431f, 1.0f);
 
 
 static cached_style WindowStyle =
 {
-    .Default =
+    .Layout = 
     {
         .Size         = size({1000.f, LayoutSizing::Fixed}, {1000.f, LayoutSizing::Fixed}),
         .Direction    = LayoutDirection::Horizontal,
         .XAlign       = Alignment::Start,
         .YAlign       = Alignment::Center,
-
-        .Padding      = core::padding(20.f, 20.f, 20.f, 20.f),
+        .Padding      = padding(20.f, 20.f, 20.f, 20.f),
         .Spacing      = 10.f,
+    },
 
+    .Default =
+    {
         .Color        = Background,
         .BorderColor  = BorderOrDivider,
-
         .BorderWidth  = 2.f,
         .Softness     = 2.f,
-        .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
+        .CornerRadius = corner_radius(4.f, 4.f, 4.f, 4.f),
     },
 
     .Hovered =
@@ -651,18 +671,20 @@ static cached_style WindowStyle =
 
 static cached_style TreePanelStyle =
 {
-    .Default =
+    .Layout = 
     {
         .Size         = size({50.f, LayoutSizing::Percent}, {100.f, LayoutSizing::Percent}),
+        .Padding      = padding(20.f, 20.f, 20.f, 20.f),
+    },
 
-        .Padding      = core::padding(20.f, 20.f, 20.f, 20.f),
-
+    .Default =
+    {
         .Color        = SurfaceBackground,
         .BorderColor  = BorderOrDivider,
 
         .BorderWidth  = 2.f,
         .Softness     = 2.f,
-        .CornerRadius = core::corner_radius(4.f, 4.f, 4.f, 4.f),
+        .CornerRadius = corner_radius(4.f, 4.f, 4.f, 4.f),
     },
 };
 
@@ -675,39 +697,119 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
 {
     if(!Inspector.IsInitialized)
     {
-        Inspector.FrameArena  = AllocateArena({});
-        Inspector.StateArena  = AllocateArena({});
-        Inspector.LayoutTree  = layout::PlaceLayoutTreeInMemory(128, PushArena(Inspector.StateArena, layout::GetLayoutTreeFootprint(128), AlignOf(layout::layout_node)));
+        Inspector.FrameArena = AllocateArena({});
+        Inspector.StateArena = AllocateArena({});
+
+        // Messy!
+        Inspector.LayoutTree = PlaceLayoutTreeInMemory(128, PushArena(Inspector.StateArena, GetLayoutTreeFootprint(128), AlignOf(ui_layout_node)));
 
         Inspector.IsInitialized = true;
     }
 
-    PopArenaTo(Inspector.FrameArena, 0);
-
-    layout::NodeFlags WindowFlags = layout::NodeFlags::ClipContent |
-                                    layout::NodeFlags::IsDraggable |
-                                    layout::NodeFlags::IsResizable;
-
-    core::component Window("window", WindowFlags, &WindowStyle, Inspector.LayoutTree);
-    if(Window.Push(PushStruct<layout::parent_node>(Inspector.FrameArena)))
+    NodeFlags WindowFlags = NodeFlags::ClipContent | NodeFlags::IsDraggable | NodeFlags::IsResizable;
+    component Window("window", WindowFlags, &WindowStyle, Inspector.LayoutTree);
+    if(Window.Push(PushStruct<parent_node>(Inspector.FrameArena)))
     {
-        core::component TreePanel("tree_panel", layout::NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
-        if(TreePanel.Push(PushStruct<layout::parent_node>(Inspector.FrameArena)))
+        component TreePanel("tree_panel", NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
+        if(TreePanel.Push(PushStruct<parent_node>(Inspector.FrameArena)))
         {
             TreePanel.Pop();
         }
 
-        core::component OtherPanel("other_panel", layout::NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
-        if(OtherPanel.Push(PushStruct<layout::parent_node>(Inspector.FrameArena)))
+        component OtherPanel("other_panel", NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
+        if(OtherPanel.Push(PushStruct<parent_node>(Inspector.FrameArena)))
         {
             OtherPanel.Pop();
         }
     }
     Window.Pop();
 
-    // Then we can do this stuff I guess? And ask for a draw list...
-    // Which means we need a renderer, so let's do that. Alright.
-    // ComputeTreeLayout(Inspector.LayoutTree);
+    ComputeTreeLayout(Inspector.LayoutTree);
+
+    {
+        memory_footprint Footprint = GetRenderCommandsFootprint(Inspector.LayoutTree);
+        memory_block     Block     =
+        {
+            .SizeInBytes = Footprint.SizeInBytes,
+            .Base        = PushArena(Renderer.FrameArena, Footprint.SizeInBytes, Footprint.Alignment)
+        };
+        
+        render_command_list CommandList = ComputeRenderCommands(Inspector.LayoutTree, Block);
+        VOID_ASSERT(CommandList.Count);
+
+        // You'd probably want to move this to some other function, but since it's the only thing
+        // we render, we just put it here for simplicity.
+
+        render_pass *RenderPass = GetRenderPass(Renderer.FrameArena, RenderPassType::UI, Renderer.PassList);
+        if(RenderPass)
+        {
+            render_pass_params_ui &UIParams    = RenderPass->Params.UI;
+            rect_group_node       *GroupNode   = UIParams.Last;
+            rect_group_params      GroupParams = {};
+
+            if(!GroupNode)
+            {
+                GroupNode = PushStruct<rect_group_node>(Renderer.FrameArena);
+                GroupNode->BatchList.BytesPerInstance = sizeof(0);
+                GroupNode->Params                     = GroupParams;
+
+                if(!UIParams.First)
+                {
+                    UIParams.First = GroupNode;
+                    UIParams.Last  = GroupNode;
+                }
+                else
+                {
+                    UIParams.Last->Next = GroupNode;
+                    UIParams.Last       = GroupNode;
+                }
+            }
+
+            render_batch_list &BatchList = GroupNode->BatchList;
+
+            for(uint32_t Idx = 0; Idx < CommandList.Count; ++Idx)
+            {
+                const render_command &Command = CommandList.Commands[Idx];
+
+                switch(Command.Type)
+                {
+
+                case RenderCommandType::Rectangle:
+                {
+                    auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Renderer.FrameArena, BatchList));
+                    Rect->RectBounds    = {};
+                    Rect->TextureSource = {};
+                    Rect->ColorTL       = {};
+                    Rect->ColorBL       = {};
+                    Rect->ColorTR       = {};
+                    Rect->ColorBR       = {};
+                    Rect->CornerRadius  = {};
+                    Rect->BorderWidth   = {};
+                    Rect->Softness      = {};
+                    Rect->SampleTexture = {};
+                } break;
+
+                case RenderCommandType::Border:
+                {
+                    auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Renderer.FrameArena, BatchList));
+                    Rect->RectBounds    = {};
+                    Rect->TextureSource = {};
+                    Rect->ColorTL       = {};
+                    Rect->ColorBL       = {};
+                    Rect->ColorTR       = {};
+                    Rect->ColorBR       = {};
+                    Rect->CornerRadius  = {};
+                    Rect->BorderWidth   = {};
+                    Rect->Softness      = {};
+                    Rect->SampleTexture = {};
+                } break;
+
+                default: break;
+
+                }
+            }
+        }
+    }
 }
 
 // ====================================================
@@ -753,7 +855,7 @@ WinMain(HINSTANCE HInstance, HINSTANCE PrevInstance, LPSTR CmdLine, int CmdShow)
     ShowWindow(WindowState.Handle, CmdShow);
 
     inspector                Inspector = {};
-    core::pointer_event_list EventList = {};
+    pointer_event_list EventList = {};
     d3d11_renderer           Renderer  = D3D11Initialize(WindowState.Handle);
 
     while (WindowState.Running)
@@ -770,7 +872,7 @@ WinMain(HINSTANCE HInstance, HINSTANCE PrevInstance, LPSTR CmdLine, int CmdShow)
             DispatchMessageA(&Message);
         }
 
-        core::BeginFrame(1901.f, 1041.f, EventList, Inspector.LayoutTree);
+        BeginFrame(1901.f, 1041.f, EventList, Inspector.LayoutTree);
 
         float Color[4] = {0.f, 0.f, 0.f, 1.f};
         Renderer.DeviceContext->ClearRenderTargetView(Renderer.RenderView, Color);
@@ -779,7 +881,7 @@ WinMain(HINSTANCE HInstance, HINSTANCE PrevInstance, LPSTR CmdLine, int CmdShow)
 
         Renderer.SwapChain->Present(1, 0);
 
-        core::EndFrame();
+        EndFrame();
 
         Sleep(5);
     }

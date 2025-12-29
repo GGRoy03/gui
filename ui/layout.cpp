@@ -199,50 +199,73 @@ IsValidLayoutTree(const ui_layout_tree *Tree)
 }
 
 
-static uint64_t
+static memory_footprint
 GetLayoutTreeFootprint(uint64_t NodeCount)
 {
-    uint64_t ArraySize = (NodeCount + 1) * sizeof(ui_layout_node);
-    uint64_t PaintSize = (NodeCount + 0) * sizeof(paint_properties);  
-    uint64_t Result    = sizeof(ui_layout_tree) + ArraySize + PaintSize;
+    // ui_layout_tree
+    const uint64_t TreeEnd = sizeof(ui_layout_tree);
+
+    // ui_layout_node[NodeCount+1]
+    const uint64_t NodesStart = AlignPow2(TreeEnd, AlignOf(ui_layout_node));
+    const uint64_t NodesEnd   = NodesStart + ((NodeCount + 1) * sizeof(ui_layout_node));
+
+    // paint_properties[NodeCount]
+    const uint64_t PaintStart = AlignPow2(NodesEnd, AlignOf(paint_properties));
+    const uint64_t PaintEnd   = PaintStart + (NodeCount * sizeof(paint_properties));
+
+    memory_footprint Result =
+    {
+        .SizeInBytes = PaintEnd,
+        .Alignment   = AlignOf(ui_layout_tree),
+    };
+
     return Result;
 }
 
 
 static ui_layout_tree *
-PlaceLayoutTreeInMemory(uint64_t NodeCount, void *Memory)
+PlaceLayoutTreeInMemory(uint64_t NodeCount, memory_block Block)
 {
     ui_layout_tree *Result = 0;
+    memory_region   Local  = EnterMemoryRegion(Block);
 
-    if (Memory)
+    if (IsValidMemoryRegion(Local))
     {
-        ui_layout_node   *Nodes       = static_cast<ui_layout_node*>(Memory);
-        paint_properties *PaintBuffer = (paint_properties *)(Nodes + (NodeCount + 1));
+        // IMPORTANT:
+        // THE ORDER IN WHICH WE PLACE MEMBERS IS IMPORTANT (BIGGER ALIGNMENT GOES FIRST)
 
-        Result = reinterpret_cast<ui_layout_tree *>(PaintBuffer + NodeCount);
-        Result->NodeBuffer.Nodes    = Nodes;
-        Result->NodeBuffer.Count    = 0;
-        Result->NodeBuffer.Capacity = NodeCount;
-        Result->PaintBuffer         = PaintBuffer;
+        auto *Tree  = PushStruct<ui_layout_tree>(Local);
+        auto *Nodes = PushArray<ui_layout_node>(Local, NodeCount + 1);
+        auto *Paint = PushArray<paint_properties>(Local, NodeCount);
 
-        for (uint64_t Idx = 0; Idx < Result->NodeBuffer.Capacity; Idx++)
+        if (Tree && Nodes && Paint)
         {
-            ui_layout_node *Node = GetLayoutNode(Result->NodeBuffer, Idx);
-            VOID_ASSERT(Node);
+            Tree->NodeBuffer.Nodes    = Nodes;
+            Tree->NodeBuffer.Count    = 0;
+            Tree->NodeBuffer.Capacity = NodeCount;
+            Tree->PaintBuffer         = Paint;
+            
+            for (uint64_t Idx = 0; Idx < Tree->NodeBuffer.Capacity; Idx++)
+            {
+                ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, Idx);
+                VOID_ASSERT(Node);
+            
+                Node->Index      = InvalidIndex;
+                Node->First      = InvalidIndex;
+                Node->Last       = InvalidIndex;
+                Node->Parent     = InvalidIndex;
+                Node->Prev       = InvalidIndex;
+                Node->ChildCount = 0;
+            
+                Node->Next = Idx + 1;
+            }
+            
+            ui_layout_node *Sentinel = GetSentinelNode(Tree->NodeBuffer);
+            Sentinel->Next  = 0;
+            Sentinel->Index = InvalidIndex;
 
-            Node->Index      = InvalidIndex;
-            Node->First      = InvalidIndex;
-            Node->Last       = InvalidIndex;
-            Node->Parent     = InvalidIndex;
-            Node->Prev       = InvalidIndex;
-            Node->ChildCount = 0;
-
-            Node->Next = Idx + 1;
+            Result = Tree;
         }
-
-        ui_layout_node *Sentinel = GetSentinelNode(Result->NodeBuffer);
-        Sentinel->Next  = 0;
-        Sentinel->Index = InvalidIndex;
     }
 
     return Result;

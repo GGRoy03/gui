@@ -18,7 +18,7 @@ enum class NodeFlags : uint32_t
 };
 
 
-enum class Alignment
+enum class Alignment : uint32_t
 {
     None   = 0,
     Start  = 1,
@@ -27,7 +27,7 @@ enum class Alignment
 };
 
 
-enum class LayoutDirection
+enum class LayoutDirection : uint32_t
 {
     None       = 0,
     Horizontal = 1,
@@ -35,7 +35,7 @@ enum class LayoutDirection
 };
 
 
-enum class LayoutSizing
+enum class LayoutSizing : uint32_t
 {
     None    = 0,
     Fixed   = 1,
@@ -59,8 +59,8 @@ struct size
 
 // --- Tree Manipulation ---
 
-static uint64_t         GetLayoutTreeFootprint  (uint64_t NodeCount);
-static ui_layout_tree *    PlaceLayoutTreeInMemory (uint64_t NodeCount, void *Memory);
+static memory_footprint GetLayoutTreeFootprint  (uint64_t NodeCount);
+static ui_layout_tree * PlaceLayoutTreeInMemory (uint64_t NodeCount, memory_block Block);
 
 // --- Node Manipulation ---
 

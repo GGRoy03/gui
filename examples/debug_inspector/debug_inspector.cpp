@@ -408,6 +408,95 @@ GetRenderPass(memory_arena *Arena, RenderPassType Type, render_pass_list &PassLi
 }
 
 
+static void
+RenderUI(ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassList)
+{
+    memory_footprint Footprint = GetRenderCommandsFootprint(Tree);
+    memory_block     Block     =
+    {
+        .SizeInBytes = Footprint.SizeInBytes,
+        .Base        = PushArena(Arena, Footprint.SizeInBytes, Footprint.Alignment)
+    };
+        
+    render_command_list CommandList = ComputeRenderCommands(Tree, Block);
+    // VOID_ASSERT(CommandList.Count);
+
+    render_pass *RenderPass = GetRenderPass(Arena, RenderPassType::UI, PassList);
+    if(RenderPass)
+    {
+        render_pass_params_ui &UIParams    = RenderPass->Params.UI;
+        rect_group_node       *GroupNode   = UIParams.Last;
+        rect_group_params      GroupParams = {};
+
+        if(!GroupNode)
+        {
+            GroupNode = PushStruct<rect_group_node>(Arena);
+            GroupNode->BatchList.First            = nullptr;
+            GroupNode->BatchList.Last             = nullptr;
+            GroupNode->BatchList.BatchCount       = 0;
+            GroupNode->BatchList.ByteCount        = 0;
+            GroupNode->BatchList.BytesPerInstance = sizeof(render_rect);
+            GroupNode->Params                     = GroupParams;
+
+            if(!UIParams.First)
+            {
+                UIParams.First = GroupNode;
+                UIParams.Last  = GroupNode;
+            }
+            else
+            {
+                UIParams.Last->Next = GroupNode;
+                UIParams.Last       = GroupNode;
+            }
+        }
+
+        render_batch_list &BatchList = GroupNode->BatchList;
+
+        for(uint32_t Idx = 0; Idx < CommandList.Count; ++Idx)
+        {
+            const render_command &Command = CommandList.Commands[Idx];
+
+            switch(Command.Type)
+            {
+
+            case RenderCommandType::Rectangle:
+            {
+                auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Arena, BatchList));
+                Rect->RectBounds    = Command.Box;
+                Rect->TextureSource = {};
+                Rect->ColorTL       = Command.Rect.Color;
+                Rect->ColorBL       = Command.Rect.Color;
+                Rect->ColorTR       = Command.Rect.Color;
+                Rect->ColorBR       = Command.Rect.Color;
+                Rect->CornerRadius  = Command.Rect.CornerRadius;
+                Rect->BorderWidth   = 0;
+                Rect->Softness      = 2;
+                Rect->SampleTexture = 0;
+            } break;
+
+            case RenderCommandType::Border:
+            {
+                auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Arena, BatchList));
+                Rect->RectBounds    = Command.Box;
+                Rect->TextureSource = {};
+                Rect->ColorTL       = Command.Border.Color;
+                Rect->ColorBL       = Command.Border.Color;
+                Rect->ColorTR       = Command.Border.Color;
+                Rect->ColorBR       = Command.Border.Color;
+                Rect->CornerRadius  = Command.Border.CornerRadius;
+                Rect->BorderWidth   = Command.Border.Width;
+                Rect->Softness      = 2;
+                Rect->SampleTexture = 0;
+            } break;
+
+            default: break;
+
+            }
+        }
+    }
+}
+
+
 // ====================================================
 // D3D11 Renderer
 // ====================================================
@@ -834,9 +923,6 @@ static cached_style TreePanelStyle =
 };
 
 
-// When I look at this, I wonder if the component type is even useful?
-
-
 static void
 RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
 {
@@ -845,8 +931,13 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
         Inspector.FrameArena = AllocateArena({});
         Inspector.StateArena = AllocateArena({});
 
-        // Messy!
-        Inspector.LayoutTree = PlaceLayoutTreeInMemory(128, PushArena(Inspector.StateArena, GetLayoutTreeFootprint(128), AlignOf(ui_layout_node)));
+        memory_footprint Footprint = GetLayoutTreeFootprint(128);
+        memory_block     Block     =
+        {
+            .SizeInBytes = Footprint.SizeInBytes,
+            .Base        = PushArena(Inspector.StateArena, Footprint.SizeInBytes, Footprint.Alignment),
+        };
+        Inspector.LayoutTree = PlaceLayoutTreeInMemory(128, Block);
 
         Inspector.IsInitialized = true;
     }
@@ -871,94 +962,7 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
 
     ComputeTreeLayout(Inspector.LayoutTree);
 
-    {
-        memory_footprint Footprint = GetRenderCommandsFootprint(Inspector.LayoutTree);
-        memory_block     Block     =
-        {
-            .SizeInBytes = Footprint.SizeInBytes,
-            .Base        = PushArena(Renderer.FrameArena, Footprint.SizeInBytes, Footprint.Alignment)
-        };
-        
-        render_command_list CommandList = ComputeRenderCommands(Inspector.LayoutTree, Block);
-        VOID_ASSERT(CommandList.Count);
-
-        // You'd probably want to move this to some other function, but since it's the only thing
-        // we render, we just put it here for simplicity.
-
-        render_pass *RenderPass = GetRenderPass(Renderer.FrameArena, RenderPassType::UI, Renderer.PassList);
-        if(RenderPass)
-        {
-            render_pass_params_ui &UIParams    = RenderPass->Params.UI;
-            rect_group_node       *GroupNode   = UIParams.Last;
-            rect_group_params      GroupParams = {};
-
-            if(!GroupNode)
-            {
-                GroupNode = PushStruct<rect_group_node>(Renderer.FrameArena);
-                GroupNode->BatchList.First            = nullptr;
-                GroupNode->BatchList.Last             = nullptr;
-                GroupNode->BatchList.BatchCount       = 0;
-                GroupNode->BatchList.ByteCount        = 0;
-                GroupNode->BatchList.BytesPerInstance = sizeof(render_rect);
-                GroupNode->Params                     = GroupParams;
-
-                if(!UIParams.First)
-                {
-                    UIParams.First = GroupNode;
-                    UIParams.Last  = GroupNode;
-                }
-                else
-                {
-                    UIParams.Last->Next = GroupNode;
-                    UIParams.Last       = GroupNode;
-                }
-            }
-
-            render_batch_list &BatchList = GroupNode->BatchList;
-
-            for(uint32_t Idx = 0; Idx < CommandList.Count; ++Idx)
-            {
-                const render_command &Command = CommandList.Commands[Idx];
-
-                switch(Command.Type)
-                {
-
-                case RenderCommandType::Rectangle:
-                {
-                    auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Renderer.FrameArena, BatchList));
-                    Rect->RectBounds    = Command.Box;
-                    Rect->TextureSource = {};
-                    Rect->ColorTL       = Command.Rect.Color;
-                    Rect->ColorBL       = Command.Rect.Color;
-                    Rect->ColorTR       = Command.Rect.Color;
-                    Rect->ColorBR       = Command.Rect.Color;
-                    Rect->CornerRadius  = Command.Rect.CornerRadius;
-                    Rect->BorderWidth   = 0;
-                    Rect->Softness      = 2;
-                    Rect->SampleTexture = 0;
-                } break;
-
-                case RenderCommandType::Border:
-                {
-                    auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Renderer.FrameArena, BatchList));
-                    Rect->RectBounds    = Command.Box;
-                    Rect->TextureSource = {};
-                    Rect->ColorTL       = Command.Border.Color;
-                    Rect->ColorBL       = Command.Border.Color;
-                    Rect->ColorTR       = Command.Border.Color;
-                    Rect->ColorBR       = Command.Border.Color;
-                    Rect->CornerRadius  = Command.Border.CornerRadius;
-                    Rect->BorderWidth   = Command.Border.Width;
-                    Rect->Softness      = 2;
-                    Rect->SampleTexture = 0;
-                } break;
-
-                default: break;
-
-                }
-            }
-        }
-    }
+    RenderUI(Inspector.LayoutTree, Renderer.FrameArena, Renderer.PassList);
 }
 
 // ====================================================

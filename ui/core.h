@@ -295,7 +295,7 @@ constexpr T* PushArrayAligned(memory_region &Region, uint64_t Count, uint64_t Al
 template <typename T>
 constexpr T* PushArray(memory_region &Region, uint64_t Count)
 {
-    return PushArrayAligned<T>(Region, Count, max(8, alignof(T)));
+    return PushArrayAligned<T>(Region, Count, alignof(T));
 }
 
 template <typename T>

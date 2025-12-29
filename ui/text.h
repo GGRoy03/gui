@@ -1,3 +1,6 @@
+namespace gui
+{
+
 // =================================================================
 // @Internal: Fonts Implementation
 
@@ -6,7 +9,9 @@ struct font
     // render_handle          CacheTransfer;
     // render_handle          Cache;
     // render_handle          CacheView;
-    vec2_uint16            TextureSize;
+
+    uint16_t               TextureSizeX;
+    uint16_t               TextureSizeY;
     ntext::glyph_generator Generator;
     uint16_t               Size;
     byte_string            Name;
@@ -19,13 +24,13 @@ static resource_key UILoadSystemFont  (byte_string Name, float Size, uint16_t Ca
 
 struct shaped_glyph
 {
-    float      OffsetX;
-    float      OffsetY;
-    float      Advance;
-    rect_float Source;
-    rect_float Position;
-    bool       BreakLine;
-    bool       Skip;
+    float        OffsetX;
+    float        OffsetY;
+    float        Advance;
+    bounding_box Source;
+    bounding_box Position;
+    bool         BreakLine;
+    bool         Skip;
 };
 
 struct text_word
@@ -50,3 +55,5 @@ struct text
 
 static uint64_t GetTextFootprint   (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run);
 static text *   PlaceTextInMemory  (ntext::analysed_text Analysed, ntext::shaped_glyph_run Run, font *Font, void *Memory);
+
+} // namespace gui

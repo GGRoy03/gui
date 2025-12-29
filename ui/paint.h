@@ -1,5 +1,8 @@
 #pragma once
 
+namespace gui
+{
+
 template<typename T>
 struct style_property
 {
@@ -120,7 +123,7 @@ enum class RenderCommandType
 struct render_command
 {
     RenderCommandType Type;
-    rect_float        Box;
+    bounding_box      Box;
 
     union
     {
@@ -149,3 +152,5 @@ struct render_command_list
 
 static memory_footprint    GetRenderCommandsFootprint  (ui_layout_tree *Tree);
 static render_command_list ComputeRenderCommands       (ui_layout_tree *Tree, void *Memory);
+
+} // namespace gui

@@ -1,3 +1,6 @@
+namespace gui
+{
+
 //// =================================================================
 //// @Internal: Fonts Implementation
 //
@@ -135,4 +138,6 @@
 //    }
 //
 //    return Result;
-//}
+//
+
+} // namespace gui

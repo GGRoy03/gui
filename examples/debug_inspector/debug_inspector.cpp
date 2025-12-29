@@ -7,6 +7,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <windowsx.h>
 
 #define D3D11_NO_HELPERS
 #include <d3d11.h>
@@ -246,17 +247,17 @@ enum class RenderPassType
 
 struct render_rect
 {
-    rect_float    RectBounds;
-    rect_float    TextureSource;
-    color         ColorTL;
-    color         ColorBL;
-    color         ColorTR;
-    color         ColorBR;
-    corner_radius CornerRadius;
-    float         BorderWidth;
-    float         Softness;
-    float         SampleTexture;
-    float        _Padding0;
+    gui::bounding_box         RectBounds;
+    gui::bounding_box         TextureSource;
+    gui::color         ColorTL;
+    gui::color         ColorBL;
+    gui::color         ColorTR;
+    gui::color         ColorBR;
+    gui::corner_radius CornerRadius;
+    float              BorderWidth;
+    float              Softness;
+    float              SampleTexture;
+    float             _Padding0;
 };
 
 
@@ -288,8 +289,7 @@ struct render_batch_list
 
 struct rect_group_params
 {
-    matrix_3x3 Transform;
-    rect_float Clip;
+    gui::bounding_box Clip;
 };
 
 
@@ -362,7 +362,7 @@ PushDataInBatchList(memory_arena *Arena, render_batch_list &BatchList)
         }
     }
 
-    BatchList.ByteCount += BatchList.BytesPerInstance;
+    BatchList.ByteCount  += BatchList.BytesPerInstance;
     BatchList.BatchCount += 1;
 
     if(Node)
@@ -409,17 +409,16 @@ GetRenderPass(memory_arena *Arena, RenderPassType Type, render_pass_list &PassLi
 
 
 static void
-RenderUI(ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassList)
+RenderUI(gui::ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassList)
 {
-    memory_footprint Footprint = GetRenderCommandsFootprint(Tree);
-    memory_block     Block     =
+    gui::memory_footprint Footprint = GetRenderCommandsFootprint(Tree);
+    gui::memory_block     Block     =
     {
         .SizeInBytes = Footprint.SizeInBytes,
         .Base        = PushArena(Arena, Footprint.SizeInBytes, Footprint.Alignment)
     };
         
-    render_command_list CommandList = ComputeRenderCommands(Tree, Block);
-    // VOID_ASSERT(CommandList.Count);
+    gui::render_command_list CommandList = ComputeRenderCommands(Tree, Block);
 
     render_pass *RenderPass = GetRenderPass(Arena, RenderPassType::UI, PassList);
     if(RenderPass)
@@ -454,12 +453,12 @@ RenderUI(ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassList)
 
         for(uint32_t Idx = 0; Idx < CommandList.Count; ++Idx)
         {
-            const render_command &Command = CommandList.Commands[Idx];
+            const gui::render_command &Command = CommandList.Commands[Idx];
 
             switch(Command.Type)
             {
 
-            case RenderCommandType::Rectangle:
+            case gui::RenderCommandType::Rectangle:
             {
                 auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Arena, BatchList));
                 Rect->RectBounds    = Command.Box;
@@ -474,7 +473,7 @@ RenderUI(ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassList)
                 Rect->SampleTexture = 0;
             } break;
 
-            case RenderCommandType::Border:
+            case gui::RenderCommandType::Border:
             {
                 auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Arena, BatchList));
                 Rect->RectBounds    = Command.Box;
@@ -533,9 +532,12 @@ struct d3d11_renderer
 
 struct d3d11_rect_uniform_buffer
 {
-    vec4_float Transform[3];
-    vec2_float ViewportSizeInPixel;
-    vec2_float AtlasSizeInPixel;
+    float ScaleX   , _Padding0, _Padding1, _Padding2;
+    float _Padding3, ScaleY   , _Padding4, _Padding5;
+    float _Padding6, _Padding7, _Padding8, _Padding9;
+
+    gui::dimensions ViewportSizeInPixel;
+    gui::dimensions AtlasSizeInPixel;
 };
 
 
@@ -548,7 +550,7 @@ D3D11Initialize(HWND HWindow)
     {
         UINT CreateFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
         #ifndef NDEBUG
-        // CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
+        CreateFlags |= D3D11_CREATE_DEVICE_DEBUG;
         #endif
         D3D_FEATURE_LEVEL Levels[] = { D3D_FEATURE_LEVEL_11_0 };
         D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
@@ -746,11 +748,10 @@ D3D11RenderFrame(d3d11_renderer &Renderer, float Width, float Height)
                 ID3D11Buffer *UniformBuffer = Renderer.UniformBuffer;
                 {
                     d3d11_rect_uniform_buffer Uniform = {};
-                    Uniform.Transform[0]        = {{1.f, 0.f, 0.f, 0.f}};
-                    Uniform.Transform[1]        = {{0.f, 1.f, 0.f, 0.f}};
-                    Uniform.Transform[2]        = {{0.f, 0.f, 1.f, 0.f}};
-                    Uniform.ViewportSizeInPixel = {Width, Height};
-                    Uniform.AtlasSizeInPixel    = {};
+                    Uniform.ScaleX              = 1.f;
+                    Uniform.ScaleY              = 1.f;
+                    Uniform.ViewportSizeInPixel = gui::dimensions(Width, Height);
+                    Uniform.AtlasSizeInPixel    = gui::dimensions(0.f, 0.f);
 
                     D3D11_MAPPED_SUBRESOURCE Resource = {};
                     Renderer.DeviceContext->Map(static_cast<ID3D11Resource *>(UniformBuffer), 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
@@ -787,7 +788,7 @@ D3D11RenderFrame(d3d11_renderer &Renderer, float Width, float Height)
 
                 // Scissor
                 {
-                    rect_float Clip = RectParams.Clip;
+                    gui::bounding_box Clip = RectParams.Clip;
                     D3D11_RECT Rect = {};
 
                     if(Clip.Left == 0 && Clip.Top == 0 && Clip.Right == 0 && Clip.Bottom == 0)
@@ -839,7 +840,7 @@ struct inspector
 {
     // UI
 
-    ui_layout_tree *LayoutTree;
+    gui::ui_layout_tree *LayoutTree;
 
     // Static State
 
@@ -852,33 +853,33 @@ struct inspector
 };
 
 
-// constexpr color MainOrange        = color(0.9765f, 0.4510f, 0.0863f, 1.0f);
-// constexpr color WhiteOrange       = color(1.0000f, 0.9686f, 0.9294f, 1.0f);
-// constexpr color SurfaceOrange     = color(0.9961f, 0.8431f, 0.6667f, 1.0f);
-constexpr color HoverOrange       = color(0.9176f, 0.3451f, 0.0471f, 1.0f);
-// constexpr color SubtleOrange      = color(0.1686f, 0.1020f, 0.0627f, 1.0f);
+// constexpr gui::color MainOrange        = gui::color(0.9765f, 0.4510f, 0.0863f, 1.0f);
+// constexpr gui::color WhiteOrange       = gui::color(1.0000f, 0.9686f, 0.9294f, 1.0f);
+// constexpr gui::color SurfaceOrange     = gui::color(0.9961f, 0.8431f, 0.6667f, 1.0f);
+constexpr gui::color HoverOrange       = gui::color(0.9176f, 0.3451f, 0.0471f, 1.0f);
+// constexpr gui::color SubtleOrange      = gui::color(0.1686f, 0.1020f, 0.0627f, 1.0f);
 
-constexpr color Background        = color(0.0588f, 0.0588f, 0.0627f, 1.0f);
-constexpr color SurfaceBackground = color(0.1020f, 0.1098f, 0.1176f, 1.0f);
-constexpr color BorderOrDivider   = color(0.1804f, 0.1961f, 0.2118f, 1.0f);
+constexpr gui::color Background        = gui::color(0.0588f, 0.0588f, 0.0627f, 1.0f);
+constexpr gui::color SurfaceBackground = gui::color(0.1020f, 0.1098f, 0.1176f, 1.0f);
+constexpr gui::color BorderOrDivider   = gui::color(0.1804f, 0.1961f, 0.2118f, 1.0f);
 
-// constexpr color TextPrimary       = color(0.9765f, 0.9804f, 0.9843f, 1.0f);
-// constexpr color TextSecondary     = color(0.6118f, 0.6392f, 0.6863f, 1.0f);
+// constexpr gui::color TextPrimary       = gui::color(0.9765f, 0.9804f, 0.9843f, 1.0f);
+// constexpr gui::color TextSecondary     = gui::color(0.6118f, 0.6392f, 0.6863f, 1.0f);
 
-constexpr color Success           = color(0.1333f, 0.7725f, 0.3686f, 1.0f);
-// constexpr color Error             = color(0.9373f, 0.2667f, 0.2667f, 1.0f);
-// constexpr color Warning           = color(0.9608f, 0.6196f, 0.0431f, 1.0f);
+constexpr gui::color Success           = gui::color(0.1333f, 0.7725f, 0.3686f, 1.0f);
+// constexpr gui::color Error             = gui::color(0.9373f, 0.2667f, 0.2667f, 1.0f);
+// constexpr gui::color Warning           = gui::color(0.9608f, 0.6196f, 0.0431f, 1.0f);
 
 
-static cached_style WindowStyle =
+static gui::cached_style WindowStyle =
 {
     .Layout = 
     {
-        .Size         = size({1000.f, LayoutSizing::Fixed}, {1000.f, LayoutSizing::Fixed}),
-        .Direction    = LayoutDirection::Horizontal,
-        .XAlign       = Alignment::Start,
-        .YAlign       = Alignment::Center,
-        .Padding      = padding(20.f, 20.f, 20.f, 20.f),
+        .Size         = gui::size({1000.f, gui::LayoutSizing::Fixed}, {1000.f, gui::LayoutSizing::Fixed}),
+        .Direction    = gui::LayoutDirection::Horizontal,
+        .XAlign       = gui::Alignment::Start,
+        .YAlign       = gui::Alignment::Center,
+        .Padding      = gui::padding(20.f, 20.f, 20.f, 20.f),
         .Spacing      = 10.f,
     },
 
@@ -888,7 +889,7 @@ static cached_style WindowStyle =
         .BorderColor  = BorderOrDivider,
         .BorderWidth  = 2.f,
         .Softness     = 2.f,
-        .CornerRadius = corner_radius(4.f, 4.f, 4.f, 4.f),
+        .CornerRadius = gui::corner_radius(4.f, 4.f, 4.f, 4.f),
     },
 
     .Hovered =
@@ -903,12 +904,12 @@ static cached_style WindowStyle =
 };
 
 
-static cached_style TreePanelStyle =
+static gui::cached_style TreePanelStyle =
 {
     .Layout = 
     {
-        .Size         = size({50.f, LayoutSizing::Percent}, {100.f, LayoutSizing::Percent}),
-        .Padding      = padding(20.f, 20.f, 20.f, 20.f),
+        .Size         = gui::size({50.f, gui::LayoutSizing::Percent}, {100.f, gui::LayoutSizing::Percent}),
+        .Padding      = gui::padding(20.f, 20.f, 20.f, 20.f),
     },
 
     .Default =
@@ -918,7 +919,7 @@ static cached_style TreePanelStyle =
 
         .BorderWidth  = 2.f,
         .Softness     = 2.f,
-        .CornerRadius = corner_radius(4.f, 4.f, 4.f, 4.f),
+        .CornerRadius = gui::corner_radius(4.f, 4.f, 4.f, 4.f),
     },
 };
 
@@ -931,58 +932,105 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
         Inspector.FrameArena = AllocateArena({});
         Inspector.StateArena = AllocateArena({});
 
-        memory_footprint Footprint = GetLayoutTreeFootprint(128);
-        memory_block     Block     =
+        gui::memory_footprint Footprint = gui::GetLayoutTreeFootprint(128);
+        gui::memory_block     Block     =
         {
             .SizeInBytes = Footprint.SizeInBytes,
             .Base        = PushArena(Inspector.StateArena, Footprint.SizeInBytes, Footprint.Alignment),
         };
-        Inspector.LayoutTree = PlaceLayoutTreeInMemory(128, Block);
+        Inspector.LayoutTree = gui::PlaceLayoutTreeInMemory(128, Block);
 
         Inspector.IsInitialized = true;
     }
 
-    NodeFlags WindowFlags = NodeFlags::ClipContent | NodeFlags::IsDraggable | NodeFlags::IsResizable;
-    component Window("window", WindowFlags, &WindowStyle, Inspector.LayoutTree);
-    if(Window.Push(PushStruct<parent_node>(Inspector.FrameArena)))
+    gui::NodeFlags WindowFlags = gui::NodeFlags::ClipContent | gui::NodeFlags::IsDraggable | gui::NodeFlags::IsResizable;
+    gui::component Window("window", WindowFlags, &WindowStyle, Inspector.LayoutTree);
+    if(Window.Push(PushStruct<gui::parent_node>(Inspector.FrameArena)))
     {
-        component TreePanel("tree_panel", NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
-        if(TreePanel.Push(PushStruct<parent_node>(Inspector.FrameArena)))
+        gui::component TreePanel("tree_panel", gui::NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
+        if(TreePanel.Push(PushStruct<gui::parent_node>(Inspector.FrameArena)))
         {
             TreePanel.Pop();
         }
 
-        component OtherPanel("other_panel", NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
-        if(OtherPanel.Push(PushStruct<parent_node>(Inspector.FrameArena)))
+        gui::component OtherPanel("other_panel", gui::NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
+        if(OtherPanel.Push(PushStruct<gui::parent_node>(Inspector.FrameArena)))
         {
             OtherPanel.Pop();
         }
     }
     Window.Pop();
 
-    ComputeTreeLayout(Inspector.LayoutTree);
+    gui::ComputeTreeLayout(Inspector.LayoutTree);
 
     RenderUI(Inspector.LayoutTree, Renderer.FrameArena, Renderer.PassList);
 }
 
 // ====================================================
-// Entry Point / UI Loop
+// Entry Point & Platform
 // ====================================================
 
 
-struct window_state
+struct win32_state
 {
-    HWND Handle;
-    BOOL Running;
+    HWND                    WindowHandle;
+    memory_arena           *FrameArena;
+    gui::pointer_event_list PointerEventList;
+
+    // Mouse
+
+    int MouseX;
+    int MouseY;
 };
+
+static win32_state Win32State;
+
 
 LRESULT CALLBACK
 WindowProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
 {
-    if (Message == WM_DESTROY)
+    gui::pointer_event_list *EventList = &Win32State.PointerEventList;
+
+    switch(Message)
+    {
+
+    case WM_MOUSEMOVE:
+    {
+        float MouseX     = static_cast<float>(GET_X_LPARAM(LParam));
+        float MouseY     = static_cast<float>(GET_Y_LPARAM(LParam));
+        float LastMouseX = static_cast<float>(Win32State.MouseX);
+        float LastMouseY = static_cast<float>(Win32State.MouseY);
+
+        gui::PushPointerMoveEvent(gui::point(MouseX, MouseY), gui::point(LastMouseX, LastMouseY), PushStruct<gui::pointer_event_node>(Win32State.FrameArena), EventList);
+
+        Win32State.MouseX = MouseX;
+        Win32State.MouseY = MouseY;
+    } break;
+
+    case WM_LBUTTONDOWN:
+    {
+        float MouseX = static_cast<float>(GET_X_LPARAM(LParam));
+        float MouseY = static_cast<float>(GET_Y_LPARAM(LParam));
+
+        gui::PushPointerClickEvent(gui::PointerButton::Primary, gui::point(MouseX, MouseY), PushStruct<gui::pointer_event_node>(Win32State.FrameArena), EventList);
+    } break;
+
+    case WM_LBUTTONUP:
+    {
+        float MouseX = static_cast<float>(GET_X_LPARAM(LParam));
+        float MouseY = static_cast<float>(GET_Y_LPARAM(LParam));
+
+        gui::PushPointerReleaseEvent(gui::PointerButton::Primary, gui::point(MouseX, MouseY), PushStruct<gui::pointer_event_node>(Win32State.FrameArena), EventList);
+    } break;
+
+    case WM_DESTROY:
     {
         PostQuitMessage(0);
         return 0;
+    } break;
+
+    default: break;
+
     }
 
     return DefWindowProcA(Hwnd, Message, WParam, LParam);
@@ -992,26 +1040,25 @@ int WINAPI
 WinMain(HINSTANCE HInstance, HINSTANCE PrevInstance, LPSTR CmdLine, int CmdShow)
 {
     WNDCLASSA WindowClass = {};
+    WindowClass.hCursor       = LoadCursor(NULL, IDC_ARROW);
     WindowClass.lpfnWndProc   = WindowProc;
     WindowClass.hInstance     = HInstance;
     WindowClass.lpszClassName = "Debug Inspector";
 
     RegisterClassA(&WindowClass);
 
-    window_state WindowState = {};
-    WindowState.Running = TRUE;
+    Win32State.FrameArena   = AllocateArena({});
+    Win32State.WindowHandle = CreateWindowExA(0, WindowClass.lpszClassName, "Minimal Window",
+                                              WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+                                              1920, 1080, 0, 0, HInstance, 0);
 
-    WindowState.Handle = CreateWindowExA(0, WindowClass.lpszClassName, "Minimal Window",
-                                         WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-                                         1920, 1080, 0, 0, HInstance, 0);
+    ShowWindow(Win32State.WindowHandle, CmdShow);
 
-    ShowWindow(WindowState.Handle, CmdShow);
+    BOOL           Running   = true;
+    inspector      Inspector = {};
+    d3d11_renderer Renderer  = D3D11Initialize(Win32State.WindowHandle);
 
-    inspector          Inspector = {};
-    pointer_event_list EventList = {};
-    d3d11_renderer     Renderer  = D3D11Initialize(WindowState.Handle);
-
-    while (WindowState.Running)
+    while (Running)
     {
         if (Inspector.FrameArena)
         {
@@ -1023,24 +1070,30 @@ WinMain(HINSTANCE HInstance, HINSTANCE PrevInstance, LPSTR CmdLine, int CmdShow)
             PopArenaTo(Renderer.FrameArena, 0);
         }
 
+        if(Win32State.FrameArena)
+        {
+            PopArenaTo(Win32State.FrameArena, 0);
+        }
+
         MSG Message;
         while (PeekMessageA(&Message, 0, 0, 0, PM_REMOVE))
         {
             if (Message.message == WM_QUIT)
             {
-                WindowState.Running = FALSE;
+                Running = FALSE;
             }
 
             TranslateMessage(&Message);
             DispatchMessageA(&Message);
         }
 
-        BeginFrame(1901.f, 1041.f, EventList, Inspector.LayoutTree);
+        gui::BeginFrame(1901.f, 1041.f, Win32State.PointerEventList, Inspector.LayoutTree);
 
         RenderInspectorUI(Inspector, Renderer);
         D3D11RenderFrame(Renderer, 1901.f, 1041.f);
 
-        EndFrame();
+        gui::ClearPointerEvents(&Win32State.PointerEventList);
+        gui::EndFrame();
 
         Sleep(10);
     }

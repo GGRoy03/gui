@@ -1,18 +1,42 @@
 #pragma once
 
-// =============================================================================
-// GLOBAL: Template Specializations & Includes
-// =============================================================================
-
 #include <unordered_map>
 
-enum class NodeState : uint32_t;
+namespace gui
+{
 
-template<>
-struct enable_bitmask_operators<NodeState> : std::true_type {};
+// =============================================================================
+// DOMAIN: Basic Geometry
+// =============================================================================
 
-template<>
-struct enable_bitmask_operators<NodeFlags> : std::true_type {};
+
+// TODO: Handle radiuses
+static float
+BoundingBoxSignedDistanceField(point Point, bounding_box BoundingBox)
+{
+    dimensions Size   = dimensions(BoundingBox.Right - BoundingBox.Left, BoundingBox.Bottom - BoundingBox.Top);
+    dimensions Half   = dimensions(Size.Width * 0.5f, Size.Height * 0.5f);
+    point      Start  = point(BoundingBox.Left, BoundingBox.Top);
+    point      Center = Start + Half;
+    point      Local  = Point - Center;
+
+    point FirstQuadrant = point(abs(Local.X), abs(Local.Y)) - Half;
+    float OuterX        = Max(FirstQuadrant.X, 0.f);
+    float OuterY        = Max(FirstQuadrant.Y, 0.f);
+    float OuterDistance = sqrtf(OuterX * OuterX + OuterY * OuterY);
+    float InnerDistance = Min(Max(FirstQuadrant.X, FirstQuadrant.Y), 0.f);
+    float Result        = OuterDistance + InnerDistance;
+
+    return Result;
+}
+
+
+static bool
+BoundingBoxesIntersect(bounding_box A, bounding_box B)
+{
+    bool Result = A.Left < B.Right && A.Right > B.Left && A.Top < B.Bottom && A.Bottom > B.Top;
+    return Result;
+}
 
 // =============================================================================
 // DOMAIN: Layout Tree & Nodes
@@ -24,6 +48,7 @@ std::unordered_map<uint64_t, uint32_t> KeyMap;
 enum class NodeState : uint32_t
 {
     None = 0,
+
     UseHoveredStyle    = 1 << 0,
     UseFocusedStyle    = 1 << 1,
     HasCapturedPointer = 1 << 2,
@@ -31,11 +56,11 @@ enum class NodeState : uint32_t
 };
 
 
-struct axes
-{
-    float Width;
-    float Height;
-};
+template<>
+struct enable_bitmask_operators<NodeState> : std::true_type {};
+
+template<>
+struct enable_bitmask_operators<gui::NodeFlags> : std::true_type {};
 
 
 struct ui_layout_node
@@ -48,9 +73,9 @@ struct ui_layout_node
     uint32_t            ChildCount;
     uint32_t            Index;
 
-    vec2_float          OutputPosition;
-    axes                OutputSize;
-    axes                OutputChildSize;
+    point               OutputPosition;
+    dimensions          OutputSize;
+    dimensions          OutputChildSize;
 
     size                Size;
     size                MinSize;
@@ -61,9 +86,9 @@ struct ui_layout_node
     padding             Padding;
     float               Spacing;
 
-    vec2_float          VisualOffset;
-    vec2_float          DragOffset;
-    vec2_float          ScrollOffset;
+    dimensions          VisualOffset;
+    dimensions          DragOffset;
+    dimensions          ScrollOffset;
 
     NodeState           State;
     NodeFlags           Flags;
@@ -232,7 +257,7 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, memory_block Block)
     if (IsValidMemoryRegion(Local))
     {
         // IMPORTANT:
-        // THE ORDER IN WHICH WE PLACE MEMBERS IS IMPORTANT (BIGGER ALIGNMENT GOES FIRST)
+        // THE ORDER IN WHICH WE PLACE MEMBERS IS IMPORTANT. (SEE FOOTPRINT)
 
         auto *Tree  = PushStruct<ui_layout_tree>(Local);
         auto *Nodes = PushArray<ui_layout_node>(Local, NodeCount + 1);
@@ -335,32 +360,48 @@ UpdateInput(uint32_t NodeIndex, cached_style *Cached, ui_layout_tree *Tree)
 }
 
 
-static rect_float GetLayoutNodeOuterRect(ui_layout_node *Node)
+static bounding_box
+GetLayoutNodeBoundingBox(ui_layout_node *Node)
 {
-    rect_float Result = {};
+    bounding_box Result = {};
 
     if(IsValidLayoutNode(Node))
     {
-        vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
-        Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
+        point Screen = Node->OutputPosition + Node->ScrollOffset;
+        Result = bounding_box(Screen, Node->OutputSize);
+    }
+
+    return Result;
+}
+
+// TODO: FIX THIS
+static bounding_box
+GetLayoutNodeInnerBoundingBox(ui_layout_node *Node)
+{
+    bounding_box Result = {};
+
+    if(IsValidLayoutNode(Node))
+    {
+        point Screen = Node->OutputPosition + Node->ScrollOffset;
+        Result = bounding_box(Screen, Node->OutputSize);
     }
 
     return Result;
 }
 
 
-static rect_float GetLayoutNodeInnerRect(ui_layout_node *Node)
+// TODO: FIX THIS
+static bounding_box
+GetLayoutNodeContentRect(ui_layout_node *Node)
 {
-    vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
-    rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
-    return Result;
-}
+    bounding_box Result = {};
 
+    if(IsValidLayoutNode(Node))
+    {
+        point Screen = Node->OutputPosition + Node->ScrollOffset;
+        Result = bounding_box(Screen, Node->OutputSize);
+    }
 
-static rect_float GetLayoutNodeContentRect(ui_layout_node *Node)
-{
-    vec2_float Screen = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
-    rect_float Result = rect_float::FromXYWH(Screen.X, Screen.Y, Node->OutputSize.Width, Node->OutputSize.Height);
     return Result;
 }
 
@@ -463,15 +504,14 @@ AppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
 
 
 static void
-SetNodeOffset(uint32_t NodeIndex, float XOffset, float YOffset, ui_layout_tree *Tree)
+SetNodeOffset(uint32_t NodeIndex, dimensions Offset, ui_layout_tree *Tree)
 {
     if(IsValidLayoutTree(Tree))
     {
         ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
         if(IsValidLayoutNode(Node))
         {
-            Node->VisualOffset.X = XOffset;
-            Node->VisualOffset.Y = YOffset;
+            Node->VisualOffset = Offset;
         }
     }
 }
@@ -482,10 +522,10 @@ SetNodeOffset(uint32_t NodeIndex, float XOffset, float YOffset, ui_layout_tree *
 
 struct scroll_region
 {
-    vec2_float     ContentSize;
-    float          ScrollOffset;
-    float          PixelPerLine;
-    AxisType Axis;
+    dimensions ContentSize;
+    float      ScrollOffset;
+    float      PixelPerLine;
+    AxisType   Axis;
 };
 
 // --- Private Helpers ---
@@ -493,42 +533,42 @@ struct scroll_region
 static void UpdateScrollNode(float ScrolledLines, ui_layout_node *Node, ui_layout_tree *Tree, scroll_region *Region)
 {
     float      ScrolledPixels = ScrolledLines * Region->PixelPerLine;
-    vec2_float WindowSize     = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height);
+    dimensions WindowSize     = Node->OutputSize;
 
     float ScrollLimit = 0.f;
     if (Region->Axis == AxisType::X)
     {
-        ScrollLimit = -(Region->ContentSize.X - WindowSize.X);
+        ScrollLimit = -(Region->ContentSize.Width  - WindowSize.Width);
     } else
     if (Region->Axis == AxisType::Y)
     {
-        ScrollLimit = -(Region->ContentSize.Y - WindowSize.Y);
+        ScrollLimit = -(Region->ContentSize.Height - WindowSize.Height);
     }
 
     Region->ScrollOffset += ScrolledPixels;
     Region->ScrollOffset  = ClampTop(ClampBot(ScrollLimit, Region->ScrollOffset), 0);
 
-    vec2_float ScrollDelta = vec2_float(0.f, 0.f);
+    dimensions ScrollDelta = dimensions(0.f, 0.f);
     if(Region->Axis == AxisType::X)
     {
-        ScrollDelta.X = -1.f * Region->ScrollOffset;
+        ScrollDelta.Width  = -1.f * Region->ScrollOffset;
     } else
     if(Region->Axis == AxisType::Y)
     {
-        ScrollDelta.Y = -1.f * Region->ScrollOffset;
+        ScrollDelta.Height = -1.f * Region->ScrollOffset;
     }
 
-    rect_float WindowContent = GetLayoutNodeOuterRect(Node);
+    bounding_box WindowContent = GetLayoutNodeBoundingBox(Node);
     for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
     {
-        Child->ScrollOffset = vec2_float(-ScrollDelta.X, -ScrollDelta.Y);
+        Child->ScrollOffset = dimensions(-ScrollDelta.Width, -ScrollDelta.Height);
 
-        vec2_float FixedContentSize = vec2_float(Child->OutputSize.Width, Child->OutputSize.Height);
-        rect_float ChildContent     = GetLayoutNodeOuterRect(Child);
+        dimensions   FixedContentSize = Child->OutputSize;
+        bounding_box ChildContent     = GetLayoutNodeBoundingBox(Child);
 
-        if (FixedContentSize.X > 0.0f && FixedContentSize.Y > 0.0f) 
+        if (FixedContentSize.Width > 0.0f && FixedContentSize.Height > 0.0f) 
         {
-            if (WindowContent.IsIntersecting(ChildContent))
+            if (BoundingBoxesIntersect(WindowContent, ChildContent))
             {
                 // TODO: Prune?
             }
@@ -540,22 +580,22 @@ static void UpdateScrollNode(float ScrolledLines, ui_layout_node *Node, ui_layou
     }
 }
 
-// --- Public API ---
-
-static uint64_t GetScrollRegionFootprint(void)
+static uint64_t
+GetScrollRegionFootprint(void)
 {
     uint64_t Result = sizeof(scroll_region);
     return Result;
 }
 
-static scroll_region * PlaceScrollRegionInMemory(scroll_region_params Params, void *Memory)
+static scroll_region *
+PlaceScrollRegionInMemory(scroll_region_params Params, void *Memory)
 {
     scroll_region *Result = 0;
 
     if(Memory)
     {
         Result = (scroll_region *)Memory;
-        Result->ContentSize  = vec2_float(0.f, 0.f);
+        Result->ContentSize  = dimensions(0.f, 0.f);
         Result->ScrollOffset = 0.f;
         Result->PixelPerLine = Params.PixelPerLine;
         Result->Axis         = Params.Axis;
@@ -564,17 +604,18 @@ static scroll_region * PlaceScrollRegionInMemory(scroll_region_params Params, vo
     return Result;
 }
 
-static vec2_float GetScrollNodeTranslation(scroll_region *Region)
+static dimensions
+GetScrollNodeTranslation(scroll_region *Region)
 {
-    vec2_float Result = vec2_float(0.f, 0.f);
+    dimensions Result = {};
 
     if (Region->Axis == AxisType::X)
     {
-        Result = vec2_float(Region->ScrollOffset, 0.f);
+        Result = dimensions(Region->ScrollOffset, 0.f);
     } else
     if (Region->Axis == AxisType::Y)
     {
-        Result = vec2_float(0.f, Region->ScrollOffset);
+        Result = dimensions(0.f, Region->ScrollOffset);
     }
 
     return Result;
@@ -584,49 +625,44 @@ static vec2_float GetScrollNodeTranslation(scroll_region *Region)
 // DOMAIN: Input Handling
 // =============================================================================
 
-// --- Private Helpers ---
 
-static bool IsMouseInsideOuterBox(vec2_float MousePosition, ui_layout_node *Node)
+static bool
+IsMouseInsideOuterBox(point Position, ui_layout_node *Node)
 {
-    VOID_ASSERT(MousePosition.X >= 0.f && MousePosition.Y >= 0.f);
-    VOID_ASSERT(IsValidLayoutNode(Node));
+    bool Result = false;
 
-    vec2_float OuterSize  = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height);
-    vec2_float OuterPos   = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y) + Node->ScrollOffset;
-    vec2_float OuterHalf  = vec2_float(OuterSize.X * 0.5f, OuterSize.Y * 0.5f);
-    vec2_float Center     = OuterPos + OuterHalf;
-    vec2_float LocalMouse = MousePosition - Center;
+    if(IsValidLayoutNode(Node))
+    {
+        auto  BoundingBox = GetLayoutNodeBoundingBox(Node);
+        float Distance    = BoundingBoxSignedDistanceField(Position, BoundingBox);
 
-    rect_sdf_params Params = {0};
-    Params.HalfSize      = OuterHalf;
-    Params.PointPosition = LocalMouse;
+        Result = Distance <= 0.f;
+    }
 
-    float Distance = RoundedRectSDF(Params);
-    return Distance <= 0.f;
+    return Result;
 }
 
-static bool IsMouseInsideBorder(vec2_float MousePosition, ui_layout_node *Node)
+
+// TODO: Fix the border stuff
+static bool
+IsPointInsideBorder(point Position, ui_layout_node *Node)
 {
-    VOID_ASSERT(MousePosition.X >= 0.f && MousePosition.Y >= 0.f);
-    VOID_ASSERT(IsValidLayoutNode(Node));
+    bool Result = false;
 
-    vec2_float InnerSize   = vec2_float(Node->OutputSize.Width, Node->OutputSize.Height) - vec2_float(0.f, 0.f);
-    vec2_float InnerPos    = vec2_float(Node->OutputPosition.X, Node->OutputPosition.Y ) - vec2_float(0.f, 0.f) + Node->ScrollOffset;
-    vec2_float InnerHalf   = vec2_float(InnerSize.X * 0.5f, InnerSize.Y * 0.5f);
-    vec2_float InnerCenter = InnerPos + InnerHalf;
+    if(IsValidLayoutNode(Node))
+    {
+        auto  BoundingBox = GetLayoutNodeBoundingBox(Node);
+        float Distance    = BoundingBoxSignedDistanceField(Position, BoundingBox);
 
-    rect_sdf_params Params = {0};
-    Params.Radius        = 0.f;
-    Params.HalfSize      = InnerHalf;
-    Params.PointPosition = MousePosition - InnerCenter;
+        Result = Distance >= 0.f;
+    }
 
-    float Distance = RoundedRectSDF(Params);
-    return Distance >= 0.f;
+    return Result;
 }
 
-// --- Public API ---
 
-static bool HandlePointerClick(vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree)
+static bool
+HandlePointerClick(point Position, PointerButton ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree)
 {
     VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
     VOID_ASSERT(IsValidLayoutTree(Tree));
@@ -663,7 +699,8 @@ static bool HandlePointerClick(vec2_float Position, uint32_t ClickMask, uint32_t
     return false;
 }
 
-static bool HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint32_t NodeIndex, ui_layout_tree *Tree)
+static bool
+HandlePointerRelease(point Position, PointerButton ReleaseMask, uint32_t NodeIndex, ui_layout_tree *Tree)
 {
     VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
     VOID_ASSERT(IsValidLayoutTree(Tree));
@@ -675,7 +712,7 @@ static bool HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint3
 
         for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
         {
-            if(HandlePointerRelease(Position, ButtonMask, Child->Index, Tree))
+            if(HandlePointerRelease(Position, ReleaseMask, Child->Index, Tree))
             {
                 return true;
             }
@@ -694,7 +731,9 @@ static bool HandlePointerRelease(vec2_float Position, uint32_t ButtonMask, uint3
     return false;
 }
 
-static bool HandlePointerHover(vec2_float Position, uint32_t NodeIndex, ui_layout_tree *Tree)
+
+static bool
+HandlePointerHover(point Position, uint32_t NodeIndex, ui_layout_tree *Tree)
 {
     VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
 
@@ -723,7 +762,9 @@ static bool HandlePointerHover(vec2_float Position, uint32_t NodeIndex, ui_layou
     return false;
 }
 
-static void HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
+
+static void
+HandlePointerMove(float DeltaX, float DeltaY, ui_layout_tree *Tree)
 {
     VOID_ASSERT(IsValidLayoutTree(Tree));
     
@@ -734,8 +775,8 @@ static void HandlePointerMove(vec2_float Delta, ui_layout_tree *Tree)
         {
             if((CapturedNode->Flags & NodeFlags::IsDraggable) != NodeFlags::None)
             {
-                CapturedNode->OutputPosition.X += Delta.X;
-                CapturedNode->OutputPosition.Y += Delta.Y;
+                CapturedNode->OutputPosition.X += DeltaX;
+                CapturedNode->OutputPosition.Y += DeltaY;
             }
         }
     }
@@ -853,13 +894,13 @@ static float ComputeNodeSize(sizing Sizing, float ParentSize)
 }
 
 static void
-ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, axes ParentBounds, resource_table *ResourceTable, bool &Changed)
+ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, dimensions ParentBounds, resource_table *ResourceTable, bool &Changed)
 {
     VOID_ASSERT(IsValidLayoutNode(Node));
     VOID_ASSERT(IsValidLayoutTree(Tree));
 
     Node->OutputChildSize  = {};
-    axes LastSize = Node->OutputSize;
+    dimensions LastSize = Node->OutputSize;
 
     float Width     = ComputeNodeSize(Node->Size.Width    , ParentBounds.Width);
     float MinWidth  = ComputeNodeSize(Node->MinSize.Width , ParentBounds.Width);
@@ -878,7 +919,7 @@ ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, axes ParentBounds, res
         Changed = true;
     }
 
-    axes ContentBounds =
+    dimensions ContentBounds =
     {
         .Width  = Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right),
         .Height = Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot  ),
@@ -917,7 +958,8 @@ ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, axes ParentBounds, res
 
 static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_table *ResourceTable)
 {
-    vec2_float Cursor = {
+    point Cursor =
+    {
         Node->OutputPosition.X + Node->Padding.Left,
         Node->OutputPosition.Y + Node->Padding.Top ,
     };
@@ -948,12 +990,12 @@ static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_tab
 
         if(IsXMajor)
         {
-            Child->OutputPosition.Y += MinorOffset + Child->VisualOffset.Y;
+            Child->OutputPosition.Y += MinorOffset + Child->VisualOffset.Height;
             Cursor.X                += Child->OutputSize.Width  + Node->Spacing;
         }
         else
         {
-            Child->OutputPosition.X += MinorOffset + Child->VisualOffset.X;
+            Child->OutputPosition.X += MinorOffset + Child->VisualOffset.Width;
             Cursor.Y                += Child->OutputSize.Height + Node->Spacing;
         }
 
@@ -965,8 +1007,8 @@ static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_tab
     {
         VOID_ASSERT(Node->ChildCount == 0);
 
-        vec2_float TextCursor   = vec2_float(Node->OutputPosition.X + Node->Padding.Left, Node->OutputPosition.Y + Node->Padding.Top);
-        float      CursorStartX = TextCursor.X;
+        point TextCursor   = point(Node->OutputPosition.X + Node->Padding.Left, Node->OutputPosition.Y + Node->Padding.Top);
+        float CursorStartX = TextCursor.X;
 
         for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
         {
@@ -974,7 +1016,10 @@ static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_tab
 
             if (!Glyph.Skip)
             {
-                Glyph.Position = rect_float::FromXYWH(TextCursor.X + Glyph.OffsetX, TextCursor.Y + Glyph.OffsetY, (Glyph.Source.Right - Glyph.Source.Left), (Glyph.Source.Bottom - Glyph.Source.Top));
+                point      CursorWithOffset = point(TextCursor.X + Glyph.OffsetX, TextCursor.Y + Glyph.OffsetY);
+                dimensions GlyphSize        = dimensions(Glyph.Source.Right - Glyph.Source.Left, Glyph.Source.Bottom - Glyph.Source.Top);
+
+                Glyph.Position = bounding_box(CursorWithOffset, GlyphSize);
 
                 TextCursor.X += Glyph.Advance;
 
@@ -1012,3 +1057,5 @@ static void ComputeTreeLayout(ui_layout_tree *Tree)
         PlaceLayout(ActiveRoot, Tree, Context.ResourceTable);
     }
 }
+
+} // namespace gui

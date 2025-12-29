@@ -1,3 +1,6 @@
+namespace gui
+{
+
 constexpr uint32_t MAX_COMMAND_PER_NODE = 2;
 
 static memory_footprint
@@ -75,7 +78,7 @@ ComputeRenderCommands(ui_layout_tree *Tree, memory_block Block)
                 render_command &Command = Result.Commands[Result.Count++];
 
                 Command.Type = RenderCommandType::Rectangle;
-                Command.Box  = GetLayoutNodeOuterRect(Node);
+                Command.Box  = GetLayoutNodeBoundingBox(Node);
 
                 Command.Rect.Color        = Color;
                 Command.Rect.CornerRadius = CornerRadius;
@@ -86,7 +89,7 @@ ComputeRenderCommands(ui_layout_tree *Tree, memory_block Block)
                 render_command &Command = Result.Commands[Result.Count++];
 
                 Command.Type = RenderCommandType::Border;
-                Command.Box  = GetLayoutNodeOuterRect(Node);
+                Command.Box  = GetLayoutNodeBoundingBox(Node);
 
                 Command.Border.Color        = BorderColor;
                 Command.Border.CornerRadius = CornerRadius;
@@ -97,3 +100,5 @@ ComputeRenderCommands(ui_layout_tree *Tree, memory_block Block)
 
     return Result;
 }
+
+} // namespace gui

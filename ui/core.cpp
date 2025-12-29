@@ -1,5 +1,39 @@
-// ----------------------------------------------------------------------------------
-// UI Resource Cache Private Implementation
+namespace gui
+{
+
+// =============================================================================
+// DOMAIN: Strings
+// =============================================================================
+
+
+static byte_string 
+ByteString(char *String, uint64_t Size)
+{
+    byte_string Result = { String, Size };
+    return Result;
+}
+
+
+static bool
+IsValidByteString(byte_string Input)
+{
+    bool Result = (Input.String) && (Input.Size);
+    return Result;
+}
+
+
+static uint64_t
+HashByteString(byte_string Input)
+{
+    uint64_t Result = XXH3_64bits(Input.String, Input.Size);
+    return Result;
+}
+
+
+// =============================================================================
+// DOMAIN: Resource Cache
+// =============================================================================
+
 
 struct resource_allocator
 {
@@ -24,11 +58,11 @@ struct resource_table
     resource_stats     Stats;
     resource_allocator Allocator;
 
-    uint32_t              HashMask;
-    uint32_t              HashSlotCount;
-    uint32_t              EntryCount;
+    uint32_t           HashMask;
+    uint32_t           HashSlotCount;
+    uint32_t           EntryCount;
 
-    uint32_t             *HashTable;
+    uint32_t          *HashTable;
     resource_entry    *Entries;
 };
 
@@ -417,10 +451,10 @@ QueryNodeResource(ResourceType Type, uint32_t NodeIndex, ui_layout_tree *Tree, r
 
 struct pointer_state
 {
-    uint32_t   Id;
-    vec2_float Position;
-    vec2_float LastPosition;
-    uint32_t   ButtonMask;
+    uint32_t      Id;
+    point      Position;
+    point      LastPosition;
+    PointerButton ButtonMask;
 
     // Targets?
     bool     IsCaptured; // This might be, uhhh, a state flag with some other states.
@@ -428,57 +462,85 @@ struct pointer_state
 
 
 static void
-PushPointerEvent(pointer_event_list *List, pointer_event_node *Node, PointerEvent Type)
+ClearPointerEvents(pointer_event_list *List)
 {
-    VOID_ASSERT(Node);
+    if(List)
+    {
+        List->First = 0;
+        List->Last  = 0;
+        List->Count = 0;
+    }
+}
 
-    if(List && Type != PointerEvent::None)
+
+static bool
+PushPointerEvent(PointerEvent Type, pointer_event_node *Node, pointer_event_list *List)
+{
+    bool Pushed = false;
+
+    if(List && Node && Type != PointerEvent::None)
     {
         Node->Next = 0;
         Node->Prev = 0;
         Node->Value.Type = Type;
 
         AppendToDoublyLinkedList(List, Node, List->Count);
+
+        Pushed = true;
     }
+
+    return Pushed;
 }
 
 
-static void
-PushPointerMoveEvent(pointer_event_list *List, pointer_event_node *Node, vec2_float Position, vec2_float Delta)
+static bool
+PushPointerMoveEvent(point Position, point LastPosition, pointer_event_node *Node, pointer_event_list *List)
 {
+    bool Pushed = false;
+
     if(Node)
     {
         Node->Value.Position = Position;
-        Node->Value.Delta = Delta;
+        Node->Value.Delta    = translation(Position, LastPosition);
 
-        PushPointerEvent(List, Node, PointerEvent::Move);
+        Pushed = PushPointerEvent(PointerEvent::Move, Node, List);
     }
+
+    return Pushed;
 }
 
 
-static void
-PushPointerClickEvent(pointer_event_list *List, pointer_event_node *Node, uint32_t Button, vec2_float Position)
+static bool
+PushPointerClickEvent(PointerButton Button, point Position, pointer_event_node *Node, pointer_event_list *List)
 {
-    PushPointerEvent(List, Node, PointerEvent::Click);
+    bool Pushed = false;
+
+    if(Node)
+    {
+        Node->Value.ButtonMask = Button;
+        Node->Value.Position   = Position;
+
+        Pushed = PushPointerEvent(PointerEvent::Click, Node, List);
+    }
+
+    return Pushed;
+}
+
+
+static bool
+PushPointerReleaseEvent(PointerButton Button, point Position, pointer_event_node *Node, pointer_event_list *List)
+{
+    bool Pushed = false;
 
     if(Node)
     {
         Node->Value.ButtonMask = Button;
-        Node->Value.Position = Position;
+        Node->Value.Position   = Position;
+
+        Pushed = PushPointerEvent(PointerEvent::Release, Node, List);
     }
-}
 
-
-static void
-PushPointerReleaseEvent(pointer_event_list *List, pointer_event_node *Node, uint32_t Button, vec2_float Position)
-{
-    if(Node)
-    {
-        Node->Value.ButtonMask = Button;
-        Node->Value.Position = Position;
-
-        PushPointerEvent(List, Node, PointerEvent::Release);
-    }
+    return Pushed;
 }
 
 
@@ -507,7 +569,9 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, ui_la
 
             if(State.IsCaptured)
             {
-                HandlePointerMove(Event.Delta, Tree);
+                float DeltaX = Event.Delta.X;
+                float DeltaY = Event.Delta.Y;
+                HandlePointerMove(DeltaX, DeltaY, Tree);
             }
         } break;
 
@@ -541,15 +605,15 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, ui_la
     // If the ButtonMask is 0 then it means the pointer is in a hover state.
     // We look for that hover target in any of the pipelines.
 
-    //for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
-    //{
-    //    pointer_state &State = PointerStates[PointerIdx];
+    for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
+    {
+        pointer_state &State = PointerStates[PointerIdx];
 
-    //    if(State.ButtonMask == 0)
-    //    {
-    //        HandlePointerHover(State.Position, 0, Tree);
-    //    }
-    //}
+        if(State.ButtonMask == PointerButton::None) 
+        {
+            HandlePointerHover(State.Position, 0, Tree);
+        }
+    }
 
     Context.Width  = Width;
     Context.Height = Height;
@@ -639,3 +703,5 @@ bool component::Pop()
 
     return true;
 }
+
+} // namespace gui

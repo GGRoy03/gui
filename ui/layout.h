@@ -1,5 +1,8 @@
 #pragma once
 
+namespace gui
+{
+
 struct ui_layout_tree;
 
 
@@ -59,10 +62,14 @@ struct size
 
 // --- Tree Manipulation ---
 
+
 static memory_footprint GetLayoutTreeFootprint  (uint64_t NodeCount);
 static ui_layout_tree * PlaceLayoutTreeInMemory (uint64_t NodeCount, memory_block Block);
+static void             ComputeTreeLayout       (ui_layout_tree *Tree);
+
 
 // --- Node Manipulation ---
+
 
 struct parent_node;
 
@@ -78,6 +85,15 @@ static void     PopParent      (uint32_t NodeIndex, ui_layout_tree *Tree);
 static uint32_t FindChild      (uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree);
 
 
+// --- Tree Queries ---
+
+
+static bool     HandlePointerClick    (point Position, PointerButton ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
+static bool     HandlePointerRelease  (point Position, PointerButton ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
+static bool     HandlePointerHover    (point Position, uint32_t NodeIndex, ui_layout_tree *Tree);
+static void     HandlePointerMove     (float DeltaX, float DeltaY, ui_layout_tree *Tree);
+
+
 // --- Node Properties ---
 
 
@@ -85,27 +101,6 @@ static void     UpdateInput    (uint32_t NodeIndex, cached_style *Cached, ui_lay
 static void     SetNodeOffset  (uint32_t NodeIndex, float X, float Y, ui_layout_tree *Tree);
 
 
-// -----------------------------------------------------------------------------
-// @Private Layout API
-//
-// These functions form the internal interface used by the UI implementation.
-// They are exposed to allow shared access between internal systems, but are
-// not considered stable and may change without notice.
-//
-// Most users should not call these directly.
-// -----------------------------------------------------------------------------
-
-// Compute layout for the entire tree.
-static void             ComputeTreeLayout       (ui_layout_tree *Tree);
-
-// Pointer / input handling helpers used by the UI pipeline.
-static bool             HandlePointerClick      (vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
-static bool             HandlePointerRelease    (vec2_float Position, uint32_t ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
-static bool             HandlePointerHover      (vec2_float Position, uint32_t NodeIndex, ui_layout_tree *Tree);
-static void             HandlePointerMove       (vec2_float Delta, ui_layout_tree *Tree);
-
-// Rendering and styling helpers.
-// static paint_buffer  GeneratePaintBuffer     (ui_layout_tree *Tree, memory_arena *Arena);
 // ------------------------------------------------------------------------------------
 // @internal: Layout Resources
 
@@ -120,3 +115,5 @@ struct scroll_region_params
 
 static uint64_t        GetScrollRegionFootprint   (void);
 static scroll_region * PlaceScrollRegionInMemory  (scroll_region_params Params, void *Memory);
+
+} // namespace gui

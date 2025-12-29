@@ -2,6 +2,9 @@
 
 #include <immintrin.h>
 
+namespace gui
+{
+
 struct ui_layout_tree;
 struct parent_node;
 enum class NodeFlags : uint32_t;
@@ -45,20 +48,22 @@ struct padding
     float Bot;
 };
 
-struct rect
+// =============================================================================
+// DOMAIN: Strings
+// =============================================================================
+
+struct byte_string
 {
-    rect_float    RectBounds;
-    rect_float    TextureSource;
-    color         ColorTL;
-    color         ColorBL;
-    color         ColorTR;
-    color         ColorBR;
-    corner_radius CornerRadii;
-    float         BorderWidth;
-    float         Softness;
-    float         SampleTexture;
-    float        _Padding0;
+    char    *String;
+    uint64_t Size;
 };
+
+#define str8_lit(String)  ByteString(String, sizeof(String) - 1)
+#define str8_comp(String) {(char *)(String), sizeof(String) - 1}
+
+static byte_string ByteString         (char *String, uint64_t Size);
+static bool        IsValidByteString  (byte_string Input);
+static uint64_t    HashByteString     (byte_string Input);
 
 // =============================================================================
 // DOMAIN: Resources
@@ -117,8 +122,6 @@ struct resource_state
 
 struct resource_table;
 
-// --- Public API ---
-
 static uint64_t         GetResourceTableFootprint   (resource_table_params Params);
 static resource_table * PlaceResourceTableInMemory  (resource_table_params Params, void *Memory);
 
@@ -130,18 +133,31 @@ static void             UpdateResourceTable         (uint32_t Id, resource_key K
 
 static void           * QueryNodeResource           (ResourceType Type, uint32_t NodeIndex, ui_layout_tree *Tree, resource_table *Table);
 
-// 
 
-// 
+// ----------------------
 
 enum class PointerSource
 {
-    None       = 0,
+    None = 0,
+
     Mouse      = 1,
     Touch      = 2,
     Pen        = 3,
     Controller = 4,
 };
+
+
+enum class PointerButton
+{
+    None = 0,
+
+    Primary   = 1,
+    Secondary = 2,
+};
+
+
+template<>
+struct enable_bitmask_operators<PointerButton> : std::true_type {};
 
 enum class PointerEvent
 {
@@ -151,28 +167,16 @@ enum class PointerEvent
     Release = 3,
 };
 
-constexpr uint32_t BUTTON_NONE      = 0;
-constexpr uint32_t BUTTON_PRIMARY   = 1u << 0;
-constexpr uint32_t BUTTON_SECONDARY = 1u << 1;
-
-struct input_pointer
-{
-    uint32_t      Id;
-    PointerSource Source;
-    vec2_float    Position;
-    vec2_float    Delta;
-    uint32_t      ButtonMask;
-    uint32_t      LastButtonMask;
-};
 
 struct pointer_event
 {
-    PointerEvent Type;
-    uint32_t     PointerId;
-    vec2_float   Position;
-    vec2_float   Delta;
-    uint32_t     ButtonMask;
+    PointerEvent  Type;
+    uint32_t      PointerId;
+    point         Position;
+    translation   Delta;
+    PointerButton ButtonMask;
 };
+
 
 struct pointer_event_node
 {
@@ -181,6 +185,7 @@ struct pointer_event_node
     pointer_event       Value;
 };
 
+
 struct pointer_event_list
 {
     pointer_event_node *First;
@@ -188,12 +193,11 @@ struct pointer_event_list
     uint32_t            Count;
 };
 
-static void
-PushPointerMoveEvent(pointer_event_list *List, pointer_event_node *Node, vec2_float Position, vec2_float Delta);
-static void
-PushPointerClickEvent(pointer_event_list *List, pointer_event_node *Node, uint32_t Button, vec2_float Position);
-static void
-PushPointerReleaseEvent(pointer_event_list *List, pointer_event_node *Node, uint32_t Button, vec2_float Position);
+
+static void ClearPointerEvents       (pointer_event_list *List);
+static bool PushPointerMoveEvent     (point Position, point LastPosition, pointer_event_node *Node, pointer_event_list *List);
+static bool PushPointerClickEvent    (PointerButton Button, point Position, pointer_event_node *Node, pointer_event_list *List);
+static bool PushPointerReleaseEvent  (PointerButton Button, point Position, pointer_event_node *Node, pointer_event_list *List);
 
 
 // =============================================================================
@@ -334,3 +338,5 @@ struct component
     component(const char *Name, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree);
     component(byte_string Name, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree);
 };
+
+} // namespace gui

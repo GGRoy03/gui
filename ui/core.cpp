@@ -135,61 +135,69 @@ GetResourceTypeFromKey(resource_key Key)
 }
 
 // TODO: Make a better resource allocator.
-
 static void *
 AllocateUIResource(uint64_t Size, resource_allocator *Allocator)
 {
     return 0;
 }
 
-// ----------------------------------------------------------------------------------
-// UI Resource Cache Public API
 
-static uint64_t
+static memory_footprint
 GetResourceTableFootprint(resource_table_params Params)
 {
-    uint64_t HashTableSize  = Params.HashSlotCount  * sizeof(uint32_t);
-    uint64_t EntryArraySize = Params.EntryCount * sizeof(resource_entry);
-    uint64_t Result         = sizeof(resource_table) + HashTableSize + EntryArraySize;
+    uint64_t HashTableSize  = Params.HashSlotCount * sizeof(uint32_t);
+    uint64_t EntryArraySize = Params.EntryCount    * sizeof(resource_entry);
+
+    memory_footprint Result = 
+    {
+        .SizeInBytes = sizeof(resource_table) + HashTableSize + EntryArraySize,
+        .Alignment   = AlignOf(resource_entry),
+    };
 
     return Result;
 }
 
+
 static resource_table *
-PlaceResourceTableInMemory(resource_table_params Params, void *Memory)
+PlaceResourceTableInMemory(resource_table_params Params, memory_block Block)
 {
-    VOID_ASSERT(Params.EntryCount);
-    VOID_ASSERT(Params.HashSlotCount);
+    // Since this is user facing maybe we want hard-validation??
     VOID_ASSERT(VOID_ISPOWEROFTWO(Params.HashSlotCount));
 
     resource_table *Result = 0;
+    memory_region   Local  = EnterMemoryRegion(Block);
 
-    if(Memory)
+    if(IsValidMemoryRegion(Local))
     {
-        uint32_t          *HashTable = (uint32_t *)Memory;
-        resource_entry *Entries   = (resource_entry *)(HashTable + Params.HashSlotCount);
+        resource_entry *Entries   = PushArray<resource_entry>(Local, Params.EntryCount);
+        uint32_t       *HashTable = PushArray<uint32_t>(Local, Params.HashSlotCount);
+        resource_table *Table     = PushStruct<resource_table>(Local);
 
-        Result = (resource_table *)(Entries + Params.EntryCount);
-        Result->HashTable     = HashTable;
-        Result->Entries       = Entries;
-        Result->EntryCount    = Params.EntryCount;
-        Result->HashSlotCount = Params.HashSlotCount;
-        Result->HashMask      = Params.HashSlotCount - 1;
-
-        for(uint32_t Idx = 0; Idx < Params.EntryCount; ++Idx)
+        if(Entries && HashTable && Table)
         {
-            resource_entry *Entry = GetResourceEntry(Idx, Result);
-            if((Idx + 1) < Params.EntryCount)
+            Table->HashTable     = HashTable;
+            Table->Entries       = Entries;
+            Table->EntryCount    = Params.EntryCount;
+            Table->HashSlotCount = Params.HashSlotCount;
+            Table->HashMask      = Params.HashSlotCount - 1;
+
+            for(uint32_t Idx = 0; Idx < Params.EntryCount; ++Idx)
             {
-                Entry->NextWithSameHashSlot = Idx + 1;
-            }
-            else
-            {
-                Entry->NextWithSameHashSlot = 0;
+                resource_entry *Entry = GetResourceEntry(Idx, Result);
+                if((Idx + 1) < Params.EntryCount)
+                {
+                    Entry->NextWithSameHashSlot = Idx + 1;
+                }
+                else
+                {
+                    Entry->NextWithSameHashSlot = 0;
+                }
+    
+                Entry->ResourceType = ResourceType::None;
+                Entry->Memory       = 0;
             }
 
-            Entry->ResourceType = ResourceType::None;
-            Entry->Memory       = 0;
+            Result = Table;
         }
     }
 
@@ -336,6 +344,100 @@ QueryNodeResource(ResourceType Type, uint32_t NodeIndex, ui_layout_tree *Tree, r
     resource_state State = FindResourceByKey(Key, FindResourceFlag::None, Table);
 
     void *Result = State.Resource;
+    return Result;
+}
+
+
+struct shaped_glyph_input
+{
+    float OffsetX;
+    float OffsetY;
+    float Advance;
+    bool  IsWhiteSpace;
+};
+
+
+struct shaped_glyph
+{
+    // User
+
+    bounding_box       Source;
+
+    // Read-Only Inputs
+
+    shaped_glyph_input Input;
+
+    // Output
+
+    bounding_box       Position;
+
+    // Internal Use
+
+    bool              _BreakLine;
+    bool              _Skip;
+};
+
+
+struct text_params
+{
+    uint64_t            GlyphCount;
+    shaped_glyph_input *Inputs;
+};
+
+
+struct static_text
+{
+    shaped_glyph *Glyphs;
+    uint32_t      GlyphCount;
+};
+
+
+static memory_footprint
+GetStaticTextFootprint(text_params Params)
+{
+    uint64_t ShapedGlyphBufferSize = Params.GlyphCount * sizeof(shaped_glyph);
+
+    memory_footprint Result =
+    {
+        .SizeInBytes = sizeof(static_text) + ShapedGlyphBufferSize,
+        .Alignment   = AlignOf(shaped_glyph),
+    };
+
+    return Result;
+}
+
+
+static static_text *
+PlaceStaticTextInMemory(text_params Params, memory_block Block)
+{
+    static_text  *Result = 0;
+    memory_region Local  = EnterMemoryRegion(Block);
+
+    if(IsValidMemoryRegion(Local) && Params.Inputs)
+    {
+        shaped_glyph *Glyphs     = PushArray<shaped_glyph>(Local, Params.GlyphCount);
+        static_text  *StaticText = PushStruct<static_text>(Local);
+
+        if(Glyphs && StaticText)
+        {
+            StaticText->Glyphs     = Glyphs;
+            StaticText->GlyphCount = Params.GlyphCount;
+
+            for(uint32_t Idx = 0; Idx < Params.GlyphCount; ++Idx)
+            {
+                shaped_glyph *Glyph = StaticText->Glyphs + Idx;
+
+                Glyph->Input      = Params.Inputs[Idx];
+                Glyph->Source     = {};
+                Glyph->Position   = {};
+                Glyph->_BreakLine = false;
+                Glyph->_Skip      = false;
+            }
+
+            Result = StaticText;
+        }
+    }
+
     return Result;
 }
 

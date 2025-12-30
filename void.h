@@ -12,16 +12,16 @@
 #include "third_party/xxhash.h"
 
 #include "third_party/nxi_log.h"
-#include "third_party/ntext.h"
 
 // ====================================================================
 // [Basic Types]
 // ====================================================================
 
+#include <type_traits>
+
 namespace gui
 {
 
-#include <type_traits>
 
 template<typename E>
 struct enable_bitmask_operators : std::false_type {};

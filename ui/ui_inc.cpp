@@ -1,4 +1,3 @@
 #include "core.cpp"
-#include "text.cpp"
 #include "layout.cpp"
 #include "paint.cpp"

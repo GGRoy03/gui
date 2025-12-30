@@ -817,7 +817,8 @@ static float GetAlignmentOffset(Alignment AlignmentType, float FreeSpace)
     return Result;
 }
 
-static uint32_t WrapText(text *Text, ui_layout_node *Node)
+static uint32_t
+WrapText(static_text *Text, ui_layout_node *Node)
 {
     VOID_ASSERT(Text);
     VOID_ASSERT(IsValidLayoutNode(Node));
@@ -825,39 +826,10 @@ static uint32_t WrapText(text *Text, ui_layout_node *Node)
     uint32_t LineCount = 1;
     float    LineWidth = 0.f;
 
-    for(uint32_t WordIdx = 0; WordIdx < Text->WordCount; ++WordIdx)
+    for(uint32_t Idx = 0; Idx < Text->GlyphCount; ++Idx)
     {
-        text_word Word     = Text->Words[WordIdx];
-        float        Required = Word.Advance + Word.LeadingWhitespaceAdvance;
-
-        if(LineWidth + Required > Node->OutputSize.Width)
-        {
-            if(WordIdx > 0)
-            {
-                text_word LastWord = Text->Words[WordIdx - 1];
-                Text->Shaped[LastWord.LastGlyph].BreakLine = true;
-
-                float    Remaining = Word.LeadingWhitespaceAdvance;
-                uint64_t SpaceIdx  = LastWord.LastGlyph + 1;
-
-                while (Remaining)
-                {
-                    Text->Shaped[SpaceIdx].Skip = true;
-                    Remaining -= Text->Shaped[SpaceIdx++].Advance;
-                }
-            }
-            else
-            {
-                VOID_ASSERT(!"Unsure");
-            }
-
-            LineWidth  = Word.Advance;
-            LineCount += 1;
-        }
-        else
-        {
-            LineWidth += Required;
-        }
+        // TODO: Implement glyph-based text-wrapping.
+        // Node->OutputSize.Width
     }
 
     return LineCount;
@@ -949,7 +921,7 @@ ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, dimensions ParentBound
         Node->OutputChildSize.Height += Child->OutputSize.Height;
     }
 
-    text *Text = static_cast<text *>(QueryNodeResource(ResourceType::Text, Node->Index, Tree, ResourceTable));
+    auto *Text = static_cast<static_text *>(QueryNodeResource(ResourceType::Text, Node->Index, Tree, ResourceTable));
     if(Text)
     {
         WrapText(Text, Node);
@@ -1002,7 +974,7 @@ static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_tab
         PlaceLayout(Child, Tree, ResourceTable);
     }
 
-    auto *Text = static_cast<text *>(QueryNodeResource(ResourceType::Text, Node->Index, Tree, ResourceTable));
+    auto *Text = static_cast<static_text *>(QueryNodeResource(ResourceType::Text, Node->Index, Tree, ResourceTable));
     if(Text)
     {
         VOID_ASSERT(Node->ChildCount == 0);
@@ -1010,20 +982,20 @@ static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_tab
         point TextCursor   = point(Node->OutputPosition.X + Node->Padding.Left, Node->OutputPosition.Y + Node->Padding.Top);
         float CursorStartX = TextCursor.X;
 
-        for(uint32_t Idx = 0; Idx < Text->ShapedCount; ++Idx)
+        for(uint32_t Idx = 0; Idx < Text->GlyphCount; ++Idx)
         {
-            shaped_glyph &Glyph = Text->Shaped[Idx];
+            shaped_glyph &Glyph = Text->Glyphs[Idx];
 
-            if (!Glyph.Skip)
+            if (!Glyph._Skip)
             {
-                point      CursorWithOffset = point(TextCursor.X + Glyph.OffsetX, TextCursor.Y + Glyph.OffsetY);
+                point      CursorWithOffset = point(TextCursor.X + Glyph.Input.OffsetX, TextCursor.Y + Glyph.Input.OffsetY);
                 dimensions GlyphSize        = dimensions(Glyph.Source.Right - Glyph.Source.Left, Glyph.Source.Bottom - Glyph.Source.Top);
 
                 Glyph.Position = bounding_box(CursorWithOffset, GlyphSize);
 
-                TextCursor.X += Glyph.Advance;
+                TextCursor.X += Glyph.Input.Advance;
 
-                if (Glyph.BreakLine)
+                if (Glyph._BreakLine)
                 {
                     TextCursor.X  = CursorStartX;
                     TextCursor.Y += 14.f;

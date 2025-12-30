@@ -7,7 +7,7 @@ SETLOCAL
 set "CXX=clang-cl"
 
 set "TARGET=void_engine.exe"
-set "SRCS=..\incremental_build.cpp"
+set "SRCS=..\void.h"
 set "INCLUDES=..\..\ui_engine"
 set "OUT_DIR=."
 

@@ -3,7 +3,10 @@
 // ====================================================
 
 #include <stdint.h>
+
+// Third-Party
 #include "../../void.h"
+#include "../../third_party/ntext.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -247,8 +250,8 @@ enum class RenderPassType
 
 struct render_rect
 {
-    gui::bounding_box         RectBounds;
-    gui::bounding_box         TextureSource;
+    gui::bounding_box  RectBounds;
+    gui::bounding_box  TextureSource;
     gui::color         ColorTL;
     gui::color         ColorBL;
     gui::color         ColorTR;
@@ -486,6 +489,21 @@ RenderUI(gui::ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassL
                 Rect->BorderWidth   = Command.Border.Width;
                 Rect->Softness      = 2;
                 Rect->SampleTexture = 0;
+            } break;
+
+            case gui::RenderCommandType::Text:
+            {
+                auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Arena, BatchList));
+                Rect->RectBounds    = Command.Box;
+                Rect->TextureSource = {};
+                Rect->ColorTL       = Command.Text.Color;
+                Rect->ColorBL       = Command.Text.Color;
+                Rect->ColorTR       = Command.Text.Color;
+                Rect->ColorBR       = Command.Text.Color;
+                Rect->CornerRadius  = {};
+                Rect->BorderWidth   = 0;
+                Rect->Softness      = 0;
+                Rect->SampleTexture = 1;
             } break;
 
             default: break;
@@ -830,9 +848,52 @@ D3D11RenderFrame(d3d11_renderer &Renderer, float Width, float Height)
     Renderer.PassList.Last = 0;
 }
 
+// ====================================================
+// Core UI Helpers
+// ====================================================
+
+
+static void
+CreateStaticText(char *Text, uint64_t TextSize, memory_arena *Arena, ntext::glyph_generator &Generator, gui::resource_key Key, gui::resource_table *ResourceTable)
+{
+    gui::resource_state State = gui::FindResourceByKey(Key, gui::FindResourceFlag::AddIfNotFound, ResourceTable);
+    if(!State.Resource)
+    {
+        ntext::backend_context Backend;
+        ntext::system_font     SystemFont;
+    
+        ntext::TextAnalysis     Flags    = ntext::TextAnalysis::SkipComplexCheck;
+        ntext::analysed_text    Analysed = ntext::AnalyzeText(Text, TextSize, Flags, Generator);
+        ntext::shaped_glyph_run Run      = ntext::FillAtlas(Analysed, Generator, SystemFont, Backend);
+    
+        auto Inputs = PushArray<gui::shaped_glyph_input>(Arena, Run.ShapedCount);
+        for(uint32_t Idx = 0; Idx < Run.ShapedCount; ++Idx)
+        {
+            Inputs[Idx].OffsetX      = Run.Shaped[Idx].Layout.OffsetX;
+            Inputs[Idx].OffsetY      = Run.Shaped[Idx].Layout.OffsetY;
+            Inputs[Idx].Advance      = Run.Shaped[Idx].Layout.Advance;
+            Inputs[Idx].IsWhiteSpace = false;
+        }
+    
+        // Footprint / Allocation
+    
+        gui::text_params      Params     = {.GlyphCount = Analysed.GlyphCount, .Inputs = Inputs};
+        gui::memory_footprint Footprint  = GetStaticTextFootprint(Params);
+        gui::memory_block     Block      = {.SizeInBytes = Footprint.SizeInBytes, .Base = malloc(Footprint.SizeInBytes)};
+        gui::static_text     *StaticText = PlaceStaticTextInMemory(Params, Block);
+
+        // TODO: We also have to write the user state (Source) into the static text memory
+        // such that we can get it back when drawing? There's also a slight disconnect between the drawing
+        // of text and the resource here. Perhaps we need to pass around some struct that is intented for
+        // user modification. Which sounds like it fixes the issue.
+
+        gui::UpdateResourceTable(State.Id, Key, StaticText, ResourceTable);
+    }
+}
+
 
 // ====================================================
-// Core UI Logic
+// Inspector UI Logic
 // ====================================================
 
 
@@ -840,16 +901,20 @@ struct inspector
 {
     // UI
 
-    gui::ui_layout_tree *LayoutTree;
+    gui::ui_layout_tree   *LayoutTree;
+    gui::resource_table   *ResourceTable;
+
+    ntext::glyph_generator GlyphGenerator;
+    ntext::system_font     Font;
 
     // Static State
 
-    bool          IsInitialized;
-    memory_arena *StateArena;
+    bool                   IsInitialized;
+    memory_arena          *StateArena;
 
     // Frame State
 
-    memory_arena *FrameArena;
+    memory_arena          *FrameArena;
 };
 
 
@@ -932,13 +997,49 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
         Inspector.FrameArena = AllocateArena({});
         Inspector.StateArena = AllocateArena({});
 
-        gui::memory_footprint Footprint = gui::GetLayoutTreeFootprint(128);
-        gui::memory_block     Block     =
+        // Layout Tree
         {
-            .SizeInBytes = Footprint.SizeInBytes,
-            .Base        = PushArena(Inspector.StateArena, Footprint.SizeInBytes, Footprint.Alignment),
-        };
-        Inspector.LayoutTree = gui::PlaceLayoutTreeInMemory(128, Block);
+            gui::memory_footprint Footprint = gui::GetLayoutTreeFootprint(128);
+            gui::memory_block     Block     =
+            {
+                .SizeInBytes = Footprint.SizeInBytes,
+                .Base        = PushArena(Inspector.StateArena, Footprint.SizeInBytes, Footprint.Alignment),
+            };
+            Inspector.LayoutTree = gui::PlaceLayoutTreeInMemory(128, Block);
+        }
+
+        // Resource Table
+        {
+            gui::resource_table_params Params =
+            {
+                .HashSlotCount = 64,
+                .EntryCount    = 128,
+            };
+
+            gui::memory_footprint Footprint = gui::GetResourceTableFootprint(Params);
+            gui::memory_block     Block     =
+            {
+                .SizeInBytes = Footprint.SizeInBytes,
+                .Base        = PushArena(Inspector.StateArena, Footprint.SizeInBytes, Footprint.Alignment),
+            };
+            Inspector.ResourceTable = gui::PlaceResourceTableInMemory(Params, Block);
+        }
+
+        // Glyph Generator
+        {
+            ntext::glyph_generator_params Params =
+            {
+                .TextStorage       = ntext::TextStorage::LazyAtlas,
+                .FrameMemoryBudget = KiB(32),
+                .FrameMemory       = PushArena(Inspector.StateArena, KiB(32), 8),
+            };
+
+            Inspector.GlyphGenerator = CreateGlyphGenerator(Params);
+        }
+
+        // Fonts
+        {
+        }
 
         Inspector.IsInitialized = true;
     }
@@ -950,6 +1051,13 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
         gui::component TreePanel("tree_panel", gui::NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
         if(TreePanel.Push(PushStruct<gui::parent_node>(Inspector.FrameArena)))
         {
+            // This is beyond verbose. For a simple string. Jesus. And it's also not clear that the string is now bound
+            // to the node I guess? Unsure if that's a problem or it's simply unusual..
+
+            gui::resource_key Key  = gui::MakeNodeResourceKey(gui::ResourceType::Text, TreePanel.LayoutIndex, Inspector.LayoutTree);
+            gui::byte_string  Text = str8_comp("Can you see me :)");
+            CreateStaticText(Text.String, Text.Size, Inspector.FrameArena, Inspector.GlyphGenerator, Key, Inspector.ResourceTable);
+
             TreePanel.Pop();
         }
 

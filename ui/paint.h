@@ -118,6 +118,7 @@ enum class RenderCommandType
 
     Rectangle = 1,
     Border    = 2,
+    Text      = 3,
 };
 
 struct render_command
@@ -139,6 +140,13 @@ struct render_command
             color         Color;
             float         Width;
         } Border;
+
+        struct
+        {
+            void        *Texture;
+            color        Color;
+            bounding_box Source;
+        } Text;
     };
 };
 

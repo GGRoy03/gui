@@ -1,21 +1,18 @@
-namespace gui
-{
-
 // =============================================================================
 // DOMAIN: Strings
 // =============================================================================
 
 
-static byte_string 
-ByteString(char *String, uint64_t Size)
+static gui_byte_string 
+GuiByteString(char *String, uint64_t Size)
 {
-    byte_string Result = { String, Size };
+    gui_byte_string Result = { String, Size };
     return Result;
 }
 
 
 static bool
-IsValidByteString(byte_string Input)
+GuiIsValidByteString(gui_byte_string Input)
 {
     bool Result = (Input.String) && (Input.Size);
     return Result;
@@ -23,7 +20,7 @@ IsValidByteString(byte_string Input)
 
 
 static uint64_t
-HashByteString(byte_string Input)
+GuiHashByteString(gui_byte_string Input)
 {
     uint64_t Result = XXH3_64bits(Input.String, Input.Size);
     return Result;
@@ -35,67 +32,67 @@ HashByteString(byte_string Input)
 // =============================================================================
 
 
-struct resource_allocator
+struct gui_resource_allocator
 {
     uint64_t AllocatedCount;
     uint64_t AllocatedBytes;
 };
 
-struct resource_entry
+struct gui_resource_entry
 {
-    resource_key Key;
+    gui_resource_key Key;
 
-    uint32_t        NextWithSameHashSlot;
-    uint32_t        NextLRU;
-    uint32_t        PrevLRU;
+    uint32_t         NextWithSameHashSlot;
+    uint32_t         NextLRU;
+    uint32_t         PrevLRU;
 
-    ResourceType ResourceType;
-    void           *Memory;
+    Gui_ResourceType ResourceType;
+    void            *Memory;
 };
 
-struct resource_table
+struct gui_resource_table
 {
-    resource_stats     Stats;
-    resource_allocator Allocator;
+    gui_resource_stats     Stats;
+    gui_resource_allocator Allocator;
 
-    uint32_t           HashMask;
-    uint32_t           HashSlotCount;
-    uint32_t           EntryCount;
+    uint32_t               HashMask;
+    uint32_t               HashSlotCount;
+    uint32_t               EntryCount;
 
-    uint32_t          *HashTable;
-    resource_entry    *Entries;
+    uint32_t              *HashTable;
+    gui_resource_entry    *Entries;
 };
 
-static resource_entry *
-GetResourceSentinel(resource_table *Table)
+static gui_resource_entry *
+GuiGetResourceSentinel(gui_resource_table *Table)
 {
-    resource_entry *Result = Table->Entries;
+    gui_resource_entry *Result = Table->Entries;
     return Result;
 }
 
 static uint32_t *
-GetResourceSlotPointer(resource_key Key, resource_table *Table)
+GuiGetResourceSlotPointer(gui_resource_key Key, gui_resource_table *Table)
 {
     uint32_t HashIndex = _mm_cvtsi128_si32(Key.Value);
     uint32_t HashSlot  = (HashIndex & Table->HashMask);
 
-    VOID_ASSERT(HashSlot < Table->HashSlotCount);
+    GUI_ASSERT(HashSlot < Table->HashSlotCount);
 
     uint32_t *Result = &Table->HashTable[HashSlot];
     return Result;
 }
 
-static resource_entry *
-GetResourceEntry(uint32_t Index, resource_table *Table)
+static gui_resource_entry *
+GuiGetResourceEntry(uint32_t Index, gui_resource_table *Table)
 {
-    VOID_ASSERT(Index < Table->EntryCount);
+    GUI_ASSERT(Index < Table->EntryCount);
 
-    resource_entry *Result = Table->Entries + Index;
+    gui_resource_entry *Result = Table->Entries + Index;
     return Result;
 }
 
 static bool
-ResourceKeyAreEqual(resource_key A, resource_key B)
+GuiResourceKeyAreEqual(gui_resource_key A, gui_resource_key B)
 {
     __m128i Compare = _mm_cmpeq_epi32(A.Value, B.Value);
     bool     Result  = (_mm_movemask_epi8(Compare) == 0xffff);
@@ -104,9 +101,9 @@ ResourceKeyAreEqual(resource_key A, resource_key B)
 }
 
 static uint32_t
-PopFreeResourceEntry(resource_table *Table)
+GuiPopFreeResourceEntry(gui_resource_table *Table)
 {
-    resource_entry *Sentinel = GetResourceSentinel(Table);
+    gui_resource_entry *Sentinel = GuiGetResourceSentinel(Table);
 
     // At initialization we populate sentinel's the hash chain such that:
     // (Sentinel) -> (Slot) -> (Slot) -> (Slot)
@@ -114,64 +111,64 @@ PopFreeResourceEntry(resource_table *Table)
 
     if(!Sentinel->NextWithSameHashSlot)
     {
-        VOID_ASSERT(!"Not Implemented");
+        GUI_ASSERT(!"Not Implemented");
     }
 
     uint32_t Result = Sentinel->NextWithSameHashSlot;
 
-    resource_entry *Entry = GetResourceEntry(Result, Table);
+    gui_resource_entry *Entry = GuiGetResourceEntry(Result, Table);
     Sentinel->NextWithSameHashSlot = Entry->NextWithSameHashSlot;
     Entry->NextWithSameHashSlot    = 0;
 
     return Result;
 }
 
-static ResourceType
-GetResourceTypeFromKey(resource_key Key)
+static Gui_ResourceType
+GuiGetResourceTypeFromKey(gui_resource_key Key)
 {
-    uint64_t             High = _mm_extract_epi64(Key.Value, 1);
-    ResourceType Type = (ResourceType)(High >> 32);
+    uint64_t         High = _mm_extract_epi64(Key.Value, 1);
+    Gui_ResourceType Type = (Gui_ResourceType)(High >> 32);
     return Type;
 }
 
 // TODO: Make a better resource allocator.
 static void *
-AllocateUIResource(uint64_t Size, resource_allocator *Allocator)
+GuiAllocateUIResource(uint64_t Size, gui_resource_allocator *Allocator)
 {
     return 0;
 }
 
 
-static memory_footprint
-GetResourceTableFootprint(resource_table_params Params)
+static gui_memory_footprint
+GuiGetResourceTableFootprint(gui_resource_table_params Params)
 {
     uint64_t HashTableSize  = Params.HashSlotCount * sizeof(uint32_t);
-    uint64_t EntryArraySize = Params.EntryCount    * sizeof(resource_entry);
+    uint64_t EntryArraySize = Params.EntryCount    * sizeof(gui_resource_entry);
 
-    memory_footprint Result = 
+    gui_memory_footprint Result = 
     {
-        .SizeInBytes = sizeof(resource_table) + HashTableSize + EntryArraySize,
-        .Alignment   = AlignOf(resource_entry),
+        .SizeInBytes = sizeof(gui_resource_table) + HashTableSize + EntryArraySize,
+        .Alignment   = AlignOf(gui_resource_entry),
     };
 
     return Result;
 }
 
 
-static resource_table *
-PlaceResourceTableInMemory(resource_table_params Params, memory_block Block)
+static gui_resource_table *
+GuiPlaceResourceTableInMemory(gui_resource_table_params Params, gui_memory_block Block)
 {
     // Since this is user facing maybe we want hard-validation??
-    VOID_ASSERT(VOID_ISPOWEROFTWO(Params.HashSlotCount));
+    GUI_ASSERT(GUI_ISPOWEROFTWO(Params.HashSlotCount));
 
-    resource_table *Result = 0;
-    memory_region   Local  = EnterMemoryRegion(Block);
+    gui_resource_table *Result = 0;
+    gui_memory_region   Local  = GuiEnterMemoryRegion(Block);
 
-    if(IsValidMemoryRegion(Local))
+    if(GuiIsValidMemoryRegion(&Local))
     {
-        resource_entry *Entries   = PushArray<resource_entry>(Local, Params.EntryCount);
-        uint32_t       *HashTable = PushArray<uint32_t>(Local, Params.HashSlotCount);
-        resource_table *Table     = PushStruct<resource_table>(Local);
+        gui_resource_entry *Entries   = GuiPushArray(&Local, gui_resource_entry, Params.EntryCount);
+        uint32_t           *HashTable = GuiPushArray(&Local, uint32_t, Params.HashSlotCount);
+        gui_resource_table *Table     = GuiPushStruct(&Local, gui_resource_table);
 
         if(Entries && HashTable && Table)
         {
@@ -183,7 +180,7 @@ PlaceResourceTableInMemory(resource_table_params Params, memory_block Block)
 
             for(uint32_t Idx = 0; Idx < Params.EntryCount; ++Idx)
             {
-                resource_entry *Entry = GetResourceEntry(Idx, Result);
+                gui_resource_entry *Entry = GuiGetResourceEntry(Idx, Table);
                 if((Idx + 1) < Params.EntryCount)
                 {
                     Entry->NextWithSameHashSlot = Idx + 1;
@@ -193,7 +190,7 @@ PlaceResourceTableInMemory(resource_table_params Params, memory_block Block)
                     Entry->NextWithSameHashSlot = 0;
                 }
     
-                Entry->ResourceType = ResourceType::None;
+                Entry->ResourceType = Gui_ResourceType_None;
                 Entry->Memory       = 0;
             }
 
@@ -204,48 +201,32 @@ PlaceResourceTableInMemory(resource_table_params Params, memory_block Block)
     return Result;
 }
 
-static resource_key
-MakeNodeResourceKey(ResourceType Type, uint32_t NodeIndex, ui_layout_tree *Tree)
+static gui_resource_key
+GuiMakeNodeResourceKey(Gui_ResourceType Type, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
     uint64_t Low  = (uint64_t)Tree;
     uint64_t High = ((uint64_t)Type << 32) | NodeIndex;
 
-    resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
+    gui_resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
     return Key;
 }
 
-// This might be wrong, because I am unsure how string literals are stored when you do something like:
-// str8_lit("Consolas") 
-// str8_lit("Consolas") 
-// Do they get stored in the same place in memory? Does it depend?
-
-static resource_key
-MakeFontResourceKey(byte_string Name, float Size)
+static gui_resource_state
+GuiFindResourceByKey(gui_resource_key Key, Gui_FindResourceFlag Flags, gui_resource_table *Table)
 {
-    uint64_t Low  = reinterpret_cast<uint64_t>(Name.String);
-    uint64_t High = (static_cast<uint64_t>(ResourceType::Font) << 32) | static_cast<uint32_t>(Size);
-
-    resource_key Key = {.Value = _mm_set_epi64x(High, Low)};
-    return Key;
-}
-
-
-static resource_state
-FindResourceByKey(resource_key Key, FindResourceFlag Flags, resource_table *Table)
-{
-    resource_state Result = {};
+    gui_resource_state Result = {};
 
     if (Table)
     {
-        resource_entry *FoundEntry = 0;
+        gui_resource_entry *FoundEntry = 0;
 
-        uint32_t *Slot       = GetResourceSlotPointer(Key, Table);
+        uint32_t *Slot       = GuiGetResourceSlotPointer(Key, Table);
         uint32_t  EntryIndex = Slot[0];
         
         while(EntryIndex)
         {
-            resource_entry *Entry = GetResourceEntry(EntryIndex, Table);
-            if(ResourceKeyAreEqual(Entry->Key, Key))
+            gui_resource_entry *Entry = GuiGetResourceEntry(EntryIndex, Table);
+            if(GuiResourceKeyAreEqual(Entry->Key, Key))
             {
                 FoundEntry = Entry;
                 break;
@@ -260,15 +241,15 @@ FindResourceByKey(resource_key Key, FindResourceFlag Flags, resource_table *Tabl
             // (Prev) -> (Entry) -> (Next)
             // (Prev) -> (Next)
         
-            resource_entry *Prev = GetResourceEntry(FoundEntry->PrevLRU, Table);
-            resource_entry *Next = GetResourceEntry(FoundEntry->NextLRU, Table);
+            gui_resource_entry *Prev = GuiGetResourceEntry(FoundEntry->PrevLRU, Table);
+            gui_resource_entry *Next = GuiGetResourceEntry(FoundEntry->NextLRU, Table);
         
             Prev->NextLRU = FoundEntry->NextLRU;
             Next->PrevLRU = FoundEntry->PrevLRU;
         
             ++Table->Stats.CacheHitCount;
         }
-        else if((Flags & FindResourceFlag::AddIfNotFound) != FindResourceFlag::None)
+        else if((Flags & Gui_FindResourceFlag_AddIfNotFound) != Gui_FindResourceFlag_None)
         {
             // If we miss an entry we have to first allocate a new one.
             // If we have some hash slot at X: Hash[X]
@@ -276,10 +257,10 @@ FindResourceByKey(resource_key Key, FindResourceFlag Flags, resource_table *Tabl
             // (Entry) -> Hash[X] -> (Index) -> (Index)
             // Hash[X] -> (Index) -> (Index) -> (Index)
         
-            EntryIndex = PopFreeResourceEntry(Table);
-            VOID_ASSERT(EntryIndex);
+            EntryIndex = GuiPopFreeResourceEntry(Table);
+            GUI_ASSERT(EntryIndex);
         
-            FoundEntry = GetResourceEntry(EntryIndex, Table);
+            FoundEntry = GuiGetResourceEntry(EntryIndex, Table);
             FoundEntry->NextWithSameHashSlot = Slot[0];
             FoundEntry->Key                  = Key;
         
@@ -295,11 +276,11 @@ FindResourceByKey(resource_key Key, FindResourceFlag Flags, resource_table *Tabl
             // What we have: (Sentinel) -> (Entry)    -> (Entry) -> (Entry)
             // What we want: (Sentinel) -> (NewEntry) -> (Entry) -> (Entry) -> (Entry)
         
-            resource_entry *Sentinel = GetResourceSentinel(Table);
+            gui_resource_entry *Sentinel = GuiGetResourceSentinel(Table);
             FoundEntry->NextLRU = Sentinel->NextLRU;
             FoundEntry->PrevLRU = 0;
         
-            resource_entry *NextLRU = GetResourceEntry(Sentinel->NextLRU, Table);
+            gui_resource_entry *NextLRU = GuiGetResourceEntry(Sentinel->NextLRU, Table);
             NextLRU->PrevLRU  = EntryIndex;
             Sentinel->NextLRU = EntryIndex;
         }
@@ -307,7 +288,7 @@ FindResourceByKey(resource_key Key, FindResourceFlag Flags, resource_table *Tabl
         Result =
         {
             .Id           = EntryIndex,
-            .ResourceType = FoundEntry ? FoundEntry->ResourceType : ResourceType::None,
+            .ResourceType = FoundEntry ? FoundEntry->ResourceType : Gui_ResourceType_None,
             .Resource     = FoundEntry ? FoundEntry->Memory       : 0,
         };
     }
@@ -317,246 +298,46 @@ FindResourceByKey(resource_key Key, FindResourceFlag Flags, resource_table *Tabl
 
 
 static void
-UpdateResourceTable(uint32_t Id, resource_key Key, void *Memory, resource_table *Table)
+GuiUpdateResourceTable(uint32_t Id, gui_resource_key Key, void *Memory, gui_resource_table *Table)
 {
-    resource_entry *Entry = GetResourceEntry(Id, Table);
-    VOID_ASSERT(Entry);
+    gui_resource_entry *Entry = GuiGetResourceEntry(Id, Table);
+    GUI_ASSERT(Entry);
 
     // This is weird. Kind of.
     if(Entry->Memory && Entry->Memory != Memory)
     {
-        VOID_ASSERT(!"...");
+        GUI_ASSERT(!"...");
         // OSRelease(Entry->Memory);
     }
 
     Entry->Key          = Key;
     Entry->Memory       = Memory;
-    Entry->ResourceType = GetResourceTypeFromKey(Key);
+    Entry->ResourceType = GuiGetResourceTypeFromKey(Key);
 
-    VOID_ASSERT(Entry->ResourceType != ResourceType::None);
+    GUI_ASSERT(Entry->ResourceType != Gui_ResourceType_None);
 }
 
 
 static void *
-QueryNodeResource(ResourceType Type, uint32_t NodeIndex, ui_layout_tree *Tree, resource_table *Table)
+GuiQueryNodeResource(Gui_ResourceType Type, uint32_t NodeIndex, gui_layout_tree *Tree, gui_resource_table *Table)
 {
-    resource_key   Key   = MakeNodeResourceKey(Type, NodeIndex, Tree);
-    resource_state State = FindResourceByKey(Key, FindResourceFlag::None, Table);
+    gui_resource_key   Key   = GuiMakeNodeResourceKey(Type, NodeIndex, Tree);
+    gui_resource_state State = GuiFindResourceByKey(Key, Gui_FindResourceFlag_None, Table);
 
     void *Result = State.Resource;
     return Result;
 }
 
 
-struct shaped_glyph_input
-{
-    float OffsetX;
-    float OffsetY;
-    float Advance;
-    bool  IsWhiteSpace;
-};
-
-
-struct shaped_glyph
-{
-    // User
-
-    bounding_box       Source;
-
-    // Read-Only Inputs
-
-    shaped_glyph_input Input;
-
-    // Output
-
-    bounding_box       Position;
-
-    // Internal Use
-
-    bool              _BreakLine;
-    bool              _Skip;
-};
-
-
-struct text_params
-{
-    uint64_t            GlyphCount;
-    shaped_glyph_input *Inputs;
-};
-
-
-struct static_text
-{
-    shaped_glyph *Glyphs;
-    uint32_t      GlyphCount;
-};
-
-
-static memory_footprint
-GetStaticTextFootprint(text_params Params)
-{
-    uint64_t ShapedGlyphBufferSize = Params.GlyphCount * sizeof(shaped_glyph);
-
-    memory_footprint Result =
-    {
-        .SizeInBytes = sizeof(static_text) + ShapedGlyphBufferSize,
-        .Alignment   = AlignOf(shaped_glyph),
-    };
-
-    return Result;
-}
-
-
-static static_text *
-PlaceStaticTextInMemory(text_params Params, memory_block Block)
-{
-    static_text  *Result = 0;
-    memory_region Local  = EnterMemoryRegion(Block);
-
-    if(IsValidMemoryRegion(Local) && Params.Inputs)
-    {
-        shaped_glyph *Glyphs     = PushArray<shaped_glyph>(Local, Params.GlyphCount);
-        static_text  *StaticText = PushStruct<static_text>(Local);
-
-        if(Glyphs && StaticText)
-        {
-            StaticText->Glyphs     = Glyphs;
-            StaticText->GlyphCount = Params.GlyphCount;
-
-            for(uint32_t Idx = 0; Idx < Params.GlyphCount; ++Idx)
-            {
-                shaped_glyph *Glyph = StaticText->Glyphs + Idx;
-
-                Glyph->Input      = Params.Inputs[Idx];
-                Glyph->Source     = {};
-                Glyph->Position   = {};
-                Glyph->_BreakLine = false;
-                Glyph->_Skip      = false;
-            }
-
-            Result = StaticText;
-        }
-    }
-
-    return Result;
-}
-
-
-// -------------------------------------------------------------
-// @Public: Frame Node API
-
-//bool node::IsValid()
-//{
-//    bool Result = Index != ::InvalidIndex;
-//    return Result;
-//}
-//
-//
-//node node::FindChild(uint32_t FindIndex, pipeline &Pipeline)
-//{
-//    node Result = { ::FindChild(Index, FindIndex, Tree) };
-//    return Result;
-//}
-//
-//
-//void node::Append(node Child, pipeline &Pipeline)
-//{
-//    ::AppendChild(Index, Child.Index, Tree);
-//}
-//
-//
-//void node::SetOffset(float XOffset, float YOffset, pipeline &Pipeline)
-//{
-//    ::SetNodeOffset(Index, XOffset, YOffset, Tree);
-//}
-//
-//
-//// There are so many indirections. This is unusual.
-//
-//void node::SetText(byte_string UserText, resource_key FontKey, pipeline &Pipeline)
-//{
-//    void_context      &Context       = GetVoidContext();
-//    resource_table *ResourceTable = Context.ResourceTable;
-//
-//    auto  TextKey   = MakeNodeResourceKey(ResourceType::Text, Index, Tree);
-//    auto  TextState = FindResourceByKey(TextKey, FindResourceFlag::AddIfNotFound, ResourceTable);
-//    auto *Text      = static_cast<text *>(TextState.Resource);
-//
-//    if(!Text)
-//    {
-//        auto  FontState = FindResourceByKey(FontKey, FindResourceFlag::None, Context.ResourceTable);
-//        auto *Font      = static_cast<font *>(FontState.Resource);
-//
-//        if(Font)
-//        {
-//            ntext::TextAnalysis Flags = ntext::TextAnalysis::GenerateWordSlices;
-//
-//            auto Analysed = ntext::AnalyzeText(UserText.String, UserText.Size, Flags, Font->Generator);
-//            auto GlyphRun = ntext::FillAtlas(Analysed, Font->Generator);
-//
-//            uint64_t Footprint = GetTextFootprint(Analysed, GlyphRun);
-//            void    *Memory    = AllocateUIResource(Footprint, &ResourceTable->Allocator);
-//
-//            Text = PlaceTextInMemory(Analysed, GlyphRun, Font, Memory);
-//            if(Text)
-//            {
-//                UpdateResourceTable(TextState.Id, TextKey, Text, Context.ResourceTable);
-//            }
-//        }
-//    }
-//    else
-//    {
-//        VOID_ASSERT(!"Unsure");
-//    }
-//}
-//
-//void node::SetTextInput(uint8_t *Buffer, uint64_t BufferSize, pipeline &Pipeline)
-//{
-//}
-//
-//// This is badly implemented.
-//
-//void node::SetScroll(float ScrollSpeed, AxisType Axis, pipeline &Pipeline)
-//{
-//    void_context &Context  = GetVoidContext();
-//
-//    resource_key   Key   = MakeNodeResourceKey(ResourceType::ScrollRegion, Index, Tree);
-//    resource_state State = FindResourceByKey(Key, FindResourceFlag::AddIfNotFound, Context.ResourceTable);
-//
-//    uint64_t Size   = GetScrollRegionFootprint();
-//    void    *Memory = AllocateUIResource(Size, &Context.ResourceTable->Allocator);
-//
-//    scroll_region_params Params =
-//    {
-//        .PixelPerLine = ScrollSpeed,
-//        .Axis         = Axis,
-//    };
-//
-//    scroll_region *ScrollRegion = PlaceScrollRegionInMemory(Params, Memory);
-//    if(ScrollRegion)
-//    {
-//        UpdateResourceTable(State.Id, Key, ScrollRegion, Context.ResourceTable);
-//    }
-//}
-//
-//void node::SetImage(byte_string Path, byte_string Group, pipeline &Pipeline)
-//{
-//    // TODO: Reimplement.
-//}
-//
-//void node::DebugBox(uint32_t Flag, bool Draw, pipeline &Pipeline)
-//{
-//}
-
 // ----------------------------------------------------------------------------------
 // Context Public API Implementation
 
-struct pointer_state
+struct gui_pointer_state
 {
-    uint32_t      Id;
-    point      Position;
-    point      LastPosition;
-    PointerButton ButtonMask;
+    uint32_t          Id;
+    gui_point         Position;
+    gui_point         LastPosition;
+    uint32_t          ButtonMask;
 
     // Targets?
     bool     IsCaptured; // This might be, uhhh, a state flag with some other states.
@@ -564,7 +345,7 @@ struct pointer_state
 
 
 static void
-ClearPointerEvents(pointer_event_list *List)
+GuiClearPointerEvents(gui_pointer_event_list *List)
 {
     if(List)
     {
@@ -576,11 +357,11 @@ ClearPointerEvents(pointer_event_list *List)
 
 
 static bool
-PushPointerEvent(PointerEvent Type, pointer_event_node *Node, pointer_event_list *List)
+GuiPushPointerEvent(Gui_PointerEvent Type, gui_pointer_event_node *Node, gui_pointer_event_list *List)
 {
     bool Pushed = false;
 
-    if(List && Node && Type != PointerEvent::None)
+    if(List && Node && Type != Gui_PointerEvent_None)
     {
         Node->Next = 0;
         Node->Prev = 0;
@@ -596,16 +377,16 @@ PushPointerEvent(PointerEvent Type, pointer_event_node *Node, pointer_event_list
 
 
 static bool
-PushPointerMoveEvent(point Position, point LastPosition, pointer_event_node *Node, pointer_event_list *List)
+GuiPushPointerMoveEvent(gui_point Position, gui_point LastPosition, gui_pointer_event_node *Node, gui_pointer_event_list *List)
 {
     bool Pushed = false;
 
     if(Node)
     {
         Node->Value.Position = Position;
-        Node->Value.Delta    = translation(Position, LastPosition);
+        Node->Value.Delta    = GuiTranslationFromPoints(Position, LastPosition);
 
-        Pushed = PushPointerEvent(PointerEvent::Move, Node, List);
+        Pushed = GuiPushPointerEvent(Gui_PointerEvent_Move, Node, List);
     }
 
     return Pushed;
@@ -613,7 +394,7 @@ PushPointerMoveEvent(point Position, point LastPosition, pointer_event_node *Nod
 
 
 static bool
-PushPointerClickEvent(PointerButton Button, point Position, pointer_event_node *Node, pointer_event_list *List)
+GuiPushPointerClickEvent(Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List)
 {
     bool Pushed = false;
 
@@ -622,7 +403,7 @@ PushPointerClickEvent(PointerButton Button, point Position, pointer_event_node *
         Node->Value.ButtonMask = Button;
         Node->Value.Position   = Position;
 
-        Pushed = PushPointerEvent(PointerEvent::Click, Node, List);
+        Pushed = GuiPushPointerEvent(Gui_PointerEvent_Click, Node, List);
     }
 
     return Pushed;
@@ -630,7 +411,7 @@ PushPointerClickEvent(PointerButton Button, point Position, pointer_event_node *
 
 
 static bool
-PushPointerReleaseEvent(PointerButton Button, point Position, pointer_event_node *Node, pointer_event_list *List)
+GuiPushPointerReleaseEvent(Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List)
 {
     bool Pushed = false;
 
@@ -639,7 +420,7 @@ PushPointerReleaseEvent(PointerButton Button, point Position, pointer_event_node
         Node->Value.ButtonMask = Button;
         Node->Value.Position   = Position;
 
-        Pushed = PushPointerEvent(PointerEvent::Release, Node, List);
+        Pushed = GuiPushPointerEvent(Gui_PointerEvent_Release, Node, List);
     }
 
     return Pushed;
@@ -649,23 +430,23 @@ PushPointerReleaseEvent(PointerButton Button, point Position, pointer_event_node
 // We take this tree parameter for simplicity while we refactor this part
 
 static void
-BeginFrame(float Width, float Height, const pointer_event_list &EventList, ui_layout_tree *Tree)
+GuiBeginFrame(float Width, float Height, gui_pointer_event_list *EventList, gui_layout_tree *Tree)
 {
-    void_context &Context = GetVoidContext();
+    gui_context *Context = GuiGetContext();
 
     // Obviously this is temporary. Unsure how I want to structure this yet.
-    static pointer_state PointerStates[1];
+    static gui_pointer_state PointerStates[1];
 
-    for(pointer_event_node *EventNode = EventList.First; EventNode != 0; EventNode = EventNode->Next)
+    for(gui_pointer_event_node *EventNode = EventList->First; EventNode != 0; EventNode = EventNode->Next)
     {
-        const pointer_event &Event = EventNode->Value;
+        gui_pointer_event Event = EventNode->Value;
 
         switch(Event.Type)
         {
 
-        case PointerEvent::Move:
+        case Gui_PointerEvent_Move:
         {
-            pointer_state &State = PointerStates[0];
+            gui_pointer_state &State = PointerStates[0];
             State.LastPosition = State.Position;
             State.Position     = Event.Position;
 
@@ -673,32 +454,32 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, ui_la
             {
                 float DeltaX = Event.Delta.X;
                 float DeltaY = Event.Delta.Y;
-                HandlePointerMove(DeltaX, DeltaY, Tree);
+                GuiHandlePointerMove(DeltaX, DeltaY, Tree);
             }
         } break;
 
-        case PointerEvent::Click:
+        case Gui_PointerEvent_Click:
         {
-            pointer_state &State = PointerStates[0];
+            gui_pointer_state &State = PointerStates[0];
             State.ButtonMask |= Event.ButtonMask;
-            State.IsCaptured  = HandlePointerClick(State.Position, State.ButtonMask, 0, Tree);
+            State.IsCaptured  = GuiHandlePointerClick(State.Position, State.ButtonMask, 0, Tree);
         } break;
 
-        case PointerEvent::Release:
+        case Gui_PointerEvent_Release:
         {
-            pointer_state &State = PointerStates[0];
+            gui_pointer_state &State = PointerStates[0];
             State.ButtonMask &= ~Event.ButtonMask;
 
             if(State.IsCaptured)
             {
-                HandlePointerRelease(State.Position, State.ButtonMask, 0, Tree);
+                GuiHandlePointerRelease(State.Position, State.ButtonMask, 0, Tree);
                 State.IsCaptured = false;
             }
         } break;
 
         default:
         {
-            VOID_ASSERT(!"Unknown Event Type");
+            GUI_ASSERT(!"Unknown Event Type");
         } break;
 
         }
@@ -709,44 +490,41 @@ BeginFrame(float Width, float Height, const pointer_event_list &EventList, ui_la
 
     for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
     {
-        pointer_state &State = PointerStates[PointerIdx];
+        gui_pointer_state &State = PointerStates[PointerIdx];
 
-        if(State.ButtonMask == PointerButton::None) 
+        if(State.ButtonMask == Gui_PointerButton_None) 
         {
-            HandlePointerHover(State.Position, 0, Tree);
+            GuiHandlePointerHover(State.Position, 0, Tree);
         }
     }
 
-    Context.Width  = Width;
-    Context.Height = Height;
+    Context->Width  = Width;
+    Context->Height = Height;
 }
 
+
 static void
-EndFrame(void)
+GuiEndFrame(void)
 {
     // TODO: Unsure
 }
 
-// ==================================================================================
-// @Public : Context
 
-static void_context &
-GetVoidContext(void)
+static gui_context *
+GuiGetContext(void)
 {
-    return GlobalVoidContext;
+    return &GlobalVoidContext;
 }
 
-// NOTE:
-// Context parameters? Unsure.
 
 static void
-CreateVoidContext(void)
+GuiCreateContext(void)
 {
     // void_context &Context = GetVoidContext();
 
     // State
     {
-        // resource_table_params TableParams =
+        // gui_resource_table_params TableParams =
         //{
         //    .HashSlotCount = 512,
         //    .EntryCount    = 2048,
@@ -757,53 +535,53 @@ CreateVoidContext(void)
 
         //Context.ResourceTable =  PlaceResourceTableInMemory(TableParams, TableMemory);
 
-        //VOID_ASSERT(Context.ResourceTable);
+        //GUI_ASSERT(Context.ResourceTable);
     }
 }
 
-// -----------------------------------------------------------------------------
-// @Private Meta-Layout API
-// Functions intended for internal use.
-// -----------------------------------------------------------------------------
+// -------------------
+// Component stuff
 
-component::component(const char *Name, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree)
-    : component(str8_comp(Name), Flags, Style, Tree)
+
+static gui_component
+GuiCreateComponent(gui_byte_string Name, uint32_t Flags, gui_cached_style *Style, gui_layout_tree *Tree)
 {
-}
-
-component::component(byte_string Name, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree)
-{
-    LayoutIndex = CreateNode(HashByteString(Name), Flags, Style, Tree);
-    LayoutTree  = Tree;
-    UpdateInput(LayoutIndex, Style, Tree);
-}
-
-
-void component::SetStyle(cached_style *Style)
-{
-    UpdateInput(LayoutIndex, Style, LayoutTree);
-}
-
-
-bool component::Push(parent_node *Node)
-{
-    bool Result = false;
-
-    if(Node)
+    gui_component Component = 
     {
-        PushParent(LayoutIndex, LayoutTree, Node);
-        Result = true;
+        .LayoutIndex = GuiCreateNode(GuiHashByteString(Name), Flags, Style, Tree),
+        .LayoutTree  = Tree,
+    };
+
+    GuiUpdateInput(Component.LayoutIndex, Style, Tree);
+
+    return Component;
+}
+
+
+static void
+GuiSetStyle(gui_component *Component, gui_cached_style *Style)
+{
+    GuiUpdateInput(Component->LayoutIndex, Style, Component->LayoutTree);
+}
+
+
+static bool
+GuiPushComponent(gui_component *Component, gui_parent_node *Node)
+{
+    bool Result = Component && Node;
+
+    if(Result)
+    {
+        GuiPushParent(Component->LayoutIndex, Component->LayoutTree, Node);
     }
 
     return Result;
 }
 
 
-bool component::Pop()
+static bool
+GuiPopComponent(gui_component *Component)
 {
-    PopParent(LayoutIndex, LayoutTree);
-
+    GuiPopParent(Component->LayoutIndex, Component->LayoutTree);
     return true;
 }
-
-} // namespace gui

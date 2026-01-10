@@ -1,351 +1,324 @@
 #pragma once
 
+
+#include <stdint.h>
+#include <stdbool.h>
 #include <immintrin.h>
 
-namespace gui
-{
+
+// =============================================================================
+// Forward Declarations
+// =============================================================================
 
 
+struct gui_layout_tree;
+struct gui_parent_node;
+struct gui_cached_style;
+struct gui_font;
+struct gui_resource_table;
 
-struct ui_layout_tree;
-struct parent_node;
-enum class NodeFlags : uint32_t;
-struct cached_style;
-struct font;
-struct cached_style;
 
 // =============================================================================
 // DOMAIN: Basic Types
 // =============================================================================
 
-enum class AxisType
-{
-    None = 0,
-    X    = 1,
-    Y    = 2,
-    XY   = 3,
-};
 
-struct color
+typedef enum Gui_AxisType
+{
+    Gui_AxisType_None = 0,
+    Gui_AxisType_X    = 1,
+    Gui_AxisType_Y    = 2,
+    Gui_AxisType_XY   = 3,
+} Gui_AxisType;
+
+
+typedef struct gui_color
 {
     float R;
     float G;
     float B;
     float A;
-};
+} gui_color;
 
-struct corner_radius
+
+typedef struct gui_corner_radius
 {
     float TL;
     float TR;
     float BR;
     float BL;
-};
+} gui_corner_radius;
 
-struct padding
+
+typedef struct gui_padding
 {
     float Left;
     float Top;
     float Right;
     float Bot;
-};
+} gui_padding;
+
 
 // =============================================================================
 // DOMAIN: Strings
 // =============================================================================
 
-struct byte_string
+
+typedef struct gui_byte_string
 {
     char    *String;
     uint64_t Size;
-};
+} gui_byte_string;
 
-#define str8_lit(String)  ByteString(String, sizeof(String) - 1)
-#define str8_comp(String) {(char *)(String), sizeof(String) - 1}
 
-static byte_string ByteString         (char *String, uint64_t Size);
-static bool        IsValidByteString  (byte_string Input);
-static uint64_t    HashByteString     (byte_string Input);
+#define gui_str8_lit(String)   GuiByteString((char *)(String), sizeof(String) - 1)
+#define gui_str8_comp(String)  ((gui_byte_string){ (char *)(String), sizeof(String) - 1 })
+
+
+static gui_byte_string GuiByteString(char *String, uint64_t Size);
+static bool            GuiIsValidByteString(gui_byte_string Input);
+static uint64_t        GuiHashByteString(gui_byte_string Input);
 
 
 // =============================================================================
 // DOMAIN: Memory
 // =============================================================================
 
-struct memory_footprint
+
+typedef struct gui_memory_footprint
 {
     uint64_t SizeInBytes;
     uint64_t Alignment;
-};
+} gui_memory_footprint;
 
 
-struct memory_block
+typedef struct gui_memory_block
 {
     uint64_t SizeInBytes;
     void    *Base;
-};
+} gui_memory_block;
 
 
-struct memory_region
+typedef struct gui_memory_region
 {
     void    *Base;
     uint64_t Size;
     uint64_t At;
-};
+} gui_memory_region;
 
 
 static bool
-IsValidMemoryRegion(const memory_region &Region)
+GuiIsValidMemoryRegion(gui_memory_region *Region)
 {
-    bool Result = Region.Base && Region.Size && Region.At <= Region.Size;
+    bool Result = Region && Region->Base && Region->Size && Region->At <= Region->Size;
     return Result;
 }
 
 
-static memory_region
-EnterMemoryRegion(memory_block Block)
+static gui_memory_region
+GuiEnterMemoryRegion(gui_memory_block Block)
 {
-    memory_region Region =
-    {
-        .Base = Block.Base,
-        .Size = Block.SizeInBytes,
-        .At   = 0,
-    };
-
+    gui_memory_region Region;
+    Region.Base = Block.Base;
+    Region.Size = Block.SizeInBytes;
+    Region.At   = 0;
     return Region;
 }
 
 
 static void *
-PushMemoryRegion(memory_region &Region, uint64_t Size, uint64_t Alignment)
+GuiPushMemoryRegion(gui_memory_region *Region, uint64_t Size, uint64_t Alignment)
 {
     void *Result = 0;
 
-    uint64_t Before = AlignPow2(Region.At, Alignment); // Like.. Wouldn't it already be aligned?
+    uint64_t Before = AlignPow2(Region->At, Alignment);
     uint64_t After  = Before + Size;
 
-    if(After <= Region.Size)
+    if(After <= Region->Size)
     {
-        Result = (uint8_t *)Region.Base + Before;
-        Region.At = After;
+        Result = (uint8_t *)Region->Base + Before;
+        Region->At = After;
     }
 
     return Result;
 }
 
+
+#define GuiPushArrayNoZeroAligned(Region, Type, Count, Align) ((Type *)GuiPushMemoryRegion((Region), sizeof(Type) * (Count), (Align)))
+#define GuiPushArrayAligned(Region, Type, Count, Align)                GuiPushArrayNoZeroAligned((Region), Type, (Count), (Align))
+#define GuiPushArray(Region, Type, Count)                              GuiPushArrayAligned((Region), Type, (Count), _Alignof(Type))
+#define GuiPushStruct(Region, Type)                                    GuiPushArray((Region), Type, 1)
+
 // =============================================================================
 // DOMAIN: Resources
 // =============================================================================
 
-enum class ResourceType
-{
-    None         = 0,
-    Text         = 1,
-    TextInput    = 2,
-    ScrollRegion = 3,
-    Image        = 4,
-    ImageGroup   = 5,
-    Font         = 6,
-};
 
-enum class FindResourceFlag
+typedef enum Gui_ResourceType
 {
-    None          = 0,
-    AddIfNotFound = 1 << 0,
-};
+    Gui_ResourceType_None         = 0,
+    Gui_ResourceType_Text         = 1,
+    Gui_ResourceType_TextInput    = 2,
+    Gui_ResourceType_ScrollRegion = 3,
+    Gui_ResourceType_Image        = 4,
+    Gui_ResourceType_ImageGroup   = 5,
+    Gui_ResourceType_Font         = 6,
+} Gui_ResourceType;
 
-inline FindResourceFlag operator|(FindResourceFlag A, FindResourceFlag B)
+
+typedef enum Gui_FindResourceFlag
 {
-    return static_cast<FindResourceFlag>(static_cast<int>(A) | static_cast<int>(B));
-}
+    Gui_FindResourceFlag_None          = 0,
+    Gui_FindResourceFlag_AddIfNotFound = 1 << 0,
+} Gui_FindResourceFlag;
 
-inline FindResourceFlag operator&(FindResourceFlag A, FindResourceFlag B)
-{
-    return static_cast<FindResourceFlag>(static_cast<int>(A) & static_cast<int>(B));
-}
 
-struct resource_key
+typedef struct gui_resource_key
 {
     __m128i Value;
-};
+} gui_resource_key;
 
-struct resource_stats
+
+typedef struct gui_resource_stats
 {
     uint64_t CacheHitCount;
     uint64_t CacheMissCount;
-};
+} gui_resource_stats;
 
-struct resource_table_params
+
+typedef struct gui_resource_table_params
 {
     uint32_t HashSlotCount;
     uint32_t EntryCount;
-};
+} gui_resource_table_params;
 
-struct resource_state
+
+typedef struct gui_resource_state
 {
-    uint32_t     Id;
-    ResourceType ResourceType;
-    void        *Resource;
-};
-
-// New API
-
-struct resource_table;
-
-static memory_footprint   GetResourceTableFootprint   (resource_table_params Params);
-static resource_table   * PlaceResourceTableInMemory  (resource_table_params Params, memory_block Block);
+    uint32_t          Id;
+    Gui_ResourceType  ResourceType;
+    void             *Resource;
+} gui_resource_state;
 
 
-static resource_key   MakeNodeResourceKey  (ResourceType Type, uint32_t NodeIndex, ui_layout_tree *Tree);
-static resource_state FindResourceByKey    (resource_key Key, FindResourceFlag Flags, resource_table *Table);
-static void           UpdateResourceTable  (uint32_t Id, resource_key Key, void *Resource, resource_table *Table);
+static gui_memory_footprint   GuiGetResourceTableFootprint   (gui_resource_table_params Params);
+static gui_resource_table   * GuiPlaceResourceTableInMemory  (gui_resource_table_params Params, gui_memory_block Block);
 
-// ----------------------
+static gui_resource_key       GuiMakeNodeResourceKey         (Gui_ResourceType Type, uint32_t NodeIndex, gui_layout_tree *Tree);
+static gui_resource_state     GuiFindResourceByKey           (gui_resource_key Key, Gui_FindResourceFlag Flags, gui_resource_table *Table);
+static void                   GuiUpdateResourceTable         (uint32_t Id, gui_resource_key Key, void *Resource, gui_resource_table *Table);
 
-enum class PointerSource
+
+// =============================================================================
+// DOMAIN: Pointer Input
+// =============================================================================
+
+
+typedef enum Gui_PointerSource
 {
-    None = 0,
+    Gui_PointerSource_None       = 0,
+    Gui_PointerSource_Mouse      = 1,
+    Gui_PointerSource_Touch      = 2,
+    Gui_PointerSource_Pen        = 3,
+    Gui_PointerSource_Controller = 4,
+} Gui_PointerSource;
 
-    Mouse      = 1,
-    Touch      = 2,
-    Pen        = 3,
-    Controller = 4,
-};
 
-
-enum class PointerButton
+typedef enum Gui_PointerButton
 {
-    None = 0,
+    Gui_PointerButton_None      = 0,
+    Gui_PointerButton_Primary   = 1,
+    Gui_PointerButton_Secondary = 2,
+} Gui_PointerButton;
 
-    Primary   = 1,
-    Secondary = 2,
-};
 
-
-template<>
-struct enable_bitmask_operators<PointerButton> : std::true_type {};
-
-enum class PointerEvent
+typedef enum Gui_PointerEvent
 {
-    None    = 0,
-    Move    = 1,
-    Click   = 2,
-    Release = 3,
-};
+    Gui_PointerEvent_None    = 0,
+    Gui_PointerEvent_Move    = 1,
+    Gui_PointerEvent_Click   = 2,
+    Gui_PointerEvent_Release = 3,
+} Gui_PointerEvent;
 
 
-struct pointer_event
+typedef struct gui_pointer_event
 {
-    PointerEvent  Type;
-    uint32_t      PointerId;
-    point         Position;
-    translation   Delta;
-    PointerButton ButtonMask;
-};
+    Gui_PointerEvent  Type;
+    uint32_t          PointerId;
+    gui_point         Position;
+    gui_translation   Delta;
+    Gui_PointerButton ButtonMask;
+} gui_pointer_event;
 
 
-struct pointer_event_node
+typedef struct gui_pointer_event_node
 {
-    pointer_event_node *Prev;
-    pointer_event_node *Next;
-    pointer_event       Value;
-};
+    gui_pointer_event_node *Prev;
+    gui_pointer_event_node *Next;
+    gui_pointer_event       Value;
+} gui_pointer_event_node;
 
 
-struct pointer_event_list
+typedef struct gui_pointer_event_list
 {
-    pointer_event_node *First;
-    pointer_event_node *Last;
-    uint32_t            Count;
-};
+    gui_pointer_event_node *First;
+    gui_pointer_event_node *Last;
+    uint32_t                Count;
+} gui_pointer_event_list;
 
 
-static void ClearPointerEvents       (pointer_event_list *List);
-static bool PushPointerMoveEvent     (point Position, point LastPosition, pointer_event_node *Node, pointer_event_list *List);
-static bool PushPointerClickEvent    (PointerButton Button, point Position, pointer_event_node *Node, pointer_event_list *List);
-static bool PushPointerReleaseEvent  (PointerButton Button, point Position, pointer_event_node *Node, pointer_event_list *List);
+static void GuiClearPointerEvents       (gui_pointer_event_list *List);
+static bool GuiPushPointerMoveEvent     (gui_point Position, gui_point LastPosition, gui_pointer_event_node *Node, gui_pointer_event_list *List);
+static bool GuiPushPointerClickEvent    (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
+static bool GuiPushPointerReleaseEvent  (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
 
 
 // =============================================================================
 // DOMAIN: Context & Memory
 // =============================================================================
 
-struct font_list
+
+typedef struct gui_font_list
 {
-    font     *First;
-    font     *Last;
-    uint32_t Count;
-};
+    gui_font *First;
+    gui_font *Last;
+    uint32_t  Count;
+} gui_font_list;
 
-struct void_context
+
+typedef struct gui_context
 {
-    resource_table *ResourceTable;
-    font_list       Fonts;
-
-    // Frame State
-
-    float Width;
-    float Height;
-};
-
-static void_context GlobalVoidContext;
+    gui_resource_table *ResourceTable;
+    gui_font_list       Fonts;
+    float               Width;
+    float               Height;
+} gui_context;
 
 
+static gui_context GlobalVoidContext;
 
 
-template <typename T>
-constexpr T* PushArrayNoZeroAligned(memory_region &Region, uint64_t Count, uint64_t Align)
-{
-    return static_cast<T*>(PushMemoryRegion(Region, sizeof(T) * Count, Align));
-}
+static void          GuiBeginFrame         (float Width, float Height, const gui_pointer_event_list *EventList, gui_layout_tree *Tree);
+static void          GuiEndFrame           (void);
 
-template <typename T>
-constexpr T* PushArrayAligned(memory_region &Region, uint64_t Count, uint64_t Align)
-{
-    return PushArrayNoZeroAligned<T>(Region, Count, Align);
-}
+static gui_context * GuiGetContext         (void);
+static void          GuiCreateVoidContext  (void);
 
-template <typename T>
-constexpr T* PushArray(memory_region &Region, uint64_t Count)
-{
-    return PushArrayAligned<T>(Region, Count, alignof(T));
-}
-
-template <typename T>
-constexpr T* PushStruct(memory_region &Region)
-{
-    return PushArray<T>(Region, 1);
-}
-
-
-static void BeginFrame  (float Width, float Height, const pointer_event_list &EventList, ui_layout_tree *Tree);
-static void EndFrame    (void);
-
-static void_context & GetVoidContext     ();
-static void           CreateVoidContext  ();
 
 // =============================================================================
-// DOMAIN: Meta Tree
+// DOMAIN: Components
 // =============================================================================
 
-struct component
+
+typedef struct gui_component
 {
-    uint32_t      LayoutIndex;
-    ui_layout_tree * LayoutTree;
+    uint32_t         LayoutIndex;
+    gui_layout_tree *LayoutTree;
+} gui_component;
 
-    // Attributes
 
-    void SetStyle  (cached_style *Style);
+static gui_component GuiCreateComponent  (gui_byte_string Name, uint32_t Flags, gui_cached_style *Style, gui_layout_tree *Tree);
 
-    // Layout
-
-    bool Push      (parent_node *ParentNode);
-    bool Pop       ();
-
-    // Helpers
-
-    component(const char *Name, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree);
-    component(byte_string Name, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree);
-};
-
-} // namespace gui
+static void GuiSetComponentStyle         (gui_component *Component, gui_cached_style *Style);
+static bool GuiPushComponent             (gui_component *Component, gui_parent_node *ParentNode);
+static bool GuiPopComponent              (gui_component *Component);

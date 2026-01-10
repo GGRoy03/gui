@@ -1,164 +1,217 @@
 #pragma once
 
-namespace gui
+#include <stdint.h>
+#include <stdbool.h>
+
+// =============================================================================
+// Style Property
+// =============================================================================
+
+
+typedef struct gui_style_property_float
 {
+    float Value;
+    bool  IsSet;
+} gui_style_property_float;
 
-template<typename T>
-struct style_property
+
+typedef struct gui_style_property_size
 {
-    T    Value;
-    bool IsSet;
-
-    style_property() = default;
-    constexpr style_property(const T& Value_)              : Value(Value_), IsSet(true) {}
-    constexpr style_property(const T& Value_, bool IsSet_) : Value(Value_), IsSet(IsSet_) {}
-
-    style_property& operator=(const T& Value_) { Value = Value_; IsSet = true; return *this; }
-};
+    gui_size Value;
+    bool     IsSet;
+} gui_style_property_size;
 
 
-struct layout_properties
+typedef struct gui_style_property_color
 {
-    style_property<size>            Size;
-    style_property<size>            MinSize;
-    style_property<size>            MaxSize;
-
-    style_property<LayoutDirection> Direction;
-    style_property<Alignment>       XAlign;
-    style_property<Alignment>       YAlign;
-
-    style_property<padding>         Padding;
-    style_property<float>           Spacing;
-
-    style_property<float>           Grow;
-    style_property<float>           Shrink;
-};
+    gui_color Value;
+    bool      IsSet;
+} gui_style_property_color;
 
 
-struct paint_default_properties
+typedef struct gui_style_property_corner_radius
 {
-    style_property<color>         Color;
-    style_property<color>         BorderColor;
-    style_property<color>         TextColor;
-
-    style_property<float>         BorderWidth;
-    style_property<float>         Softness;
-    style_property<corner_radius> CornerRadius;
-};
+    gui_corner_radius Value;
+    bool              IsSet;
+} gui_style_property_corner_radius;
 
 
-struct paint_hovered_properties
+typedef struct gui_style_property_padding
 {
-    style_property<color>         Color;
-    style_property<color>         BorderColor;
-    style_property<color>         TextColor;
-
-    style_property<float>         BorderWidth;
-    style_property<float>         Softness;
-    style_property<corner_radius> CornerRadius;
-};
+    gui_padding Value;
+    bool        IsSet;
+} gui_style_property_padding;
 
 
-struct paint_focused_properties
-{   
-    style_property<color>           Color;
-    style_property<color>           BorderColor;
-    style_property<float>           BorderWidth;
-    style_property<color>           TextColor;
-    style_property<color>           CaretColor;
-    style_property<float>           CaretWidth;
-    style_property<float>           Softness;
-    style_property<corner_radius>   CornerRadius;
-};
-
-
-struct cached_style
+typedef struct gui_style_property_alignment
 {
-    layout_properties        Layout;
-    paint_default_properties Default;
-    paint_hovered_properties Hovered;
-    paint_focused_properties Focused;
-};
+    Gui_Alignment Value;
+    bool          IsSet;
+} gui_style_property_alignment;
 
 
-struct paint_properties
+typedef struct gui_style_property_layout_direction
 {
-    color         Color;
-    color         HoveredColor;
-    color         FocusedColor;
-
-    color         BorderColor;
-    color         HoveredBorderColor;
-    color         FocusedBorderColor;
-
-    float         BorderWidth;
-    float         HoveredBorderWidth;
-    float         FocusedBorderWidth;
-
-    color         TextColor;
-    color         HoveredTextColor;
-    color         FocusedTextColor;
-
-    color         CaretColor;
-    float         CaretWidth;
-
-    corner_radius CornerRadius;
-    corner_radius HoveredCornerRadius;
-    corner_radius FocusedCornerRadius;
-
-    float         Softness;
-    float         HoveredSoftness;
-    float         FocusedSoftness;
-};
+    Gui_LayoutDirection Value;
+    bool                IsSet;
+} gui_style_property_layout_direction;
 
 
-enum class RenderCommandType
+// =============================================================================
+// Layout Properties
+// =============================================================================
+
+
+typedef struct gui_layout_properties
 {
-    None = 0,
+    gui_style_property_size             Size;
+    gui_style_property_size             MinSize;
+    gui_style_property_size             MaxSize;
 
-    Rectangle = 1,
-    Border    = 2,
-    Text      = 3,
-};
+    gui_style_property_layout_direction Direction;
+    gui_style_property_alignment        XAlign;
+    gui_style_property_alignment        YAlign;
 
-struct render_command
+    gui_style_property_padding          Padding;
+    gui_style_property_float            Spacing;
+
+    gui_style_property_float            Grow;
+    gui_style_property_float            Shrink;
+} gui_layout_properties;
+
+
+// =============================================================================
+// Paint Properties
+// =============================================================================
+
+
+typedef struct gui_paint_default_properties
 {
-    RenderCommandType Type;
-    bounding_box      Box;
+    gui_style_property_color         Color;
+    gui_style_property_color         BorderColor;
+    gui_style_property_color         TextColor;
+
+    gui_style_property_float         BorderWidth;
+    gui_style_property_float         Softness;
+    gui_style_property_corner_radius CornerRadius;
+} gui_paint_default_properties;
+
+
+typedef struct gui_paint_hovered_properties
+{
+    gui_style_property_color          Color;
+    gui_style_property_color          BorderColor;
+    gui_style_property_color          TextColor;
+
+    gui_style_property_float          BorderWidth;
+    gui_style_property_float          Softness;
+    gui_style_property_corner_radius  CornerRadius;
+} gui_paint_hovered_properties;
+
+
+typedef struct gui_paint_focused_properties
+{
+    gui_style_property_color          Color;
+    gui_style_property_color          BorderColor;
+    gui_style_property_float          BorderWidth;
+    gui_style_property_color          TextColor;
+    gui_style_property_color          CaretColor;
+    gui_style_property_float          CaretWidth;
+    gui_style_property_float          Softness;
+    gui_style_property_corner_radius  CornerRadius;
+} gui_paint_focused_properties;
+
+
+typedef struct gui_paint_properties
+{
+    gui_color         Color;
+    gui_color         HoveredColor;
+    gui_color         FocusedColor;
+
+    gui_color         BorderColor;
+    gui_color         HoveredBorderColor;
+    gui_color         FocusedBorderColor;
+
+    float             BorderWidth;
+    float             HoveredBorderWidth;
+    float             FocusedBorderWidth;
+
+    gui_color         TextColor;
+    gui_color         HoveredTextColor;
+    gui_color         FocusedTextColor;
+
+    gui_color         CaretColor;
+    float             CaretWidth;
+
+    gui_corner_radius CornerRadius;
+    gui_corner_radius HoveredCornerRadius;
+    gui_corner_radius FocusedCornerRadius;
+
+    float             Softness;
+    float             HoveredSoftness;
+    float             FocusedSoftness;
+} gui_paint_properties;
+
+
+typedef struct gui_cached_style
+{
+    gui_layout_properties        Layout;
+    gui_paint_default_properties Default;
+    gui_paint_hovered_properties Hovered;
+    gui_paint_focused_properties Focused;
+} gui_cached_style;
+
+
+// =============================================================================
+// Render Commands
+// =============================================================================
+
+
+typedef enum Gui_RenderCommandType
+{
+    Gui_RenderCommandType_None      = 0,
+    Gui_RenderCommandType_Rectangle = 1,
+    Gui_RenderCommandType_Border    = 2,
+    Gui_RenderCommandType_Text      = 3,
+} GuiRenderCommandType;
+
+
+typedef struct gui_render_command
+{
+    GuiRenderCommandType Type;
+    gui_bounding_box     Box;
 
     union
     {
         struct
         {
-            color         Color;
-            corner_radius CornerRadius;
+            gui_color         Color;
+            gui_corner_radius CornerRadius;
         } Rect;
 
         struct
         {
-            corner_radius CornerRadius;
-            color         Color;
-            float         Width;
+            gui_corner_radius CornerRadius;
+            gui_color         Color;
+            float             Width;
         } Border;
 
         struct
         {
-            void        *Texture;
-            color        Color;
-            bounding_box Source;
+            void             *Texture;
+            gui_color         Color;
+            gui_bounding_box  Source;
         } Text;
     };
-};
+} gui_render_command;
 
 
-struct render_command_list
+typedef struct gui_render_command_list
 {
-    render_command *Commands;
-    uint32_t        Count;
-};
+    gui_render_command *Commands;
+    uint32_t            Count;
+} gui_render_command_list;
 
 
-static memory_footprint    GetRenderCommandsFootprint  (ui_layout_tree *Tree);
-static render_command_list ComputeRenderCommands       (ui_layout_tree *Tree, void *Memory);
-
-} // namespace gui
+static gui_memory_footprint    GuiGetRenderCommandsFootprint  (gui_layout_tree *Tree);
+static gui_render_command_list GuiComputeRenderCommands       (gui_layout_tree *Tree, void *Memory);

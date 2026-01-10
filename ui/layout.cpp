@@ -1,69 +1,63 @@
 #pragma once
 
-#include <unordered_map>
+#include <stdint.h>
+#include <stdbool.h>
+#include <math.h>
+#include <string.h>
+#include <stdlib.h>
+#include <xmmintrin.h>
+#include <emmintrin.h>
 
-namespace gui
-{
 
-// =============================================================================
-// DOMAIN: Basic Geometry
-// =============================================================================
+// -----------------------------------------------------------------------------
+// Basic Geometry
+// -----------------------------------------------------------------------------
 
 
-// TODO: Handle radiuses
 static float
-BoundingBoxSignedDistanceField(point Point, bounding_box BoundingBox)
+GuiBoundingBoxSignedDistanceField(gui_point Point, gui_bounding_box BoundingBox)
 {
-    dimensions Size   = dimensions(BoundingBox.Right - BoundingBox.Left, BoundingBox.Bottom - BoundingBox.Top);
-    dimensions Half   = dimensions(Size.Width * 0.5f, Size.Height * 0.5f);
-    point      Start  = point(BoundingBox.Left, BoundingBox.Top);
-    point      Center = Start + Half;
-    point      Local  = Point - Center;
+    gui_dimensions Size   = (gui_dimensions){.Width = BoundingBox.Right - BoundingBox.Left, .Height = BoundingBox.Bottom - BoundingBox.Top};
+    gui_dimensions Half   = (gui_dimensions){.Width = Size.Width * 0.5f, .Height = Size.Height * 0.5f};
+    gui_point      Start  = (gui_point){.X = BoundingBox.Left, .Y = BoundingBox.Top};
+    gui_point      Center = (gui_point){.X = Start.X + Half.Width, .Y = Start.Y + Half.Height};
+    gui_point      Local  = (gui_point){.X = Point.X - Center.X, .Y = Point.Y - Center.Y};
 
-    point FirstQuadrant = point(abs(Local.X), abs(Local.Y)) - Half;
-    float OuterX        = Max(FirstQuadrant.X, 0.f);
-    float OuterY        = Max(FirstQuadrant.Y, 0.f);
+    gui_point FirstQuadrant = (gui_point){ .X = fabsf(Local.X) - Half.Width, .Y = fabsf(Local.Y) - Half.Height };
+
+    float OuterX        = (FirstQuadrant.X > 0.0f) ? FirstQuadrant.X : 0.0f;
+    float OuterY        = (FirstQuadrant.Y > 0.0f) ? FirstQuadrant.Y : 0.0f;
     float OuterDistance = sqrtf(OuterX * OuterX + OuterY * OuterY);
-    float InnerDistance = Min(Max(FirstQuadrant.X, FirstQuadrant.Y), 0.f);
-    float Result        = OuterDistance + InnerDistance;
+    float InnerDistance = fminf(fmaxf(FirstQuadrant.X, FirstQuadrant.Y), 0.0f);
 
+    float Result = OuterDistance + InnerDistance;
     return Result;
 }
 
 
 static bool
-BoundingBoxesIntersect(bounding_box A, bounding_box B)
+GuiBoundingBoxesIntersect(gui_bounding_box A, gui_bounding_box B)
 {
     bool Result = A.Left < B.Right && A.Right > B.Left && A.Top < B.Bottom && A.Bottom > B.Top;
     return Result;
 }
 
-// =============================================================================
-// DOMAIN: Layout Tree & Nodes
-// =============================================================================
+// -----------------------------------------------------------------------------
+// Layout Tree & Nodes
+// -----------------------------------------------------------------------------
 
-// Obviously remove this from global. (Don't even want to use STD)
-std::unordered_map<uint64_t, uint32_t> KeyMap;
 
-enum class NodeState : uint32_t
+typedef enum Gui_NodeState
 {
-    None = 0,
-
-    UseHoveredStyle    = 1 << 0,
-    UseFocusedStyle    = 1 << 1,
-    HasCapturedPointer = 1 << 2,
-    IsClicked          = 1 << 3,
-};
-
-
-template<>
-struct enable_bitmask_operators<NodeState> : std::true_type {};
-
-template<>
-struct enable_bitmask_operators<gui::NodeFlags> : std::true_type {};
+    Gui_NodeState_None               = 0,
+    Gui_NodeState_UseHoveredStyle    = 1 << 0,
+    Gui_NodeState_UseFocusedStyle    = 1 << 1,
+    Gui_NodeState_HasCapturedPointer = 1 << 2,
+    Gui_NodeState_IsClicked          = 1 << 3
+} Gui_NodeState;
 
 
-struct ui_layout_node
+typedef struct gui_layout_node
 {
     uint32_t            Parent;
     uint32_t            First;
@@ -73,110 +67,207 @@ struct ui_layout_node
     uint32_t            ChildCount;
     uint32_t            Index;
 
-    point               OutputPosition;
-    dimensions          OutputSize;
-    dimensions          OutputChildSize;
+    gui_point           OutputPosition;
+    gui_dimensions      OutputSize;
+    gui_dimensions      OutputChildSize;
 
-    size                Size;
-    size                MinSize;
-    size                MaxSize;
-    Alignment           XAlign;
-    Alignment           YAlign;
-    LayoutDirection     Direction;
-    padding             Padding;
+    gui_size            Size;
+    gui_size            MinSize;
+    gui_size            MaxSize;
+    Gui_Alignment       XAlign;
+    Gui_Alignment       YAlign;
+    Gui_LayoutDirection Direction;
+    gui_padding         Padding;
     float               Spacing;
 
-    dimensions          VisualOffset;
-    dimensions          DragOffset;
-    dimensions          ScrollOffset;
+    gui_dimensions      VisualOffset;
+    gui_dimensions      DragOffset;
+    gui_dimensions      ScrollOffset;
 
-    NodeState           State;
-    NodeFlags           Flags;
-};
+    uint32_t            State;
+    uint32_t            Flags;
+} gui_layout_node;
 
 
-struct parent_node
+typedef struct gui_parent_node
 {
-    parent_node *Prev;
-    uint32_t     Value;
-};
+    gui_parent_node *Prev;
+    uint32_t Value;
+} gui_parent_node;
 
 
-struct ui_node_buffer
+typedef struct gui_node_buffer
 {
-    ui_layout_node *Nodes;
-    uint64_t        Count;
-    uint64_t        Capacity;
-};
+    gui_layout_node *Nodes;
+    uint64_t Count;
+    uint64_t Capacity;
+} gui_node_buffer;
 
 
-struct ui_layout_tree
+typedef struct gui_layout_tree
 {
-    ui_node_buffer    NodeBuffer;
-    paint_properties *PaintBuffer;
-    uint64_t          RootIndex;
-    uint64_t          CapturedNodeIndex;
-    parent_node      *Parent;
-};
+    gui_node_buffer       NodeBuffer;
+    gui_paint_properties *PaintBuffer;
+    uint64_t              RootIndex;
+    uint64_t              CapturedNodeIndex;
+    gui_parent_node      *Parent;
+} gui_layout_tree;
 
 
-static bool
-IsValidLayoutNode(ui_layout_node *Node)
+// -----------------------------------------------------------------------------
+// Simple KeyMap replacement (TODO: Actually rewrite this)
+// -----------------------------------------------------------------------------
+
+
+#define KEYMAP_CAPACITY 8192u
+#define KEYMAP_EMPTY ((uint64_t)0xFFFFFFFFFFFFFFFFULL)
+
+static uint64_t KeyMap_Keys[KEYMAP_CAPACITY];
+static uint32_t KeyMap_Values[KEYMAP_CAPACITY];
+static bool KeyMap_Initialized = false;
+
+static void
+GuiKeyMap_Init(void)
 {
-    bool Result = Node && Node->Index != InvalidIndex;
+    if(!KeyMap_Initialized)
+    {
+        for(uint32_t i = 0; i < KEYMAP_CAPACITY; ++i)
+        {
+            KeyMap_Keys[i] = KEYMAP_EMPTY;
+            KeyMap_Values[i] = (uint32_t)GuiInvalidIndex;
+        }
+        KeyMap_Initialized = true;
+    }
+}
+
+static uint32_t
+GuiKeyMap_FindOrInsert(uint64_t Key, bool *Inserted)
+{
+    // Returns value if found, otherwise inserts and returns GuiInvalidIndex
+    GuiKeyMap_Init();
+
+    uint32_t Hash = (uint32_t)(XXH3_64bits(&Key, sizeof(Key)) & (KEYMAP_CAPACITY - 1));
+    uint32_t Slot = Hash;
+
+    for(;;)
+    {
+        uint64_t Stored = KeyMap_Keys[Slot];
+        if(Stored == Key)
+        {
+            if(Inserted) *Inserted = false;
+            return KeyMap_Values[Slot];
+        }
+        if(Stored == KEYMAP_EMPTY)
+        {
+            // Insert
+            KeyMap_Keys[Slot] = Key;
+            KeyMap_Values[Slot] = (uint32_t)GuiInvalidIndex;
+            if(Inserted) *Inserted = true;
+            return KeyMap_Values[Slot];
+        }
+        Slot = (Slot + 1) & (KEYMAP_CAPACITY - 1);
+    }
+}
+
+static void
+GuiKeyMap_Insert(uint64_t Key, uint32_t Value)
+{
+    GuiKeyMap_Init();
+
+    uint32_t Hash = (uint32_t)(XXH3_64bits(&Key, sizeof(Key)) & (KEYMAP_CAPACITY - 1));
+    uint32_t Slot = Hash;
+
+    for(;;)
+    {
+        uint64_t Stored = KeyMap_Keys[Slot];
+        if(Stored == Key || Stored == KEYMAP_EMPTY)
+        {
+            KeyMap_Keys[Slot] = Key;
+            KeyMap_Values[Slot] = Value;
+            return;
+        }
+        Slot = (Slot + 1) & (KEYMAP_CAPACITY - 1);
+    }
+}
+
+static int
+GuiKeyMap_Find(uint64_t Key, uint32_t *OutValue)
+{
+    GuiKeyMap_Init();
+
+    uint32_t Hash = (uint32_t)(XXH3_64bits(&Key, sizeof(Key)) & (KEYMAP_CAPACITY - 1));
+    uint32_t Slot = Hash;
+
+    for(;;)
+    {
+        uint64_t Stored = KeyMap_Keys[Slot];
+        if(Stored == KEYMAP_EMPTY) return 0;
+        if(Stored == Key)
+        {
+            if(OutValue) *OutValue = KeyMap_Values[Slot];
+            return 1;
+        }
+        Slot = (Slot + 1) & (KEYMAP_CAPACITY - 1);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Node buffer helpers
+// -----------------------------------------------------------------------------
+
+
+static bool GuiIsValidLayoutNode(gui_layout_node *Node)
+{
+    bool Result = Node && (Node->Index != GuiInvalidIndex);
     return Result;
 }
 
 
-static ui_layout_node *
-GetSentinelNode(ui_node_buffer NodeBuffer)
+static gui_layout_node *
+GuiGetSentinelNode(gui_node_buffer NodeBuffer)
 {
-    ui_layout_node *Result = NodeBuffer.Nodes + NodeBuffer.Capacity;
+    gui_layout_node *Result = NodeBuffer.Nodes + NodeBuffer.Capacity;
     return Result;
 }
 
 
-static ui_layout_node *
-GetLayoutNode(ui_node_buffer NodeBuffer, uint64_t Index)
+static gui_layout_node *
+GuiGetLayoutNode(gui_node_buffer NodeBuffer, uint64_t Index)
 {
-    ui_layout_node *Result = 0;
-
-    if (Index < NodeBuffer.Capacity)
+    gui_layout_node *Result = NULL;
+    if(Index < NodeBuffer.Capacity)
     {
         Result = NodeBuffer.Nodes + Index;
     }
-
     return Result;
 }
 
 
-static ui_layout_node *
-GetFreeLayoutNode(ui_node_buffer &NodeBuffer)
+static gui_layout_node *
+GuiGetFreeLayoutNode(gui_node_buffer *NodeBuffer)
 {
-    ui_layout_node *Sentinel = GetSentinelNode(NodeBuffer);
-    ui_layout_node *Result   = 0;
+    gui_layout_node *Sentinel = GuiGetSentinelNode(*NodeBuffer);
+    gui_layout_node *Result   = NULL;
 
-    if (Sentinel->Next != InvalidIndex)
+    if(Sentinel->Next != GuiInvalidIndex)
     {
-        VOID_ASSERT(NodeBuffer.Count < NodeBuffer.Capacity);
+        GUI_ASSERT(NodeBuffer->Count < NodeBuffer->Capacity);
 
-        Result = GetLayoutNode(NodeBuffer, Sentinel->Next);
-        Result->Index  = Sentinel->Next;
+        uint32_t FreeIndex = Sentinel->Next;
+        Result = GuiGetLayoutNode(*NodeBuffer, FreeIndex);
+        GUI_ASSERT(Result);
+
         Sentinel->Next = Result->Next;
 
-        Result->First      = InvalidIndex;
-        Result->Last       = InvalidIndex;
-        Result->Prev       = InvalidIndex;
-        Result->Next       = InvalidIndex;
-        Result->Parent     = InvalidIndex;
+        Result->First = GuiInvalidIndex;
+        Result->Last = GuiInvalidIndex;
+        Result->Prev = GuiInvalidIndex;
+        Result->Next = GuiInvalidIndex;
+        Result->Parent = GuiInvalidIndex;
         Result->ChildCount = 0;
+        Result->Index = FreeIndex;
 
-        // if(NodeBuffer.Count == 0)
-        // {
-            // RootIndex = Result->Index;
-        // }
-
-        ++NodeBuffer.Count;
+        ++NodeBuffer->Count;
     }
 
     return Result;
@@ -184,27 +275,27 @@ GetFreeLayoutNode(ui_node_buffer &NodeBuffer)
 
 
 static void
-AppendLayoutNode(ui_node_buffer NodeBuffer, uint32_t ParentIndex, uint32_t ChildIndex)
+GuiAppendLayoutNode(gui_node_buffer NodeBuffer, uint32_t ParentIndex, uint32_t ChildIndex)
 {
-    ui_layout_node *Parent = GetLayoutNode(NodeBuffer, ParentIndex);
-    ui_layout_node *Child  = GetLayoutNode(NodeBuffer, ChildIndex );
+    gui_layout_node *Parent = GuiGetLayoutNode(NodeBuffer, ParentIndex);
+    gui_layout_node *Child = GuiGetLayoutNode(NodeBuffer, ChildIndex);
 
-    if(IsValidLayoutNode(Parent) && IsValidLayoutNode(Child))
+    if(GuiIsValidLayoutNode(Parent) && GuiIsValidLayoutNode(Child))
     {
-        Child->First  = InvalidIndex;
-        Child->Last   = InvalidIndex;
-        Child->Prev   = InvalidIndex;
-        Child->Next   = InvalidIndex;
+        Child->First  = GuiInvalidIndex;
+        Child->Last   = GuiInvalidIndex;
+        Child->Prev   = GuiInvalidIndex;
+        Child->Next   = GuiInvalidIndex;
         Child->Parent = Parent->Index;
 
-        ui_layout_node *First = GetLayoutNode(NodeBuffer, Parent->First);
-        if(!IsValidLayoutNode(First))
+        gui_layout_node *First = GuiGetLayoutNode(NodeBuffer, Parent->First);
+        if(!GuiIsValidLayoutNode(First))
         {
             Parent->First = Child->Index;
         }
 
-        ui_layout_node *Last  = GetLayoutNode(NodeBuffer, Parent->Last);
-        if(IsValidLayoutNode(Last))
+        gui_layout_node *Last  = GuiGetLayoutNode(NodeBuffer, Parent->Last);
+        if(GuiIsValidLayoutNode(Last))
         {
             Last->Next  = Child->Index;
         }
@@ -217,77 +308,67 @@ AppendLayoutNode(ui_node_buffer NodeBuffer, uint32_t ParentIndex, uint32_t Child
 
 
 static bool
-IsValidLayoutTree(const ui_layout_tree *Tree)
+GuiIsValidLayoutTree(const gui_layout_tree *Tree)
 {
     bool Result = (Tree && Tree->NodeBuffer.Nodes && Tree->NodeBuffer.Count <= Tree->NodeBuffer.Capacity);
     return Result;
 }
 
 
-static memory_footprint
-GetLayoutTreeFootprint(uint64_t NodeCount)
+static gui_memory_footprint
+GuiGetLayoutTreeFootprint(uint64_t NodeCount)
 {
-    // ui_layout_tree
-    const uint64_t TreeEnd = sizeof(ui_layout_tree);
+    uint64_t TreeEnd    = sizeof(gui_layout_tree);
+    uint64_t NodesStart = AlignPow2(TreeEnd, AlignOf(gui_layout_node));
+    uint64_t NodesEnd   = NodesStart + ((NodeCount + 1) * sizeof(gui_layout_node));
+    uint64_t PaintStart = AlignPow2(NodesEnd, AlignOf(gui_paint_properties));
+    uint64_t PaintEnd   = PaintStart + (NodeCount * sizeof(gui_paint_properties));
 
-    // ui_layout_node[NodeCount+1]
-    const uint64_t NodesStart = AlignPow2(TreeEnd, AlignOf(ui_layout_node));
-    const uint64_t NodesEnd   = NodesStart + ((NodeCount + 1) * sizeof(ui_layout_node));
-
-    // paint_properties[NodeCount]
-    const uint64_t PaintStart = AlignPow2(NodesEnd, AlignOf(paint_properties));
-    const uint64_t PaintEnd   = PaintStart + (NodeCount * sizeof(paint_properties));
-
-    memory_footprint Result =
-    {
-        .SizeInBytes = PaintEnd,
-        .Alignment   = AlignOf(ui_layout_tree),
-    };
-
+    gui_memory_footprint Result = { .SizeInBytes = PaintEnd, .Alignment = AlignOf(gui_layout_tree) };
     return Result;
 }
 
 
-static ui_layout_tree *
-PlaceLayoutTreeInMemory(uint64_t NodeCount, memory_block Block)
+static gui_layout_tree *
+GuiPlaceLayoutTreeInMemory(uint64_t NodeCount, gui_memory_block Block)
 {
-    ui_layout_tree *Result = 0;
-    memory_region   Local  = EnterMemoryRegion(Block);
+    gui_layout_tree *Result = NULL;
+    gui_memory_region Local = GuiEnterMemoryRegion(Block);
 
-    if (IsValidMemoryRegion(Local))
+    if(GuiIsValidMemoryRegion(&Local))
     {
-        // IMPORTANT:
-        // THE ORDER IN WHICH WE PLACE MEMBERS IS IMPORTANT. (SEE FOOTPRINT)
+        // ORDER IS IMPORTANT!
+        gui_layout_tree      *Tree = GuiPushStruct(&Local, gui_layout_tree);
+        gui_layout_node      *Nodes = GuiPushArray(&Local, gui_layout_node, NodeCount + 1);
+        gui_paint_properties *Paint = GuiPushArray(&Local, gui_paint_properties, NodeCount);
 
-        auto *Tree  = PushStruct<ui_layout_tree>(Local);
-        auto *Nodes = PushArray<ui_layout_node>(Local, NodeCount + 1);
-        auto *Paint = PushArray<paint_properties>(Local, NodeCount);
-
-        if (Tree && Nodes && Paint)
+        if(Nodes && Paint && Tree)
         {
-            Tree->NodeBuffer.Nodes    = Nodes;
-            Tree->NodeBuffer.Count    = 0;
+            Tree->NodeBuffer.Nodes = Nodes;
+            Tree->NodeBuffer.Count = 0;
             Tree->NodeBuffer.Capacity = NodeCount;
-            Tree->PaintBuffer         = Paint;
-            
-            for (uint64_t Idx = 0; Idx < Tree->NodeBuffer.Capacity; Idx++)
+            Tree->PaintBuffer = Paint;
+            Tree->RootIndex = 0;
+            Tree->CapturedNodeIndex = GuiInvalidIndex;
+            Tree->Parent = NULL;
+
+            for(uint64_t Idx = 0; Idx < Tree->NodeBuffer.Capacity; ++Idx)
             {
-                ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, Idx);
-                VOID_ASSERT(Node);
-            
-                Node->Index      = InvalidIndex;
-                Node->First      = InvalidIndex;
-                Node->Last       = InvalidIndex;
-                Node->Parent     = InvalidIndex;
-                Node->Prev       = InvalidIndex;
+                gui_layout_node *Node = GuiGetLayoutNode(Tree->NodeBuffer, Idx);
+                GUI_ASSERT(Node);
+
+                Node->Index      = GuiInvalidIndex;
+                Node->First      = GuiInvalidIndex;
+                Node->Last       = GuiInvalidIndex;
+                Node->Parent     = GuiInvalidIndex;
+                Node->Prev       = GuiInvalidIndex;
                 Node->ChildCount = 0;
-            
-                Node->Next = Idx + 1;
+                Node->Next       = (uint32_t)(Idx + 1);
             }
-            
-            ui_layout_node *Sentinel = GetSentinelNode(Tree->NodeBuffer);
+
+            gui_layout_node *Sentinel = GuiGetSentinelNode(Tree->NodeBuffer);
             Sentinel->Next  = 0;
-            Sentinel->Index = InvalidIndex;
+            Sentinel->Index = GuiInvalidIndex;
 
             Result = Tree;
         }
@@ -297,142 +378,134 @@ PlaceLayoutTreeInMemory(uint64_t NodeCount, memory_block Block)
 }
 
 static void
-UpdateInput(uint32_t NodeIndex, cached_style *Cached, ui_layout_tree *Tree)
+GuiUpdateInput(uint32_t NodeIndex, gui_cached_style *Cached, gui_layout_tree *Tree)
 {
-    if(IsValidLayoutTree(Tree) && Cached)
+    if(GuiIsValidLayoutTree(Tree) && Cached)
     {
-        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
-        if(IsValidLayoutNode(Node))
+        gui_layout_node *Node = GuiGetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        if(GuiIsValidLayoutNode(Node))
         {
-            // Write the layout inputs
+            // Layout inputs
+            Node->Size      = Cached->Layout.Size.Value;
+            Node->MinSize   = Cached->Layout.MinSize.Value;
+            Node->MaxSize   = Cached->Layout.MaxSize.Value;
+            Node->Direction = Cached->Layout.Direction.Value;
+            Node->XAlign    = Cached->Layout.XAlign.Value;
+            Node->YAlign    = Cached->Layout.YAlign.Value;
+            Node->Padding   = Cached->Layout.Padding.Value;
+            Node->Spacing   = Cached->Layout.Spacing.Value;
+
+            if(!Cached->Layout.MinSize.IsSet)
             {
-                Node->Size      = Cached->Layout.Size.Value;
-                Node->MinSize   = Cached->Layout.MinSize.Value;
-                Node->MaxSize   = Cached->Layout.MaxSize.Value;
-                Node->Direction = Cached->Layout.Direction.Value;
-                Node->XAlign    = Cached->Layout.XAlign.Value;
-                Node->YAlign    = Cached->Layout.YAlign.Value;
-                Node->Padding   = Cached->Layout.Padding.Value;
-                Node->Spacing   = Cached->Layout.Spacing.Value;
-        
-                if(!Cached->Layout.MinSize.IsSet)
-                {
-                    Node->MinSize = Node->Size;
-                }
-        
-                if(!Cached->Layout.MaxSize.IsSet)
-                {
-                
-                    Node->MaxSize = Node->Size;
-                }
+                Node->MinSize = Node->Size;
             }
 
-            // Write the paint properties
+            if(!Cached->Layout.MaxSize.IsSet)
             {
-                paint_properties &Paint = Tree->PaintBuffer[NodeIndex];
-            
-                Paint.Color               = Cached->Default.Color.Value;
-                Paint.BorderColor         = Cached->Default.BorderColor.Value;
-                Paint.BorderWidth         = Cached->Default.BorderWidth.Value;
-                Paint.TextColor           = Cached->Default.TextColor.Value;
-                Paint.CornerRadius        = Cached->Default.CornerRadius.Value;
-                Paint.Softness            = Cached->Default.Softness.Value;
-            
-                Paint.HoveredColor        = Cached->Hovered.Color.IsSet        ? Cached->Hovered.Color.Value        : Paint.Color;
-                Paint.HoveredBorderColor  = Cached->Hovered.BorderColor.IsSet  ? Cached->Hovered.BorderColor.Value  : Paint.BorderColor;
-                Paint.HoveredBorderWidth  = Cached->Hovered.BorderWidth.IsSet  ? Cached->Hovered.BorderWidth.Value  : Paint.BorderWidth;
-                Paint.HoveredTextColor    = Cached->Hovered.TextColor.IsSet    ? Cached->Hovered.TextColor.Value    : Paint.TextColor;
-                Paint.HoveredCornerRadius = Cached->Hovered.CornerRadius.IsSet ? Cached->Hovered.CornerRadius.Value : Paint.CornerRadius;
-                Paint.HoveredSoftness     = Cached->Hovered.Softness.IsSet     ? Cached->Hovered.Softness.Value     : Paint.Softness;
-            
-                Paint.FocusedColor        = Cached->Focused.Color.IsSet        ? Cached->Focused.Color.Value        : Paint.Color;
-                Paint.FocusedBorderColor  = Cached->Focused.BorderColor.IsSet  ? Cached->Focused.BorderColor.Value  : Paint.BorderColor;
-                Paint.FocusedBorderWidth  = Cached->Focused.BorderWidth.IsSet  ? Cached->Focused.BorderWidth.Value  : Paint.BorderWidth;
-                Paint.FocusedTextColor    = Cached->Focused.TextColor.IsSet    ? Cached->Focused.TextColor.Value    : Paint.TextColor;
-                Paint.FocusedCornerRadius = Cached->Focused.CornerRadius.IsSet ? Cached->Focused.CornerRadius.Value : Paint.CornerRadius;
-                Paint.FocusedSoftness     = Cached->Focused.Softness.IsSet     ? Cached->Focused.Softness.Value     : Paint.Softness;
-            
-                Paint.CaretColor = Cached->Focused.CaretColor.Value;
-                Paint.CaretWidth = Cached->Focused.CaretWidth.Value;
+                Node->MaxSize = Node->Size;
             }
+
+            // TODO: This is now wrong since we can't rely on C++ assignment stuff to set IsSet.
+            // We have to have a new way. Perhaps simply checking for an empty color.
+
+            // Paint properties
+            gui_paint_properties *Paint = &Tree->PaintBuffer[NodeIndex];
+
+            Paint->Color               = Cached->Default.Color.Value;
+            Paint->BorderColor         = Cached->Default.BorderColor.Value;
+            Paint->BorderWidth         = Cached->Default.BorderWidth.Value;
+            Paint->TextColor           = Cached->Default.TextColor.Value;
+            Paint->CornerRadius        = Cached->Default.CornerRadius.Value;
+            Paint->Softness            = Cached->Default.Softness.Value;
+
+            Paint->HoveredColor        = Cached->Hovered.Color.IsSet ? Cached->Hovered.Color.Value : Paint->Color;
+            Paint->HoveredBorderColor  = Cached->Hovered.BorderColor.IsSet ? Cached->Hovered.BorderColor.Value : Paint->BorderColor;
+            Paint->HoveredBorderWidth  = Cached->Hovered.BorderWidth.IsSet ? Cached->Hovered.BorderWidth.Value : Paint->BorderWidth;
+            Paint->HoveredTextColor    = Cached->Hovered.TextColor.IsSet ? Cached->Hovered.TextColor.Value : Paint->TextColor;
+            Paint->HoveredCornerRadius = Cached->Hovered.CornerRadius.IsSet ? Cached->Hovered.CornerRadius.Value : Paint->CornerRadius;
+            Paint->HoveredSoftness     = Cached->Hovered.Softness.IsSet ? Cached->Hovered.Softness.Value : Paint->Softness;
+
+            Paint->FocusedColor        = Cached->Focused.Color.IsSet ? Cached->Focused.Color.Value : Paint->Color;
+            Paint->FocusedBorderColor  = Cached->Focused.BorderColor.IsSet ? Cached->Focused.BorderColor.Value : Paint->BorderColor;
+            Paint->FocusedBorderWidth  = Cached->Focused.BorderWidth.IsSet ? Cached->Focused.BorderWidth.Value : Paint->BorderWidth;
+            Paint->FocusedTextColor    = Cached->Focused.TextColor.IsSet ? Cached->Focused.TextColor.Value : Paint->TextColor;
+            Paint->FocusedCornerRadius = Cached->Focused.CornerRadius.IsSet ? Cached->Focused.CornerRadius.Value : Paint->CornerRadius;
+            Paint->FocusedSoftness     = Cached->Focused.Softness.IsSet ? Cached->Focused.Softness.Value : Paint->Softness;
+
+            Paint->CaretColor          = Cached->Focused.CaretColor.Value;
+            Paint->CaretWidth          = Cached->Focused.CaretWidth.Value;
         }
     }
 }
 
-
-static bounding_box
-GetLayoutNodeBoundingBox(ui_layout_node *Node)
+static gui_bounding_box
+GuiGetLayoutNodeBoundingBox(gui_layout_node *Node)
 {
-    bounding_box Result = {};
-
-    if(IsValidLayoutNode(Node))
+    gui_bounding_box Result = { .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 };
+    if(GuiIsValidLayoutNode(Node))
     {
-        point Screen = Node->OutputPosition + Node->ScrollOffset;
-        Result = bounding_box(Screen, Node->OutputSize);
+        gui_point Screen = {.X = Node->OutputPosition.X + Node->ScrollOffset.Width, .Y = Node->OutputPosition.Y + Node->ScrollOffset.Height};
+        Result = (gui_bounding_box){.Left = Screen.X, .Top = Screen.Y, .Right = Screen.X + Node->OutputSize.Width, .Bottom = Screen.Y + Node->OutputSize.Height};
     }
-
     return Result;
 }
 
-// TODO: FIX THIS
-static bounding_box
-GetLayoutNodeInnerBoundingBox(ui_layout_node *Node)
+static gui_bounding_box
+GuiGetLayoutNodeInnerBoundingBox(gui_layout_node *Node)
 {
-    bounding_box Result = {};
-
-    if(IsValidLayoutNode(Node))
+    // For now identical to outer bounding box; placeholder for padding clipping
+    gui_bounding_box Result = { .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 };
+    if(GuiIsValidLayoutNode(Node))
     {
-        point Screen = Node->OutputPosition + Node->ScrollOffset;
-        Result = bounding_box(Screen, Node->OutputSize);
+        gui_point Screen = {.X = Node->OutputPosition.X + Node->ScrollOffset.Width, .Y = Node->OutputPosition.Y + Node->ScrollOffset.Height};
+        Result = (gui_bounding_box){ .Left = Screen.X, .Top = Screen.Y, .Right = Screen.X + Node->OutputSize.Width, .Bottom = Screen.Y + Node->OutputSize.Height };
     }
-
     return Result;
 }
 
-
-// TODO: FIX THIS
-static bounding_box
-GetLayoutNodeContentRect(ui_layout_node *Node)
+static gui_bounding_box
+GuiGetLayoutNodeContentRect(gui_layout_node *Node)
 {
-    bounding_box Result = {};
-
-    if(IsValidLayoutNode(Node))
+    // Also placeholder for content rect computation
+    gui_bounding_box Result = { .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 };
+    if(GuiIsValidLayoutNode(Node))
     {
-        point Screen = Node->OutputPosition + Node->ScrollOffset;
-        Result = bounding_box(Screen, Node->OutputSize);
+        gui_point Screen = {.X = Node->OutputPosition.X + Node->ScrollOffset.Width, .Y = Node->OutputPosition.Y + Node->ScrollOffset.Height};
+        Result = (gui_bounding_box){.Left = Screen.X, .Top = Screen.Y, .Right = Screen.X + Node->OutputSize.Width, .Bottom = Screen.Y + Node->OutputSize.Height};
     }
-
     return Result;
 }
-
 
 static uint32_t
-CreateNode(uint64_t Key, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree)
+GuiCreateNode(uint64_t Key, uint32_t Flags, gui_cached_style *Style, gui_layout_tree *Tree)
 {
-    uint32_t Result = InvalidIndex;
+    uint32_t Result = (uint32_t)GuiInvalidIndex;
 
-    if(IsValidLayoutTree(Tree))
+    if(GuiIsValidLayoutTree(Tree))
     {
-        auto         Iter = KeyMap.find(Key);
-        ui_layout_node *Node = nullptr;
-    
-        if (Iter != KeyMap.end())
+        uint32_t FoundIndex = (uint32_t)GuiInvalidIndex;
+        if(GuiKeyMap_Find(Key, &FoundIndex))
         {
-            Node = GetLayoutNode(Tree->NodeBuffer, Iter->second);
+            // existing
         }
         else
         {
-            Node = GetFreeLayoutNode(Tree->NodeBuffer);
-            KeyMap.emplace(Key, Node->Index);
+            gui_layout_node *Node = GuiGetFreeLayoutNode(&Tree->NodeBuffer);
+            if(Node)
+            {
+                GuiKeyMap_Insert(Key, Node->Index);
+                FoundIndex = Node->Index;
+            }
         }
-    
-        if(IsValidLayoutNode(Node))
+
+        gui_layout_node *Node = GuiGetLayoutNode(Tree->NodeBuffer, FoundIndex);
+        if(GuiIsValidLayoutNode(Node))
         {
             Node->ChildCount = 0;
             Node->Flags      = Flags;
 
-            uint32_t ParentIndex = Tree->Parent ? Tree->Parent->Value : InvalidIndex;
-            AppendLayoutNode(Tree->NodeBuffer, ParentIndex, Node->Index);
+            uint32_t ParentIndex = (Tree->Parent) ? Tree->Parent->Value : (uint32_t)GuiInvalidIndex;
+            GuiAppendLayoutNode(Tree->NodeBuffer, ParentIndex, Node->Index);
 
             Result = Node->Index;
         }
@@ -441,11 +514,10 @@ CreateNode(uint64_t Key, NodeFlags Flags, cached_style *Style, ui_layout_tree *T
     return Result;
 }
 
-
 static void
-PushParent(uint32_t NodeIndex, ui_layout_tree *Tree, parent_node *ParentNode)
+GuiPushParent(uint32_t NodeIndex, gui_layout_tree *Tree, gui_parent_node *ParentNode)
 {
-    if(IsValidLayoutTree(Tree) && ParentNode)
+    if(GuiIsValidLayoutTree(Tree) && ParentNode)
     {
         ParentNode->Prev  = Tree->Parent;
         ParentNode->Value = NodeIndex;
@@ -454,121 +526,124 @@ PushParent(uint32_t NodeIndex, ui_layout_tree *Tree, parent_node *ParentNode)
     }
 }
 
-
 static void
-PopParent(uint32_t NodeIndex, ui_layout_tree *Tree)
+GuiPopParent(uint32_t NodeIndex, gui_layout_tree *Tree)
 {
-    if(IsValidLayoutTree(Tree) && Tree->Parent)
+    if(GuiIsValidLayoutTree(Tree) && Tree->Parent)
     {
         Tree->Parent = Tree->Parent->Prev;
     }
 }
 
-
 static uint32_t
-FindChild(uint32_t NodeIndex, uint32_t FindIndex, ui_layout_tree *Tree)
+GuiFindChild(uint32_t NodeIndex, uint32_t FindIndex, gui_layout_tree *Tree)
 {
-    uint32_t Result = InvalidIndex;
+    uint32_t Result = (uint32_t)GuiInvalidIndex;
 
-    if(IsValidLayoutTree(Tree))
+    if(GuiIsValidLayoutTree(Tree))
     {
-        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
-        if(IsValidLayoutNode(Node))
+        gui_layout_node *Node = GuiGetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        if(GuiIsValidLayoutNode(Node))
         {
-            ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First);
-            while(IsValidLayoutNode(Child) && FindIndex--)
+            gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First);
+            uint32_t Remaining = FindIndex;
+            while(GuiIsValidLayoutNode(Child) && Remaining)
             {
-                Child = GetLayoutNode(Tree->NodeBuffer, Child->Next);
+                Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next);
+                --Remaining;
             }
 
-            Result = Child->Index;
+            if(GuiIsValidLayoutNode(Child))
+            {
+                Result = Child->Index;
+            }
         }
     }
 
     return Result;
 }
 
-
 static bool
-AppendChild(uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree)
+GuiAppendChild(uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *Tree)
 {
     bool Result = false;
-
-    if(IsValidLayoutTree(Tree) && ParentIndex != ChildIndex)
+    if(GuiIsValidLayoutTree(Tree) && ParentIndex != ChildIndex)
     {
-        AppendLayoutNode(Tree->NodeBuffer, ParentIndex, ChildIndex);
+        GuiAppendLayoutNode(Tree->NodeBuffer, ParentIndex, ChildIndex);
+        Result = true;
     }
-
     return Result;
 }
 
-
 static void
-SetNodeOffset(uint32_t NodeIndex, dimensions Offset, ui_layout_tree *Tree)
+GuiSetNodeOffset(uint32_t NodeIndex, gui_dimensions Offset, gui_layout_tree *Tree)
 {
-    if(IsValidLayoutTree(Tree))
+    if(GuiIsValidLayoutTree(Tree))
     {
-        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
-        if(IsValidLayoutNode(Node))
+        gui_layout_node *Node = GuiGetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        if(GuiIsValidLayoutNode(Node))
         {
             Node->VisualOffset = Offset;
         }
     }
 }
 
-// =============================================================================
-// DOMAIN: Scroll Region
-// =============================================================================
+// -----------------------------------------------------------------------------
+// Scroll Region
+// -----------------------------------------------------------------------------
 
-struct scroll_region
+
+typedef struct gui_scroll_region
 {
-    dimensions ContentSize;
-    float      ScrollOffset;
-    float      PixelPerLine;
-    AxisType   Axis;
-};
+    gui_dimensions ContentSize;
+    float          ScrollOffset;
+    float          PixelPerLine;
+    Gui_AxisType   Axis;
+} gui_scroll_region;
 
-// --- Private Helpers ---
 
-static void UpdateScrollNode(float ScrolledLines, ui_layout_node *Node, ui_layout_tree *Tree, scroll_region *Region)
+static void
+GuiUpdateScrollNode(float ScrolledLines, gui_layout_node *Node, gui_layout_tree *Tree, gui_scroll_region *Region)
 {
-    float      ScrolledPixels = ScrolledLines * Region->PixelPerLine;
-    dimensions WindowSize     = Node->OutputSize;
+    float ScrolledPixels = ScrolledLines * Region->PixelPerLine;
+    gui_dimensions WindowSize = Node->OutputSize;
 
-    float ScrollLimit = 0.f;
-    if (Region->Axis == AxisType::X)
+    float ScrollLimit = 0.0f;
+    if(Region->Axis == Gui_AxisType_X)
     {
-        ScrollLimit = -(Region->ContentSize.Width  - WindowSize.Width);
-    } else
-    if (Region->Axis == AxisType::Y)
+        ScrollLimit = -(Region->ContentSize.Width - WindowSize.Width);
+    }
+    else if(Region->Axis == Gui_AxisType_Y)
     {
         ScrollLimit = -(Region->ContentSize.Height - WindowSize.Height);
     }
 
     Region->ScrollOffset += ScrolledPixels;
-    Region->ScrollOffset  = ClampTop(ClampBot(ScrollLimit, Region->ScrollOffset), 0);
+    // Clamp to [ScrollLimit, 0]
+    if(Region->ScrollOffset < ScrollLimit) Region->ScrollOffset = ScrollLimit;
+    if(Region->ScrollOffset > 0.0f) Region->ScrollOffset = 0.0f;
 
-    dimensions ScrollDelta = dimensions(0.f, 0.f);
-    if(Region->Axis == AxisType::X)
+    gui_dimensions ScrollDelta = (gui_dimensions){ .Width = 0.0f, .Height = 0.0f };
+    if(Region->Axis == Gui_AxisType_X)
     {
-        ScrollDelta.Width  = -1.f * Region->ScrollOffset;
-    } else
-    if(Region->Axis == AxisType::Y)
+        ScrollDelta.Width = -1.0f * Region->ScrollOffset;
+    }
+    else if(Region->Axis == Gui_AxisType_Y)
     {
-        ScrollDelta.Height = -1.f * Region->ScrollOffset;
+        ScrollDelta.Height = -1.0f * Region->ScrollOffset;
     }
 
-    bounding_box WindowContent = GetLayoutNodeBoundingBox(Node);
-    for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
+    gui_bounding_box WindowContent = GuiGetLayoutNodeBoundingBox(Node);
+    for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
     {
-        Child->ScrollOffset = dimensions(-ScrollDelta.Width, -ScrollDelta.Height);
+        Child->ScrollOffset = (gui_dimensions){ .Width = -ScrollDelta.Width, .Height = -ScrollDelta.Height };
 
-        dimensions   FixedContentSize = Child->OutputSize;
-        bounding_box ChildContent     = GetLayoutNodeBoundingBox(Child);
+        gui_dimensions FixedContentSize = Child->OutputSize;
+        gui_bounding_box ChildContent = GuiGetLayoutNodeBoundingBox(Child);
 
-        if (FixedContentSize.Width > 0.0f && FixedContentSize.Height > 0.0f) 
+        if(FixedContentSize.Width > 0.0f && FixedContentSize.Height > 0.0f)
         {
-            if (BoundingBoxesIntersect(WindowContent, ChildContent))
+            if(GuiBoundingBoxesIntersect(WindowContent, ChildContent))
             {
                 // TODO: Prune?
             }
@@ -580,117 +655,101 @@ static void UpdateScrollNode(float ScrolledLines, ui_layout_node *Node, ui_layou
     }
 }
 
+
 static uint64_t
-GetScrollRegionFootprint(void)
+GuiGetScrollRegionFootprint(void)
 {
-    uint64_t Result = sizeof(scroll_region);
+    uint64_t Result = sizeof(gui_scroll_region);
     return Result;
 }
 
-static scroll_region *
-PlaceScrollRegionInMemory(scroll_region_params Params, void *Memory)
-{
-    scroll_region *Result = 0;
 
+static gui_scroll_region *
+GuiPlaceScrollRegionInMemory(gui_scroll_region_params Params, void *Memory)
+{
+    gui_scroll_region *Result = NULL;
     if(Memory)
     {
-        Result = (scroll_region *)Memory;
-        Result->ContentSize  = dimensions(0.f, 0.f);
-        Result->ScrollOffset = 0.f;
+        Result = (gui_scroll_region *)Memory;
+        Result->ContentSize = (gui_dimensions){ .Width = 0.0f, .Height = 0.0f };
+        Result->ScrollOffset = 0.0f;
         Result->PixelPerLine = Params.PixelPerLine;
-        Result->Axis         = Params.Axis;
+        Result->Axis = Params.Axis;
     }
-
     return Result;
 }
 
-static dimensions
-GetScrollNodeTranslation(scroll_region *Region)
+
+static gui_dimensions
+GuiGetScrollNodeTranslation(gui_scroll_region *Region)
 {
-    dimensions Result = {};
-
-    if (Region->Axis == AxisType::X)
+    gui_dimensions Result = (gui_dimensions){ .Width = 0.0f, .Height = 0.0f };
+    if(Region->Axis == Gui_AxisType_X)
     {
-        Result = dimensions(Region->ScrollOffset, 0.f);
-    } else
-    if (Region->Axis == AxisType::Y)
-    {
-        Result = dimensions(0.f, Region->ScrollOffset);
+        Result = (gui_dimensions){ .Width = Region->ScrollOffset, .Height = 0.0f };
     }
-
+    else if(Region->Axis == Gui_AxisType_Y)
+    {
+        Result = (gui_dimensions){ .Width = 0.0f, .Height = Region->ScrollOffset };
+    }
     return Result;
 }
 
-// =============================================================================
-// DOMAIN: Input Handling
-// =============================================================================
 
+// -----------------------------------------------------------------------------
+// Input Handling
+// -----------------------------------------------------------------------------
 
-static bool
-IsMouseInsideOuterBox(point Position, ui_layout_node *Node)
+static bool GuiIsMouseInsideOuterBox(gui_point Position, gui_layout_node *Node)
 {
     bool Result = false;
-
-    if(IsValidLayoutNode(Node))
+    if(GuiIsValidLayoutNode(Node))
     {
-        auto  BoundingBox = GetLayoutNodeBoundingBox(Node);
-        float Distance    = BoundingBoxSignedDistanceField(Position, BoundingBox);
-
-        Result = Distance <= 0.f;
+        gui_bounding_box Box = GuiGetLayoutNodeBoundingBox(Node);
+        float Distance = GuiBoundingBoxSignedDistanceField(Position, Box);
+        Result = Distance <= 0.0f;
     }
-
     return Result;
 }
 
-
-// TODO: Fix the border stuff
-static bool
-IsPointInsideBorder(point Position, ui_layout_node *Node)
+static bool GuiIsPointInsideBorder(gui_point Position, gui_layout_node *Node)
 {
     bool Result = false;
-
-    if(IsValidLayoutNode(Node))
+    if(GuiIsValidLayoutNode(Node))
     {
-        auto  BoundingBox = GetLayoutNodeBoundingBox(Node);
-        float Distance    = BoundingBoxSignedDistanceField(Position, BoundingBox);
-
-        Result = Distance >= 0.f;
+        gui_bounding_box Box = GuiGetLayoutNodeBoundingBox(Node);
+        float Distance = GuiBoundingBoxSignedDistanceField(Position, Box);
+        Result = Distance >= 0.0f;
     }
-
     return Result;
 }
 
-
 static bool
-HandlePointerClick(point Position, PointerButton ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree)
+GuiHandlePointerClick(gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
-    VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
-    VOID_ASSERT(IsValidLayoutTree(Tree));
+    GUI_ASSERT(Position.X >= 0.0f && Position.Y >= 0.0f);
+    GUI_ASSERT(GuiIsValidLayoutTree(Tree));
 
-    if(IsValidLayoutTree(Tree))
+    if(GuiIsValidLayoutTree(Tree))
     {
-        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
-        VOID_ASSERT(IsValidLayoutNode(Node));
+        gui_layout_node *Node = GuiGetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        GUI_ASSERT(GuiIsValidLayoutNode(Node));
 
-        if(IsValidLayoutNode(Node))
+        if(GuiIsValidLayoutNode(Node))
         {
-            if(IsMouseInsideOuterBox(Position, Node))
+            if(GuiIsMouseInsideOuterBox(Position, Node))
             {
-                for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
+                for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
                 {
-                    bool IsHandled = HandlePointerClick(Position, ClickMask, Child->Index, Tree);
-                    if(IsHandled)
-                    {
-                        return true;
-                    }
+                    bool IsHandled = GuiHandlePointerClick(Position, ClickMask, Child->Index, Tree);
+                    if(IsHandled) return true;
                 }
-    
-                Node->State |= NodeState::IsClicked;
-                Node->State |= NodeState::UseFocusedStyle;
-                Node->State |= NodeState::HasCapturedPointer;
-    
+
+                Node->State = (Gui_NodeState)(Node->State | Gui_NodeState_IsClicked);
+                Node->State = (Gui_NodeState)(Node->State | Gui_NodeState_UseFocusedStyle);
+                Node->State = (Gui_NodeState)(Node->State | Gui_NodeState_HasCapturedPointer);
+
                 Tree->CapturedNodeIndex = NodeIndex;
-    
                 return true;
             }
         }
@@ -700,80 +759,69 @@ HandlePointerClick(point Position, PointerButton ClickMask, uint32_t NodeIndex, 
 }
 
 static bool
-HandlePointerRelease(point Position, PointerButton ReleaseMask, uint32_t NodeIndex, ui_layout_tree *Tree)
+GuiHandlePointerRelease(gui_point Position, uint32_t ReleaseMask, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
-    VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
-    VOID_ASSERT(IsValidLayoutTree(Tree));
+    GUI_ASSERT(Position.X >= 0.0f && Position.Y >= 0.0f);
+    GUI_ASSERT(GuiIsValidLayoutTree(Tree));
 
-    if(IsValidLayoutTree(Tree))
+    if(GuiIsValidLayoutTree(Tree))
     {
-        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
-        VOID_ASSERT(IsValidLayoutNode(Node));
+        gui_layout_node *Node = GuiGetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        GUI_ASSERT(GuiIsValidLayoutNode(Node));
 
-        for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
+        for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
         {
-            if(HandlePointerRelease(Position, ReleaseMask, Child->Index, Tree))
-            {
-                return true;
-            }
+            if(GuiHandlePointerRelease(Position, ReleaseMask, Child->Index, Tree)) return true;
         }
 
-        if((Node->State & NodeState::HasCapturedPointer) != NodeState::None)
+        if((Node->State & Gui_NodeState_HasCapturedPointer) != Gui_NodeState_None)
         {
-            Node->State &= ~(NodeState::HasCapturedPointer | NodeState::UseFocusedStyle);
-
-            Tree->CapturedNodeIndex = InvalidIndex;
-
+            Node->State = (Gui_NodeState)(Node->State & ~(Gui_NodeState_HasCapturedPointer | Gui_NodeState_UseFocusedStyle));
+            Tree->CapturedNodeIndex = GuiInvalidIndex;
             return true;
         }
     }
 
     return false;
 }
-
 
 static bool
-HandlePointerHover(point Position, uint32_t NodeIndex, ui_layout_tree *Tree)
+GuiHandlePointerHover(gui_point Position, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
-    VOID_ASSERT(Position.X >= 0.f && Position.Y >= 0.f);
+    GUI_ASSERT(Position.X >= 0.0f && Position.Y >= 0.0f);
 
-    if(IsValidLayoutTree(Tree))
+    if(GuiIsValidLayoutTree(Tree))
     {
-        ui_layout_node *Node = GetLayoutNode(Tree->NodeBuffer, NodeIndex);
-        VOID_ASSERT(IsValidLayoutNode(Node));
+        gui_layout_node *Node = GuiGetLayoutNode(Tree->NodeBuffer, NodeIndex);
+        GUI_ASSERT(GuiIsValidLayoutNode(Node));
 
-        if(IsMouseInsideOuterBox(Position, Node))
+        if(GuiIsMouseInsideOuterBox(Position, Node))
         {
-            for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
+            for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
             {
-                bool IsHandled = HandlePointerHover(Position, Child->Index, Tree);
-                if(IsHandled)
-                {
-                    return true;
-                }
+                bool IsHandled = GuiHandlePointerHover(Position, Child->Index, Tree);
+                if(IsHandled) return true;
             }
 
-            Node->State |= NodeState::UseHoveredStyle;
-
+            Node->State = Node->State | Gui_NodeState_UseHoveredStyle;
             return true;
         }
     }
 
     return false;
 }
-
 
 static void
-HandlePointerMove(float DeltaX, float DeltaY, ui_layout_tree *Tree)
+GuiHandlePointerMove(float DeltaX, float DeltaY, gui_layout_tree *Tree)
 {
-    VOID_ASSERT(IsValidLayoutTree(Tree));
-    
-    if(IsValidLayoutTree(Tree))
+    GUI_ASSERT(GuiIsValidLayoutTree(Tree));
+
+    if(GuiIsValidLayoutTree(Tree))
     {
-        ui_layout_node *CapturedNode = GetLayoutNode(Tree->NodeBuffer, Tree->CapturedNodeIndex);
-        if(IsValidLayoutNode(CapturedNode))
+        gui_layout_node *CapturedNode = GuiGetLayoutNode(Tree->NodeBuffer, (uint64_t)Tree->CapturedNodeIndex);
+        if(GuiIsValidLayoutNode(CapturedNode))
         {
-            if((CapturedNode->Flags & NodeFlags::IsDraggable) != NodeFlags::None)
+            if((CapturedNode->Flags & Gui_NodeFlags_IsDraggable) != Gui_NodeFlags_None)
             {
                 CapturedNode->OutputPosition.X += DeltaX;
                 CapturedNode->OutputPosition.Y += DeltaY;
@@ -782,168 +830,130 @@ HandlePointerMove(float DeltaX, float DeltaY, ui_layout_tree *Tree)
     }
 }
 
-// =============================================================================
-// DOMAIN: Layout Computation
-// =============================================================================
+// -----------------------------------------------------------------------------
+// Layout computation helpers
+// -----------------------------------------------------------------------------
 
-// --- Private Helpers ---
-
-static float GetAlignmentOffset(Alignment AlignmentType, float FreeSpace)
+static float
+GuiGetAlignmentOffset(Gui_Alignment AlignmentType, float FreeSpace)
 {
-    float Result = 0.f;
-
-    if(FreeSpace > 0)
+    float Result = 0.0f;
+    if(FreeSpace > 0.0f)
     {
         switch(AlignmentType)
         {
-        case Alignment::None:   
-        case Alignment::Start:
-        {
-            // No-Op
-        } break;
-    
-        case Alignment::Center:
-        {
-            Result = 0.5f * FreeSpace;
-        } break;
-    
-        case Alignment::End:
-        {
-            VOID_ASSERT(!"Please Implement :)");
-        } break;
+            case Gui_Alignment_None:
+            case Gui_Alignment_Start:
+            {
+                // No-Op
+            } break;
+
+            case Gui_Alignment_Center:
+            {
+                Result = 0.5f * FreeSpace;
+            } break;
+
+            case Gui_Alignment_End:
+            {
+                // TODO: implement end alignment
+                Result = FreeSpace; // fallback
+            } break;
         }
     }
-
     return Result;
 }
 
-static uint32_t
-WrapText(static_text *Text, ui_layout_node *Node)
+static float
+GuiComputeNodeSize(gui_sizing Sizing, float ParentSize)
 {
-    VOID_ASSERT(Text);
-    VOID_ASSERT(IsValidLayoutNode(Node));
-
-    uint32_t LineCount = 1;
-    float    LineWidth = 0.f;
-
-    for(uint32_t Idx = 0; Idx < Text->GlyphCount; ++Idx)
-    {
-        // TODO: Implement glyph-based text-wrapping.
-        // Node->OutputSize.Width
-    }
-
-    return LineCount;
-}
-
-static float ComputeNodeSize(sizing Sizing, float ParentSize)
-{
-    float Result = 0.f;
-
+    float Result = 0.0f;
     switch(Sizing.Type)
     {
-    case LayoutSizing::None:
-    {
-    } break;
+        case Gui_LayoutSizing_None:
+        {
+            Result = 0.0f;
+        } break;
 
-    case LayoutSizing::Fixed:
-    {
-        Result = Sizing.Value;
-    } break;
+        case Gui_LayoutSizing_Fixed:
+        {
+            Result = Sizing.Value;
+        } break;
 
-    case LayoutSizing::Percent:
-    {
-        VOID_ASSERT(Sizing.Value >= 0.f && Sizing.Value <= 100.f);
-        Result = (Sizing.Value / 100.f) * ParentSize;
-    } break;
+        case Gui_LayoutSizing_Percent:
+        {
+            GUI_ASSERT(Sizing.Value >= 0.0f && Sizing.Value <= 100.0f);
+            Result = (Sizing.Value / 100.0f) * ParentSize;
+        } break;
 
-    case LayoutSizing::Fit:
-    {
-        VOID_ASSERT(!"Implement :)");
-    } break;
+        case Gui_LayoutSizing_Fit:
+        {
+            // TODO: implement fit
+            Result = 0.0f;
+        } break;
     }
-
     return Result;
 }
 
 static void
-ComputeLayout(ui_layout_node *Node, ui_layout_tree *Tree, dimensions ParentBounds, resource_table *ResourceTable, bool &Changed)
+GuiComputeLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_dimensions ParentBounds, gui_resource_table *ResourceTable, bool *Changed)
 {
-    VOID_ASSERT(IsValidLayoutNode(Node));
-    VOID_ASSERT(IsValidLayoutTree(Tree));
+    GUI_ASSERT(GuiIsValidLayoutNode(Node));
+    GUI_ASSERT(GuiIsValidLayoutTree(Tree));
 
-    Node->OutputChildSize  = {};
-    dimensions LastSize = Node->OutputSize;
+    Node->OutputChildSize = (gui_dimensions){ .Width = 0.0f, .Height = 0.0f };
+    gui_dimensions LastSize = Node->OutputSize;
 
-    float Width     = ComputeNodeSize(Node->Size.Width    , ParentBounds.Width);
-    float MinWidth  = ComputeNodeSize(Node->MinSize.Width , ParentBounds.Width);
-    float MaxWidth  = ComputeNodeSize(Node->MaxSize.Width , ParentBounds.Width);
-    float Height    = ComputeNodeSize(Node->Size.Height   , ParentBounds.Height);
-    float MinHeight = ComputeNodeSize(Node->MinSize.Height, ParentBounds.Height);
-    float MaxHeight = ComputeNodeSize(Node->MaxSize.Height, ParentBounds.Height);
+    float Width     = GuiComputeNodeSize(Node->Size.Width, ParentBounds.Width);
+    float MinWidth  = GuiComputeNodeSize(Node->MinSize.Width, ParentBounds.Width);
+    float MaxWidth  = GuiComputeNodeSize(Node->MaxSize.Width, ParentBounds.Width);
+    float Height    = GuiComputeNodeSize(Node->Size.Height, ParentBounds.Height);
+    float MinHeight = GuiComputeNodeSize(Node->MinSize.Height, ParentBounds.Height);
+    float MaxHeight = GuiComputeNodeSize(Node->MaxSize.Height, ParentBounds.Height);
 
-    Node->OutputSize = {
-        .Width  = Max(MinWidth , Min(Width , MaxWidth )),
-        .Height = Max(MinHeight, Min(Height, MaxHeight)),
-    };
+    Node->OutputSize = (gui_dimensions){ .Width = fmaxf(MinWidth, fminf(Width, MaxWidth)), .Height = fmaxf(MinHeight, fminf(Height, MaxHeight)) };
 
-    if((Node->OutputSize.Width != LastSize.Width || Node->OutputSize.Height != LastSize.Height))
+    if((Node->OutputSize.Width != LastSize.Width) || (Node->OutputSize.Height != LastSize.Height))
     {
-        Changed = true;
+        if(Changed) *Changed = true;
     }
 
-    dimensions ContentBounds =
-    {
-        .Width  = Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right),
-        .Height = Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot  ),
-    };
+    gui_dimensions ContentBounds = (gui_dimensions){ .Width = Node->OutputSize.Width - (Node->Padding.Left + Node->Padding.Right), .Height = Node->OutputSize.Height - (Node->Padding.Top + Node->Padding.Bot) };
 
     if(Node->ChildCount > 0)
     {
-        float Spacing = Node->Spacing * (Node->ChildCount - 1);
-
-        if(Node->Direction == LayoutDirection::Horizontal)
+        float Spacing = Node->Spacing * (float)(Node->ChildCount - 1);
+        if(Node->Direction == Gui_LayoutDirection_Horizontal)
         {
-            ContentBounds.Width  -= Spacing;
-        } else
-        if(Node->Direction == LayoutDirection::Vertical)
+            ContentBounds.Width -= Spacing;
+        }
+        else if(Node->Direction == Gui_LayoutDirection_Vertical)
         {
             ContentBounds.Height -= Spacing;
         }
     }
 
-    VOID_ASSERT(ContentBounds.Width >= 0 && ContentBounds.Height >= 0);
+    GUI_ASSERT(ContentBounds.Width >= 0.0f && ContentBounds.Height >= 0.0f);
 
-    for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
+    for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
     {
-        ComputeLayout(Child, Tree, ContentBounds, ResourceTable, Changed);
-
-        Node->OutputChildSize.Width  += Child->OutputSize.Width;
+        GuiComputeLayout(Child, Tree, ContentBounds, ResourceTable, Changed);
+        Node->OutputChildSize.Width += Child->OutputSize.Width;
         Node->OutputChildSize.Height += Child->OutputSize.Height;
-    }
-
-    auto *Text = static_cast<static_text *>(QueryNodeResource(ResourceType::Text, Node->Index, Tree, ResourceTable));
-    if(Text)
-    {
-        WrapText(Text, Node);
     }
 }
 
-static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_table *ResourceTable)
+static void
+GuiPlaceLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_resource_table *ResourceTable)
 {
-    point Cursor =
-    {
-        Node->OutputPosition.X + Node->Padding.Left,
-        Node->OutputPosition.Y + Node->Padding.Top ,
-    };
+    gui_point Cursor = (gui_point){ .X = Node->OutputPosition.X + Node->Padding.Left, .Y = Node->OutputPosition.Y + Node->Padding.Top };
+    bool IsXMajor = (Node->Direction == Gui_LayoutDirection_Horizontal) ? true : false;
 
-    bool IsXMajor = Node->Direction == LayoutDirection::Horizontal ? true : false;
+    float MajorSize = IsXMajor ? Node->OutputSize.Width - (Node->Padding.Left + Node->Padding.Right) : Node->OutputSize.Height - (Node->Padding.Top + Node->Padding.Bot);
+    float MinorSize = IsXMajor ? Node->OutputSize.Height - (Node->Padding.Top + Node->Padding.Bot) : Node->OutputSize.Width - (Node->Padding.Left + Node->Padding.Right);
 
-    auto MajorSize = IsXMajor ? Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right) : Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot  );
-    auto MinorSize = IsXMajor ? Node->OutputSize.Height - (Node->Padding.Top  + Node->Padding.Bot  ) : Node->OutputSize.Width  - (Node->Padding.Left + Node->Padding.Right);
-
-    auto MajorAlignment    = IsXMajor ? Node->XAlign                : Node->YAlign;
-    auto MajorChildrenSize = IsXMajor ? Node->OutputChildSize.Width : Node->OutputChildSize.Height;
-    auto MajorOffset       = GetAlignmentOffset(MajorAlignment, (MajorSize - MajorChildrenSize));
+    Gui_Alignment MajorAlignment = IsXMajor ? Node->XAlign : Node->YAlign;
+    float MajorChildrenSize = IsXMajor ? Node->OutputChildSize.Width : Node->OutputChildSize.Height;
+    float MajorOffset = GuiGetAlignmentOffset(MajorAlignment, MajorSize - MajorChildrenSize);
 
     if(IsXMajor)
     {
@@ -954,80 +964,42 @@ static void PlaceLayout(ui_layout_node *Node, ui_layout_tree *Tree, resource_tab
         Cursor.Y += MajorOffset;
     }
 
-    for(ui_layout_node *Child = GetLayoutNode(Tree->NodeBuffer, Node->First); IsValidLayoutNode(Child); Child = GetLayoutNode(Tree->NodeBuffer, Child->Next))
+    for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
     {
         Child->OutputPosition = Cursor;
-
-        float MinorOffset = GetAlignmentOffset(IsXMajor ? Node->XAlign : Node->YAlign, IsXMajor ? (MinorSize - Child->OutputSize.Height) : (MinorSize - Child->OutputSize.Width));
+        Gui_Alignment MinorAlign = IsXMajor ? Node->YAlign : Node->XAlign;
+        float MinorOffset = GuiGetAlignmentOffset(MinorAlign, IsXMajor ? (MinorSize - Child->OutputSize.Height) : (MinorSize - Child->OutputSize.Width));
 
         if(IsXMajor)
         {
             Child->OutputPosition.Y += MinorOffset + Child->VisualOffset.Height;
-            Cursor.X                += Child->OutputSize.Width  + Node->Spacing;
+            Cursor.X += Child->OutputSize.Width + Node->Spacing;
         }
         else
         {
             Child->OutputPosition.X += MinorOffset + Child->VisualOffset.Width;
-            Cursor.Y                += Child->OutputSize.Height + Node->Spacing;
+            Cursor.Y += Child->OutputSize.Height + Node->Spacing;
         }
 
-        PlaceLayout(Child, Tree, ResourceTable);
-    }
-
-    auto *Text = static_cast<static_text *>(QueryNodeResource(ResourceType::Text, Node->Index, Tree, ResourceTable));
-    if(Text)
-    {
-        VOID_ASSERT(Node->ChildCount == 0);
-
-        point TextCursor   = point(Node->OutputPosition.X + Node->Padding.Left, Node->OutputPosition.Y + Node->Padding.Top);
-        float CursorStartX = TextCursor.X;
-
-        for(uint32_t Idx = 0; Idx < Text->GlyphCount; ++Idx)
-        {
-            shaped_glyph &Glyph = Text->Glyphs[Idx];
-
-            if (!Glyph._Skip)
-            {
-                point      CursorWithOffset = point(TextCursor.X + Glyph.Input.OffsetX, TextCursor.Y + Glyph.Input.OffsetY);
-                dimensions GlyphSize        = dimensions(Glyph.Source.Right - Glyph.Source.Left, Glyph.Source.Bottom - Glyph.Source.Top);
-
-                Glyph.Position = bounding_box(CursorWithOffset, GlyphSize);
-
-                TextCursor.X += Glyph.Input.Advance;
-
-                if (Glyph._BreakLine)
-                {
-                    TextCursor.X  = CursorStartX;
-                    TextCursor.Y += 14.f;
-                }
-            }
-        }
+        GuiPlaceLayout(Child, Tree, ResourceTable);
     }
 }
 
-// --- Public API ---
-
-static void ComputeTreeLayout(ui_layout_tree *Tree)
+static void
+GuiComputeTreeLayout(gui_layout_tree *Tree)
 {
-    if(IsValidLayoutTree(Tree))
+    if(GuiIsValidLayoutTree(Tree))
     {
-        void_context   &Context    = GetVoidContext();
-        ui_layout_node *ActiveRoot = GetLayoutNode(Tree->NodeBuffer, Tree->RootIndex);
-    
+        gui_context     *Context    = GuiGetContext();
+        gui_layout_node *ActiveRoot = GuiGetLayoutNode(Tree->NodeBuffer, (uint64_t)Tree->RootIndex);
+
         while(true)
         {
             bool Changed = false;
-    
-            ComputeLayout(ActiveRoot, Tree, ActiveRoot->OutputSize, Context.ResourceTable, Changed);
-    
-            if (!Changed)
-            {
-                break;
-            }
+            GuiComputeLayout(ActiveRoot, Tree, ActiveRoot->OutputSize, (gui_resource_table *)Context->ResourceTable, &Changed);
+            if(!Changed) break;
         }
 
-        PlaceLayout(ActiveRoot, Tree, Context.ResourceTable);
+        GuiPlaceLayout(ActiveRoot, Tree, (gui_resource_table *)Context->ResourceTable);
     }
 }
-
-} // namespace gui

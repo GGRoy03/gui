@@ -248,15 +248,21 @@ enum class RenderPassType
 };
 
 
+struct render_handle
+{
+    uint64_t Value[0];
+};
+
+
 struct render_rect
 {
-    gui::bounding_box  RectBounds;
-    gui::bounding_box  TextureSource;
-    gui::color         ColorTL;
-    gui::color         ColorBL;
-    gui::color         ColorTR;
-    gui::color         ColorBR;
-    gui::corner_radius CornerRadius;
+    gui_bounding_box  RectBounds;
+    gui_bounding_box  TextureSource;
+    gui_color         ColorTL;
+    gui_color         ColorBL;
+    gui_color         ColorTR;
+    gui_color         ColorBR;
+    gui_corner_radius CornerRadius;
     float              BorderWidth;
     float              Softness;
     float              SampleTexture;
@@ -292,7 +298,7 @@ struct render_batch_list
 
 struct rect_group_params
 {
-    gui::bounding_box Clip;
+    gui_bounding_box Clip;
 };
 
 
@@ -349,7 +355,7 @@ PushDataInBatchList(memory_arena *Arena, render_batch_list &BatchList)
         {
             Node->Next               = 0;
             Node->Value.ByteCount    = 0;
-            Node->Value.ByteCapacity = VOID_KILOBYTE(10);
+            Node->Value.ByteCapacity = GUI_KILOBYTE(10);
             Node->Value.Memory       = PushArray<uint8_t>(Arena, Node->Value.ByteCapacity);
 
             if (!BatchList.First)
@@ -412,16 +418,16 @@ GetRenderPass(memory_arena *Arena, RenderPassType Type, render_pass_list &PassLi
 
 
 static void
-RenderUI(gui::ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassList)
+RenderUI(gui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassList)
 {
-    gui::memory_footprint Footprint = GetRenderCommandsFootprint(Tree);
-    gui::memory_block     Block     =
+    gui_memory_footprint Footprint = GuiGetRenderCommandsFootprint(Tree);
+    gui_memory_block     Block     =
     {
         .SizeInBytes = Footprint.SizeInBytes,
         .Base        = PushArena(Arena, Footprint.SizeInBytes, Footprint.Alignment)
     };
         
-    gui::render_command_list CommandList = ComputeRenderCommands(Tree, Block);
+    gui_render_command_list CommandList = GuiComputeRenderCommands(Tree, Block);
 
     render_pass *RenderPass = GetRenderPass(Arena, RenderPassType::UI, PassList);
     if(RenderPass)
@@ -456,12 +462,12 @@ RenderUI(gui::ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassL
 
         for(uint32_t Idx = 0; Idx < CommandList.Count; ++Idx)
         {
-            const gui::render_command &Command = CommandList.Commands[Idx];
+            const gui_render_command &Command = CommandList.Commands[Idx];
 
             switch(Command.Type)
             {
 
-            case gui::RenderCommandType::Rectangle:
+            case Gui_RenderCommandType_Rectangle:
             {
                 auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Arena, BatchList));
                 Rect->RectBounds    = Command.Box;
@@ -476,7 +482,7 @@ RenderUI(gui::ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassL
                 Rect->SampleTexture = 0;
             } break;
 
-            case gui::RenderCommandType::Border:
+            case Gui_RenderCommandType_Border:
             {
                 auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Arena, BatchList));
                 Rect->RectBounds    = Command.Box;
@@ -491,7 +497,7 @@ RenderUI(gui::ui_layout_tree *Tree, memory_arena *Arena, render_pass_list &PassL
                 Rect->SampleTexture = 0;
             } break;
 
-            case gui::RenderCommandType::Text:
+            case Gui_RenderCommandType_Text:
             {
                 auto *Rect = static_cast<render_rect *>(PushDataInBatchList(Arena, BatchList));
                 Rect->RectBounds    = Command.Box;
@@ -554,8 +560,16 @@ struct d3d11_rect_uniform_buffer
     float _Padding3, ScaleY   , _Padding4, _Padding5;
     float _Padding6, _Padding7, _Padding8, _Padding9;
 
-    gui::dimensions ViewportSizeInPixel;
-    gui::dimensions AtlasSizeInPixel;
+    gui_dimensions ViewportSizeInPixel;
+    gui_dimensions AtlasSizeInPixel;
+};
+
+
+struct d3d11_text_cache
+{
+    ID3D11Texture2D*          Cache;
+    ID3D11ShaderResourceView* View;
+    ID3D11Texture2D*          Transfer; 
 };
 
 
@@ -712,6 +726,99 @@ D3D11Initialize(HWND HWindow)
 }
 
 
+static d3d11_text_cache 
+D3D11CreateTextCache(uint32_t Width, uint32_t Height, d3d11_renderer *Renderer)
+{
+    d3d11_text_cache Result = {};
+
+    D3D11_TEXTURE2D_DESC TextureDesc = {};
+    TextureDesc.Width              = Width;
+    TextureDesc.Height             = Height;
+    TextureDesc.MipLevels          = 1;
+    TextureDesc.ArraySize          = 1;
+    TextureDesc.Format             = DXGI_FORMAT_R8G8B8A8_UNORM;
+    TextureDesc.SampleDesc.Count   = 1;
+    TextureDesc.SampleDesc.Quality = 0;
+    TextureDesc.Usage              = D3D11_USAGE_DEFAULT;
+    TextureDesc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
+    TextureDesc.CPUAccessFlags     = 0;
+    TextureDesc.MiscFlags          = 0;
+
+    Renderer->Device->CreateTexture2D(&TextureDesc, nullptr, &Result. Cache);
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC SRVDesc = {};
+    SRVDesc.Format                    = TextureDesc.Format;
+    SRVDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+    SRVDesc.Texture2D.MipLevels       = 1;
+    SRVDesc.Texture2D.MostDetailedMip = 0;
+
+    Renderer->Device->CreateShaderResourceView(Result.Cache, &SRVDesc, &Result.View);
+
+    D3D11_TEXTURE2D_DESC StagingDesc = TextureDesc;
+    StagingDesc.Usage          = D3D11_USAGE_STAGING;
+    StagingDesc.BindFlags      = 0;
+    StagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
+
+    Renderer->Device->CreateTexture2D(&StagingDesc, nullptr, &Result.Transfer);
+
+    return Result;
+}
+
+// THIS CODE IS REALLY BAD AND EXPERIMENTAL !!!!
+
+static void
+D3D11UpdateTextCache(ntext::rasterized_glyph_list *List, d3d11_text_cache *TextCache, d3d11_renderer *Renderer)
+{
+    D3D11_MAPPED_SUBRESOURCE Mapped = {};
+    Renderer->DeviceContext->Map(TextCache->Transfer, 0, D3D11_MAP_WRITE, 0, &Mapped);
+
+    uint32_t AtlasBPP      = 4;
+    uint8_t *AtlasBase     = (uint8_t *)Mapped.pData;
+    uint32_t AtlasRowPitch = (uint32_t)Mapped.RowPitch;
+
+    for (ntext::rasterized_glyph_node *Node = List->First; Node != 0; Node = Node->Next)
+    {
+        ntext::rasterized_glyph  &Glyph  = Node->Value;
+        ntext::rasterized_buffer &Buffer = Glyph.Buffer;
+
+        uint32_t DstLeft   = (uint32_t)Glyph.Source.Left;
+        uint32_t DstTop    = (uint32_t)Glyph.Source.Top;
+        uint32_t DstRight  = (uint32_t)Glyph.Source.Right;
+        uint32_t DstBottom = (uint32_t)Glyph.Source.Bottom;
+
+        uint32_t CopyWidth  = (DstRight  > DstLeft) ? (DstRight - DstLeft) : 0;
+        uint32_t CopyHeight = (DstBottom > DstTop)  ? (DstBottom - DstTop) : 0;
+        if (CopyWidth == 0 || CopyHeight == 0) continue;
+
+        uint8_t *SrcBase   = (uint8_t *)Buffer.Data;
+        uint32_t SrcStride = Buffer.Stride ? Buffer.Stride : CopyWidth;
+
+        for (uint32_t y = 0; y < Buffer.Height; ++y)
+        {
+            uint8_t *SrcRow = SrcBase   + (size_t)y * SrcStride;
+            uint8_t *DstRow = AtlasBase + (size_t)(DstTop + y) * AtlasRowPitch + (size_t)DstLeft * AtlasBPP;
+
+            for (uint32_t x = 0; x < Buffer.Width; ++x)
+            {
+                uint8_t  Alpha    = SrcRow[x];
+                uint8_t *DstPixel = DstRow + (size_t)x * AtlasBPP;
+
+                DstPixel[0] = 0xFF;
+                DstPixel[1] = 0xFF;
+                DstPixel[2] = 0xFF;
+                DstPixel[3] = Alpha;
+            }
+        }
+    }
+
+    // Maybe heavy? Make sure to batch. Perhaps we accept a list of rasterized_glyphs.
+    // NText doesn't really support that, but it's probably trivial to implement.
+
+    Renderer->DeviceContext->Unmap(TextCache->Transfer, 0);
+    Renderer->DeviceContext->CopyResource(TextCache->Cache, TextCache->Transfer);
+}
+
+
 static void
 D3D11RenderFrame(d3d11_renderer &Renderer, float Width, float Height)
 {
@@ -768,8 +875,8 @@ D3D11RenderFrame(d3d11_renderer &Renderer, float Width, float Height)
                     d3d11_rect_uniform_buffer Uniform = {};
                     Uniform.ScaleX              = 1.f;
                     Uniform.ScaleY              = 1.f;
-                    Uniform.ViewportSizeInPixel = gui::dimensions(Width, Height);
-                    Uniform.AtlasSizeInPixel    = gui::dimensions(0.f, 0.f);
+                    Uniform.ViewportSizeInPixel = gui_dimensions(Width, Height);
+                    Uniform.AtlasSizeInPixel    = gui_dimensions(0.f, 0.f);
 
                     D3D11_MAPPED_SUBRESOURCE Resource = {};
                     Renderer.DeviceContext->Map(static_cast<ID3D11Resource *>(UniformBuffer), 0, D3D11_MAP_WRITE_DISCARD, 0, &Resource);
@@ -806,7 +913,7 @@ D3D11RenderFrame(d3d11_renderer &Renderer, float Width, float Height)
 
                 // Scissor
                 {
-                    gui::bounding_box Clip = RectParams.Clip;
+                    gui_bounding_box Clip = RectParams.Clip;
                     D3D11_RECT Rect = {};
 
                     if(Clip.Left == 0 && Clip.Top == 0 && Clip.Right == 0 && Clip.Bottom == 0)
@@ -852,45 +959,7 @@ D3D11RenderFrame(d3d11_renderer &Renderer, float Width, float Height)
 // Core UI Helpers
 // ====================================================
 
-
-static void
-CreateStaticText(char *Text, uint64_t TextSize, memory_arena *Arena, ntext::glyph_generator &Generator, gui::resource_key Key, gui::resource_table *ResourceTable)
-{
-    gui::resource_state State = gui::FindResourceByKey(Key, gui::FindResourceFlag::AddIfNotFound, ResourceTable);
-    if(!State.Resource)
-    {
-        ntext::backend_context Backend;
-        ntext::system_font     SystemFont;
-    
-        ntext::TextAnalysis     Flags    = ntext::TextAnalysis::SkipComplexCheck;
-        ntext::analysed_text    Analysed = ntext::AnalyzeText(Text, TextSize, Flags, Generator);
-        ntext::shaped_glyph_run Run      = ntext::FillAtlas(Analysed, Generator, SystemFont, Backend);
-    
-        auto Inputs = PushArray<gui::shaped_glyph_input>(Arena, Run.ShapedCount);
-        for(uint32_t Idx = 0; Idx < Run.ShapedCount; ++Idx)
-        {
-            Inputs[Idx].OffsetX      = Run.Shaped[Idx].Layout.OffsetX;
-            Inputs[Idx].OffsetY      = Run.Shaped[Idx].Layout.OffsetY;
-            Inputs[Idx].Advance      = Run.Shaped[Idx].Layout.Advance;
-            Inputs[Idx].IsWhiteSpace = false;
-        }
-    
-        // Footprint / Allocation
-    
-        gui::text_params      Params     = {.GlyphCount = Analysed.GlyphCount, .Inputs = Inputs};
-        gui::memory_footprint Footprint  = GetStaticTextFootprint(Params);
-        gui::memory_block     Block      = {.SizeInBytes = Footprint.SizeInBytes, .Base = malloc(Footprint.SizeInBytes)};
-        gui::static_text     *StaticText = PlaceStaticTextInMemory(Params, Block);
-
-        // TODO: We also have to write the user state (Source) into the static text memory
-        // such that we can get it back when drawing? There's also a slight disconnect between the drawing
-        // of text and the resource here. Perhaps we need to pass around some struct that is intented for
-        // user modification. Which sounds like it fixes the issue.
-
-        gui::UpdateResourceTable(State.Id, Key, StaticText, ResourceTable);
-    }
-}
-
+// TODO: Text Experimentation
 
 // ====================================================
 // Inspector UI Logic
@@ -899,15 +968,16 @@ CreateStaticText(char *Text, uint64_t TextSize, memory_arena *Arena, ntext::glyp
 
 struct inspector
 {
-    // UI
+    // Static State
 
-    gui::ui_layout_tree   *LayoutTree;
-    gui::resource_table   *ResourceTable;
+    gui_layout_tree       *LayoutTree;
+    gui_resource_table    *ResourceTable;
 
     ntext::glyph_generator GlyphGenerator;
     ntext::system_font     Font;
+    ntext::backend_context Backend;
 
-    // Static State
+    d3d11_text_cache       TextCache;
 
     bool                   IsInitialized;
     memory_arena          *StateArena;
@@ -918,160 +988,162 @@ struct inspector
 };
 
 
-// constexpr gui::color MainOrange        = gui::color(0.9765f, 0.4510f, 0.0863f, 1.0f);
-// constexpr gui::color WhiteOrange       = gui::color(1.0000f, 0.9686f, 0.9294f, 1.0f);
-// constexpr gui::color SurfaceOrange     = gui::color(0.9961f, 0.8431f, 0.6667f, 1.0f);
-constexpr gui::color HoverOrange       = gui::color(0.9176f, 0.3451f, 0.0471f, 1.0f);
-// constexpr gui::color SubtleOrange      = gui::color(0.1686f, 0.1020f, 0.0627f, 1.0f);
+// constexpr gui_color MainOrange        = gui_color(0.9765f, 0.4510f, 0.0863f, 1.0f);
+// constexpr gui_color WhiteOrange       = gui_color(1.0000f, 0.9686f, 0.9294f, 1.0f);
+// constexpr gui_color SurfaceOrange     = gui_color(0.9961f, 0.8431f, 0.6667f, 1.0f);
+constexpr gui_color HoverOrange       = gui_color(0.9176f, 0.3451f, 0.0471f, 1.0f);
+// constexpr gui_color SubtleOrange      = gui_color(0.1686f, 0.1020f, 0.0627f, 1.0f);
 
-constexpr gui::color Background        = gui::color(0.0588f, 0.0588f, 0.0627f, 1.0f);
-constexpr gui::color SurfaceBackground = gui::color(0.1020f, 0.1098f, 0.1176f, 1.0f);
-constexpr gui::color BorderOrDivider   = gui::color(0.1804f, 0.1961f, 0.2118f, 1.0f);
+constexpr gui_color Background        = gui_color(0.0588f, 0.0588f, 0.0627f, 1.0f);
+constexpr gui_color SurfaceBackground = gui_color(0.1020f, 0.1098f, 0.1176f, 1.0f);
+constexpr gui_color BorderOrDivider   = gui_color(0.1804f, 0.1961f, 0.2118f, 1.0f);
 
-// constexpr gui::color TextPrimary       = gui::color(0.9765f, 0.9804f, 0.9843f, 1.0f);
-// constexpr gui::color TextSecondary     = gui::color(0.6118f, 0.6392f, 0.6863f, 1.0f);
+// constexpr gui_color TextPrimary       = gui_color(0.9765f, 0.9804f, 0.9843f, 1.0f);
+// constexpr gui_color TextSecondary     = gui_color(0.6118f, 0.6392f, 0.6863f, 1.0f);
 
-constexpr gui::color Success           = gui::color(0.1333f, 0.7725f, 0.3686f, 1.0f);
-// constexpr gui::color Error             = gui::color(0.9373f, 0.2667f, 0.2667f, 1.0f);
-// constexpr gui::color Warning           = gui::color(0.9608f, 0.6196f, 0.0431f, 1.0f);
+constexpr gui_color Success           = gui_color(0.1333f, 0.7725f, 0.3686f, 1.0f);
+// constexpr gui_color Error             = gui_color(0.9373f, 0.2667f, 0.2667f, 1.0f);
+// constexpr gui_color Warning           = gui_color(0.9608f, 0.6196f, 0.0431f, 1.0f);
 
 
-static gui::cached_style WindowStyle =
+static gui_cached_style WindowStyle =
 {
     .Layout = 
     {
-        .Size         = gui::size({1000.f, gui::LayoutSizing::Fixed}, {1000.f, gui::LayoutSizing::Fixed}),
-        .Direction    = gui::LayoutDirection::Horizontal,
-        .XAlign       = gui::Alignment::Start,
-        .YAlign       = gui::Alignment::Center,
-        .Padding      = gui::padding(20.f, 20.f, 20.f, 20.f),
-        .Spacing      = 10.f,
+        .Size         = {gui_size({1000.f, Gui_LayoutSizing_Fixed}, {1000.f, Gui_LayoutSizing_Fixed})},
+        .Direction    = {Gui_LayoutDirection_Horizontal},
+        .XAlign       = {Gui_Alignment_Start},
+        .YAlign       = {Gui_Alignment_Center},
+        .Padding      = {gui_padding(20.f, 20.f, 20.f, 20.f)},
+        .Spacing      = {10.f},
     },
 
     .Default =
     {
-        .Color        = Background,
-        .BorderColor  = BorderOrDivider,
-        .BorderWidth  = 2.f,
-        .Softness     = 2.f,
-        .CornerRadius = gui::corner_radius(4.f, 4.f, 4.f, 4.f),
+        .Color        = {Background},
+        .BorderColor  = {BorderOrDivider},
+        .BorderWidth  = {2.f},
+        .Softness     = {2.f},
+        .CornerRadius = {gui_corner_radius(4.f, 4.f, 4.f, 4.f)},
     },
 
     .Hovered =
     {
-        .BorderColor = HoverOrange,
+        .BorderColor = {HoverOrange},
     },
 
     .Focused =
     {
-        .BorderColor = Success,
+        .BorderColor = {Success},
     },
 };
 
 
-static gui::cached_style TreePanelStyle =
+static gui_cached_style TreePanelStyle =
 {
     .Layout = 
     {
-        .Size         = gui::size({50.f, gui::LayoutSizing::Percent}, {100.f, gui::LayoutSizing::Percent}),
-        .Padding      = gui::padding(20.f, 20.f, 20.f, 20.f),
+        .Size         = {gui_size({50.f, Gui_LayoutSizing_Percent}, {100.f, Gui_LayoutSizing_Percent})},
+        .Padding      = {gui_padding(20.f, 20.f, 20.f, 20.f)},
     },
 
     .Default =
     {
-        .Color        = SurfaceBackground,
-        .BorderColor  = BorderOrDivider,
+        .Color        = {SurfaceBackground},
+        .BorderColor  = {BorderOrDivider},
 
-        .BorderWidth  = 2.f,
-        .Softness     = 2.f,
-        .CornerRadius = gui::corner_radius(4.f, 4.f, 4.f, 4.f),
+        .BorderWidth  = {2.f},
+        .Softness     = {2.f},
+        .CornerRadius = {gui_corner_radius(4.f, 4.f, 4.f, 4.f)},
     },
 };
 
 
+// TODO: Make sure the initialization doesn't crash. Then continue fixing up the small patches to
+// finally get something on screen.
 static void
-RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
+RenderInspectorUI(inspector *Inspector, d3d11_renderer *Renderer)
 {
-    if(!Inspector.IsInitialized)
+    if(!Inspector->IsInitialized)
     {
-        Inspector.FrameArena = AllocateArena({});
-        Inspector.StateArena = AllocateArena({});
+        Inspector->FrameArena = AllocateArena({});
+        Inspector->StateArena = AllocateArena({.ReserveSize = KiB(512)});
 
         // Layout Tree
         {
-            gui::memory_footprint Footprint = gui::GetLayoutTreeFootprint(128);
-            gui::memory_block     Block     =
+            gui_memory_footprint Footprint = GuiGetLayoutTreeFootprint(128);
+            gui_memory_block     Block     =
             {
                 .SizeInBytes = Footprint.SizeInBytes,
-                .Base        = PushArena(Inspector.StateArena, Footprint.SizeInBytes, Footprint.Alignment),
+                .Base        = PushArena(Inspector->StateArena, Footprint.SizeInBytes, Footprint.Alignment),
             };
-            Inspector.LayoutTree = gui::PlaceLayoutTreeInMemory(128, Block);
+            Inspector->LayoutTree = GuiPlaceLayoutTreeInMemory(128, Block);
         }
 
         // Resource Table
         {
-            gui::resource_table_params Params =
+            gui_resource_table_params Params =
             {
                 .HashSlotCount = 64,
                 .EntryCount    = 128,
             };
 
-            gui::memory_footprint Footprint = gui::GetResourceTableFootprint(Params);
-            gui::memory_block     Block     =
+            gui_memory_footprint Footprint = GuiGetResourceTableFootprint(Params);
+            gui_memory_block     Block     =
             {
                 .SizeInBytes = Footprint.SizeInBytes,
-                .Base        = PushArena(Inspector.StateArena, Footprint.SizeInBytes, Footprint.Alignment),
+                .Base        = PushArena(Inspector->StateArena, Footprint.SizeInBytes, Footprint.Alignment),
             };
-            Inspector.ResourceTable = gui::PlaceResourceTableInMemory(Params, Block);
+            Inspector->ResourceTable = GuiPlaceResourceTableInMemory(Params, Block);
         }
 
         // Glyph Generator
-        {
-            ntext::glyph_generator_params Params =
-            {
-                .TextStorage       = ntext::TextStorage::LazyAtlas,
-                .FrameMemoryBudget = KiB(32),
-                .FrameMemory       = PushArena(Inspector.StateArena, KiB(32), 8),
-            };
+        //{
+        //    ntext::glyph_generator_params Params =
+        //    {
+        //        .TextStorage       = ntext::TextStorage::LazyAtlas,
+        //        .FrameMemoryBudget = KiB(128),
+        //        .FrameMemory       = PushArena(Inspector->FrameArena, KiB(64), 8),
+        //        .CacheSizeX        = 1024,
+        //        .CacheSizeY        = 1024,
+        //    };
 
-            Inspector.GlyphGenerator = CreateGlyphGenerator(Params);
-        }
+        //    Inspector->GlyphGenerator = ntext::CreateGlyphGenerator(Params);
+        //}
 
-        // Fonts
-        {
-        }
+        //// Fonts
+        //{
+        //    Inspector->Backend = ntext::InitializeBackendContext();
+        //    Inspector->Font    = ntext::LoadSystemFont("Consolas", 16.f, Inspector->Backend);
+        //}
 
-        Inspector.IsInitialized = true;
+        Inspector->IsInitialized = true;
     }
 
-    gui::NodeFlags WindowFlags = gui::NodeFlags::ClipContent | gui::NodeFlags::IsDraggable | gui::NodeFlags::IsResizable;
-    gui::component Window("window", WindowFlags, &WindowStyle, Inspector.LayoutTree);
-    if(Window.Push(PushStruct<gui::parent_node>(Inspector.FrameArena)))
+    uint32_t      WindowFlags = Gui_NodeFlags_ClipContent | Gui_NodeFlags_IsDraggable | Gui_NodeFlags_IsResizable;
+    gui_component Window      = GuiCreateComponent(gui_str8_comp("window"), WindowFlags, &WindowStyle, Inspector->LayoutTree);
+
+    if(GuiPushComponent(&Window, PushStruct<gui_parent_node>(Inspector->FrameArena)))
     {
-        gui::component TreePanel("tree_panel", gui::NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
-        if(TreePanel.Push(PushStruct<gui::parent_node>(Inspector.FrameArena)))
+        gui_component TreePanel = GuiCreateComponent(gui_str8_comp("tree_panel"), Gui_NodeFlags_None, &TreePanelStyle, Inspector->LayoutTree);
+        if(GuiPushComponent(&TreePanel, PushStruct<gui_parent_node>(Inspector->FrameArena)))
         {
-            // This is beyond verbose. For a simple string. Jesus. And it's also not clear that the string is now bound
-            // to the node I guess? Unsure if that's a problem or it's simply unusual..
+            // TODO: Text Experimentation.
 
-            gui::resource_key Key  = gui::MakeNodeResourceKey(gui::ResourceType::Text, TreePanel.LayoutIndex, Inspector.LayoutTree);
-            gui::byte_string  Text = str8_comp("Can you see me :)");
-            CreateStaticText(Text.String, Text.Size, Inspector.FrameArena, Inspector.GlyphGenerator, Key, Inspector.ResourceTable);
-
-            TreePanel.Pop();
+            GuiPopComponent(&TreePanel);
         }
 
-        gui::component OtherPanel("other_panel", gui::NodeFlags::None, &TreePanelStyle, Inspector.LayoutTree);
-        if(OtherPanel.Push(PushStruct<gui::parent_node>(Inspector.FrameArena)))
+        gui_component OtherPanel = GuiCreateComponent(gui_str8_comp("other_panel"), Gui_NodeFlags_None, &TreePanelStyle, Inspector->LayoutTree);
+        if(GuiPushComponent(&OtherPanel, PushStruct<gui_parent_node>(Inspector->FrameArena)))
         {
-            OtherPanel.Pop();
+            GuiPopComponent(&OtherPanel);
         }
     }
-    Window.Pop();
+    GuiPopComponent(&Window);
 
-    gui::ComputeTreeLayout(Inspector.LayoutTree);
+    GuiComputeTreeLayout(Inspector->LayoutTree);
 
-    RenderUI(Inspector.LayoutTree, Renderer.FrameArena, Renderer.PassList);
+    RenderUI(Inspector->LayoutTree, Renderer->FrameArena, Renderer->PassList);
 }
 
 // ====================================================
@@ -1081,9 +1153,9 @@ RenderInspectorUI(inspector &Inspector, d3d11_renderer &Renderer)
 
 struct win32_state
 {
-    HWND                    WindowHandle;
-    memory_arena           *FrameArena;
-    gui::pointer_event_list PointerEventList;
+    HWND                   WindowHandle;
+    memory_arena          *FrameArena;
+    gui_pointer_event_list PointerEventList;
 
     // Mouse
 
@@ -1097,7 +1169,7 @@ static win32_state Win32State;
 LRESULT CALLBACK
 WindowProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
 {
-    gui::pointer_event_list *EventList = &Win32State.PointerEventList;
+    gui_pointer_event_list *EventList = &Win32State.PointerEventList;
 
     switch(Message)
     {
@@ -1109,7 +1181,7 @@ WindowProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
         float LastMouseX = static_cast<float>(Win32State.MouseX);
         float LastMouseY = static_cast<float>(Win32State.MouseY);
 
-        gui::PushPointerMoveEvent(gui::point(MouseX, MouseY), gui::point(LastMouseX, LastMouseY), PushStruct<gui::pointer_event_node>(Win32State.FrameArena), EventList);
+        GuiPushPointerMoveEvent(gui_point(MouseX, MouseY), gui_point(LastMouseX, LastMouseY), PushStruct<gui_pointer_event_node>(Win32State.FrameArena), EventList);
 
         Win32State.MouseX = MouseX;
         Win32State.MouseY = MouseY;
@@ -1120,7 +1192,7 @@ WindowProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
         float MouseX = static_cast<float>(GET_X_LPARAM(LParam));
         float MouseY = static_cast<float>(GET_Y_LPARAM(LParam));
 
-        gui::PushPointerClickEvent(gui::PointerButton::Primary, gui::point(MouseX, MouseY), PushStruct<gui::pointer_event_node>(Win32State.FrameArena), EventList);
+        GuiPushPointerClickEvent(Gui_PointerButton_Primary, gui_point(MouseX, MouseY), PushStruct<gui_pointer_event_node>(Win32State.FrameArena), EventList);
     } break;
 
     case WM_LBUTTONUP:
@@ -1128,7 +1200,7 @@ WindowProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
         float MouseX = static_cast<float>(GET_X_LPARAM(LParam));
         float MouseY = static_cast<float>(GET_Y_LPARAM(LParam));
 
-        gui::PushPointerReleaseEvent(gui::PointerButton::Primary, gui::point(MouseX, MouseY), PushStruct<gui::pointer_event_node>(Win32State.FrameArena), EventList);
+        GuiPushPointerReleaseEvent(Gui_PointerButton_Primary, gui_point(MouseX, MouseY), PushStruct<gui_pointer_event_node>(Win32State.FrameArena), EventList);
     } break;
 
     case WM_DESTROY:
@@ -1195,13 +1267,13 @@ WinMain(HINSTANCE HInstance, HINSTANCE PrevInstance, LPSTR CmdLine, int CmdShow)
             DispatchMessageA(&Message);
         }
 
-        gui::BeginFrame(1901.f, 1041.f, Win32State.PointerEventList, Inspector.LayoutTree);
+        GuiBeginFrame(1901.f, 1041.f, &Win32State.PointerEventList, Inspector.LayoutTree);
 
-        RenderInspectorUI(Inspector, Renderer);
+        RenderInspectorUI(&Inspector, &Renderer);
         D3D11RenderFrame(Renderer, 1901.f, 1041.f);
 
-        gui::ClearPointerEvents(&Win32State.PointerEventList);
-        gui::EndFrame();
+        GuiClearPointerEvents(&Win32State.PointerEventList);
+        GuiEndFrame();
 
         Sleep(10);
     }

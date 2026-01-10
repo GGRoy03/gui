@@ -34,13 +34,11 @@ static inline unsigned FindFirstBit(uint32_t Mask)
 
 #elif NTEXT_CLANG || NTEXT_GNU
 
-
-static inline unsigned FindFirstBit(uint32_t Mask)
+constexpr uint32_t
+FindFirstBit(uint32_t Mask)
 {
-    NTEXT_ASSERT(Mask != 0);
     return __builtin_ctz(Mask);
 }
-
 
 #else
     #error "FindFirstBit not supported for this compiler."
@@ -232,7 +230,7 @@ IsValidSystemFont(system_font *Font)
 
 
 static system_font
-LoadSystemFont(const char *Name, float Size, memory_arena *Arena, backend_context Backend)
+LoadSystemFont(const char *Name, float Size, backend_context Backend)
 {
     system_font     SystemFont  = {};
     IDWriteFactory *DirectWrite = Backend.DirectWrite;
@@ -242,7 +240,7 @@ LoadSystemFont(const char *Name, float Size, memory_arena *Arena, backend_contex
     if(Fonts)
     {
         int    Length   = MultiByteToWideChar(CP_UTF8, 0, Name, strlen(Name), 0, 0);
-        WCHAR *WideName = PushArray<WCHAR>(Arena, Length);
+        WCHAR *WideName = static_cast<WCHAR *>(malloc(Length * sizeof(WCHAR)));
         int    Written  = MultiByteToWideChar(CP_UTF8, 0, Name, strlen(Name), WideName, Length);
 
         if(Written == Length)
@@ -1067,9 +1065,9 @@ struct glyph_generator
     TextStorage       TextStorage;
 };
 
-// Should we add a function to get the static footprint for the glyph generator?
 
-
+// There are some minor issues relating to the allocations for this thing. There's a slight disconnect
+// between the params and this implementation..
 static glyph_generator
 CreateGlyphGenerator(glyph_generator_params Params)
 {

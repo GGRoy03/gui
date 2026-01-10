@@ -1,4 +1,6 @@
+// ====================================================================
 // [Third-Party Libraries]
+// ====================================================================
 
 #define STB_RECT_PACK_IMPLEMENTATION
 #include "third_party/stb_rect_pack.h"
@@ -11,137 +13,143 @@
 #define XXH_IMPLEMENTATION
 #include "third_party/xxhash.h"
 
-#include "third_party/nxi_log.h"
-
 // ====================================================================
 // [Basic Types]
 // ====================================================================
 
-#include <type_traits>
 
-namespace gui
-{
+#include <stdint.h>
+#include <stdbool.h>
 
 
-template<typename E>
-struct enable_bitmask_operators : std::false_type {};
-
-template<typename E>
-constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E>
-operator|(E a, E b) noexcept {
-    using U = std::underlying_type_t<E>;
-    return static_cast<E>(static_cast<U>(a) | static_cast<U>(b));
-}
-
-template<typename E>
-constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E>
-operator&(E a, E b) noexcept {
-    using U = std::underlying_type_t<E>;
-    return static_cast<E>(static_cast<U>(a) & static_cast<U>(b));
-}
-
-template<typename E>
-constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E&>
-operator|=(E& a, E b) noexcept {
-    return a = a | b;
-}
-
-template<typename E>
-constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E&>
-operator&=(E& a, E b) noexcept {
-    return a = a & b;
-}
-
-template<typename E>
-constexpr std::enable_if_t<enable_bitmask_operators<E>::value, E>
-operator~(E a) noexcept {
-    using U = std::underlying_type_t<E>;
-    return static_cast<E>(~static_cast<U>(a));
-}
-
-struct dimensions
+typedef struct gui_dimensions
 {
     float Width;
     float Height;
-
-    constexpr dimensions operator+(dimensions Other) const noexcept
-    {
-        return {this->Width + Other.Width, this->Height + Other.Height};
-    }
-};
+} gui_dimensions;
 
 
-struct point
+static gui_dimensions
+GuiDimensionsAdd(gui_dimensions A, gui_dimensions B)
+{
+    gui_dimensions Result;
+    Result.Width  = A.Width  + B.Width;
+    Result.Height = A.Height + B.Height;
+    return Result;
+}
+
+
+typedef struct gui_point
 {
     float X;
     float Y;
-
-    constexpr point operator+(point Other) const noexcept
-    {
-        return {this->X + Other.X, this->Y + Other.Y};
-    }
-
-    constexpr point operator-(point Other) const noexcept
-    {
-        return {this->X - Other.X, this->Y - Other.Y};
-    }
-
-    constexpr point operator+(dimensions Dimensions) const noexcept
-    {
-        return {this->X + Dimensions.Width, this->Y + Dimensions.Height};
-    }
-
-    constexpr point operator-(dimensions Dimensions) const noexcept
-    {
-        return {this->X - Dimensions.Width, this->Y - Dimensions.Height};
-    }
-};
+} gui_point;
 
 
-struct translation
+static gui_point
+GuiPointAddPoint(gui_point A, gui_point B)
+{
+    gui_point Result;
+    Result.X = A.X + B.X;
+    Result.Y = A.Y + B.Y;
+    return Result;
+}
+
+
+static gui_point
+GuiPointSubPoint(gui_point A, gui_point B)
+{
+    gui_point Result;
+    Result.X = A.X - B.X;
+    Result.Y = A.Y - B.Y;
+    return Result;
+}
+
+
+static gui_point
+GuiPointAddDimensions(gui_point P, gui_dimensions D)
+{
+    gui_point Result;
+    Result.X = P.X + D.Width;
+    Result.Y = P.Y + D.Height;
+    return Result;
+}
+
+
+static gui_point
+GuiPointSubDimensions(gui_point P, gui_dimensions D)
+{
+    gui_point Result;
+    Result.X = P.X - D.Width;
+    Result.Y = P.Y - D.Height;
+    return Result;
+}
+
+
+typedef struct gui_translation
 {
     float X;
     float Y;
-
-    translation(point A, point B)
-    {
-        X = A.X - B.X;
-        Y = A.Y - B.Y;
-    }
-};
+} gui_translation;
 
 
-struct bounding_box
+static gui_translation
+GuiTranslationFromPoints(gui_point A, gui_point B)
+{
+    gui_translation Result;
+    Result.X = A.X - B.X;
+    Result.Y = A.Y - B.Y;
+    return Result;
+}
+
+
+// --------------------------------------------------------------------
+// gui_bounding_box
+// --------------------------------------------------------------------
+
+
+typedef struct gui_bounding_box
 {
     float Left;
     float Top;
     float Right;
     float Bottom;
+} gui_bounding_box;
 
-    bounding_box()
-    {
-        Left   = 0;
-        Top    = 0;
-        Right  = 0;
-        Bottom = 0;
-    }
 
-    bounding_box(point Point, dimensions Dimensions)
-    {
-        Left   = Point.X;
-        Top    = Point.Y;
-        Right  = Point.X + Dimensions.Width;
-        Bottom = Point.Y + Dimensions.Height;
-    }
-};
-
+static gui_bounding_box
+GuiBoundingBoxZero(void)
+{
+    gui_bounding_box Result;
+    Result.Left   = 0.0f;
+    Result.Top    = 0.0f;
+    Result.Right  = 0.0f;
+    Result.Bottom = 0.0f;
+    return Result;
 }
 
+
+static gui_bounding_box
+GuiBoundingBoxFromPointAndDimensions(gui_point P, gui_dimensions D)
+{
+    gui_bounding_box Result;
+    Result.Left   = P.X;
+    Result.Top    = P.Y;
+    Result.Right  = P.X + D.Width;
+    Result.Bottom = P.Y + D.Height;
+    return Result;
+}
+
+
+// ====================================================================
 // [Headers]
+// ====================================================================
 
 #include "base/base_core.h"
 #include "ui/ui_inc.h"
 
+// ====================================================================
 // [Source Files]
+// ====================================================================
 
 #include "ui/ui_inc.cpp"

@@ -1,119 +1,135 @@
 #pragma once
 
-namespace gui
+#include <stdint.h>
+
+// =============================================================================
+// Forward Declarations
+// =============================================================================
+
+
+typedef struct gui_layout_tree   gui_layout_tree;
+typedef struct gui_parent_node   gui_parent_node;
+typedef struct gui_cached_style  gui_cached_style;
+typedef struct gui_scroll_region gui_scroll_region;
+
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+
+static const uint32_t GuiInvalidIndex = 0xFFFFFFFFu; // TODO: HIDE
+
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+
+typedef enum Gui_NodeFlags
 {
+    Gui_NodeFlags_None            = 0,
+    Gui_NodeFlags_IsDraggable     = 1 << 0,
+    Gui_NodeFlags_IsResizable     = 1 << 1,
+    Gui_NodeFlags_ClipContent     = 1 << 3,
+    Gui_NodeFlags_Indestructible  = 1 << 4,
+} Gui_NodeFlags;
 
-struct ui_layout_tree;
 
-
-constexpr uint32_t InvalidIndex = 0xFFFFFFFFu; // TODO: HIDE
-
-
-enum class NodeFlags : uint32_t
+typedef enum Gui_Alignment
 {
-    None = 0,
-
-    IsDraggable    = 1 << 0, // Node can be dragged by pointer input
-    IsResizable    = 1 << 1, // Node can be resized by pointer input
-
-    ClipContent    = 1 << 3, // Child rendering is clipped to this node's bounds
-    Indestructible = 1 << 4, // Node cannot be destroyed by normal cleanup paths
-};
+    Gui_Alignment_None   = 0,
+    Gui_Alignment_Start  = 1,
+    Gui_Alignment_Center = 2,
+    Gui_Alignment_End    = 3,
+} Gui_Alignment;
 
 
-enum class Alignment : uint32_t
+typedef enum Gui_LayoutDirection
 {
-    None   = 0,
-    Start  = 1,
-    Center = 2,
-    End    = 3,
-};
+    Gui_LayoutDirection_None       = 0,
+    Gui_LayoutDirection_Horizontal = 1,
+    Gui_LayoutDirection_Vertical   = 2,
+} Gui_LayoutDirection;
 
 
-enum class LayoutDirection : uint32_t
+typedef enum Gui_LayoutSizing
 {
-    None       = 0,
-    Horizontal = 1,
-    Vertical   = 2,
-};
+    Gui_LayoutSizing_None    = 0,
+    Gui_LayoutSizing_Fixed   = 1,
+    Gui_LayoutSizing_Percent = 2,
+    Gui_LayoutSizing_Fit     = 3,
+} Gui_LayoutSizing;
 
 
-enum class LayoutSizing : uint32_t
+// =============================================================================
+// Structs
+// =============================================================================
+
+
+typedef struct gui_sizing
 {
-    None    = 0,
-    Fixed   = 1,
-    Percent = 2,
-    Fit     = 3,
-};
+    float             Value;
+    Gui_LayoutSizing  Type;
+} gui_sizing;
 
 
-struct sizing
+typedef struct gui_size
 {
-    float        Value;
-    LayoutSizing Type;
-};
+    gui_sizing  Width;
+    gui_sizing  Height;
+} gui_size;
 
 
-struct size
-{
-    sizing Width;
-    sizing Height;
-};
+// =============================================================================
+// Tree Manipulation
+// =============================================================================
 
-// --- Tree Manipulation ---
+static gui_memory_footprint GuiGetLayoutTreeFootprint   (uint64_t NodeCount);
+static gui_layout_tree    * GuiPlaceLayoutTreeInMemory  (uint64_t NodeCount, gui_memory_block Block);
+static void                 GuiComputeTreeLayout        (gui_layout_tree *Tree);
 
+// =============================================================================
+// Node Manipulation
+// =============================================================================
 
-static memory_footprint GetLayoutTreeFootprint  (uint64_t NodeCount);
-static ui_layout_tree * PlaceLayoutTreeInMemory (uint64_t NodeCount, memory_block Block);
-static void             ComputeTreeLayout       (ui_layout_tree *Tree);
+static uint32_t GuiCreateNode   (uint64_t Key, uint32_t Flags, gui_cached_style *Style, gui_layout_tree *Tree);
+static bool     GuiAppendChild  (uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *Tree);
+static void     GuiPushParent   (uint32_t NodeIndex, gui_layout_tree *Tree, gui_parent_node *Node);
+static void     GuiPopParent    (uint32_t NodeIndex, gui_layout_tree *Tree);
 
+// =============================================================================
+// Node Queries
+// =============================================================================
 
-// --- Node Manipulation ---
+static uint32_t GuiFindChild  (uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *Tree);
 
+// =============================================================================
+// Tree Queries
+// =============================================================================
 
-struct parent_node;
+static bool GuiHandlePointerClick    (gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree);
+static bool GuiHandlePointerRelease  (gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree);
+static bool GuiHandlePointerHover    (gui_point Position, uint32_t NodeIndex, gui_layout_tree *Tree);
+static void GuiHandlePointerMove     (float DeltaX, float DeltaY, gui_layout_tree *Tree);
 
-static uint32_t CreateNode     (uint64_t Key, NodeFlags Flags, cached_style *Style, ui_layout_tree *Tree);
-static bool     AppendChild    (uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree);
-static void     PushParent     (uint32_t NodeIndex, ui_layout_tree *Tree, parent_node *Node);
-static void     PopParent      (uint32_t NodeIndex, ui_layout_tree *Tree);
+// =============================================================================
+// Node Properties
+// =============================================================================
 
+static void GuiUpdateInput    (uint32_t NodeIndex, gui_cached_style *Cached, gui_layout_tree *Tree);
+static void GuiSetNodeOffset  (uint32_t NodeIndex, float X, float Y, gui_layout_tree *Tree);
 
-// --- Node Queries ---
-
-
-static uint32_t FindChild      (uint32_t ParentIndex, uint32_t ChildIndex, ui_layout_tree *Tree);
-
-
-// --- Tree Queries ---
-
-
-static bool     HandlePointerClick    (point Position, PointerButton ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
-static bool     HandlePointerRelease  (point Position, PointerButton ClickMask, uint32_t NodeIndex, ui_layout_tree *Tree);
-static bool     HandlePointerHover    (point Position, uint32_t NodeIndex, ui_layout_tree *Tree);
-static void     HandlePointerMove     (float DeltaX, float DeltaY, ui_layout_tree *Tree);
-
-
-// --- Node Properties ---
-
-
-static void     UpdateInput    (uint32_t NodeIndex, cached_style *Cached, ui_layout_tree *Tree);
-static void     SetNodeOffset  (uint32_t NodeIndex, float X, float Y, ui_layout_tree *Tree);
-
-
-// ------------------------------------------------------------------------------------
+// =============================================================================
 // @internal: Layout Resources
+// =============================================================================
 
-
-struct scroll_region;
-
-struct scroll_region_params
+typedef struct gui_scroll_region_params
 {
-    float    PixelPerLine;
-    AxisType Axis;
-};
+    float        PixelPerLine;
+    Gui_AxisType Axis;
+} gui_scroll_region_params;
 
-static uint64_t        GetScrollRegionFootprint   (void);
-static scroll_region * PlaceScrollRegionInMemory  (scroll_region_params Params, void *Memory);
 
-} // namespace gui
+static uint64_t            GuiGetScrollRegionFootprint   (void);
+static gui_scroll_region * GuiPlaceScrollRegionInMemory  (gui_scroll_region_params Params, void *Memory);

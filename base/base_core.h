@@ -10,42 +10,42 @@
 #include <stdint.h>
 
 #if defined(_MSV_VER)
-    #define VOID_MSVC 1
+    #define GUI_MSVC 1
 #elif defined(__clang__)
-    #define VOID_CLANG 1
+    #define GUI_CLANG 1
 #elif defined(__GNUC__)
-    #define VOID_GCC 1
+    #define GUI_GCC 1
 #else
-    #error "VOID: Unknown Compiler"
+    #error "GUI: Unknown Compiler"
 #endif
 
-#if VOID_MSVC || VOID_CLANG
+#if GUI_MSVC || GUI_CLANG
     #define AlignOf(T) __alignof(T)
-#elif VOID_GCC
+#elif GUI_GCC
     #define AlignOf(T) __alignof__(T)
 #endif
 
-#if VOID_MSVC
-    #define FindFirstBit(Mask) _tzcnt_u32(Mask)
-#elif VOID_CLANG || VOID_GCC
-    #define FindFirstBit(Mask) __builtin_ctz(Mask)
+#if GUI_MSVC
+    #define GUI_FindFirstBit(Mask) _tzcnt_u32(Mask)
+#elif GUI_CLANG || GUI_GCC
+    #define GUI_FindFirstBit(Mask) __builtin_ctz(Mask)
 #endif
 
-#define VOID_NAMECONCAT2(a, b)   a##b
-#define VOID_NAMECONCAT(a, b)    VOID_NAMECONCAT2(a, b)
+#define GUI_NAMECONCAT2(a, b)   a##b
+#define GUI_NAMECONCAT(a, b)    GUI_NAMECONCAT2(a, b)
 
-#define VOID_ASSERT(Cond)        do { if (!(Cond)) __debugbreak(); } while (0)
-#define VOID_UNUSED(X)           (void)(X)
+#define GUI_ASSERT(Cond)        do { if (!(Cond)) __debugbreak(); } while (0)
+#define GUI_UNUSED(X)           (void)(X)
 
-#define VOID_ARRAYCOUNT(A)       (sizeof(A) / sizeof(A[0]))
-#define VOID_ISPOWEROFTWO(Value) (((Value) & ((Value) - 1)) == 0)
+#define GUI_ARRAYCOUNT(A)       (sizeof(A) / sizeof(A[0]))
+#define GUI_ISPOWEROFTWO(Value) (((Value) & ((Value) - 1)) == 0)
 
-#define VOID_KILOBYTE(n)         (((uint64_t)(n)) << 10)
-#define VOID_MEGABYTE(n)         (((uint64_t)(n)) << 20)
-#define VOID_GIGABYTE(n)         (((uint64_t)(n)) << 30)
+#define GUI_KILOBYTE(n)         (((uint64_t)(n)) << 10)
+#define GUI_MEGABYTE(n)         (((uint64_t)(n)) << 20)
+#define GUI_GIGABYTE(n)         (((uint64_t)(n)) << 30)
 
-#define VOID_BIT(n)              ((uint64_t)( 1ULL << ((n) - 1)))
-#define VOID_BITMASK(n)          ((uint64_t)((1ULL << (n)) - 1ULL))
+#define GUI_BIT(n)              ((uint64_t)( 1ULL << ((n) - 1)))
+#define GUI_BITMASK(n)          ((uint64_t)((1ULL << (n)) - 1ULL))
 
 // [Alignment]
 
@@ -69,7 +69,7 @@
 // [Loop Macros]
 
 #define ForEachEnum(Type, Count, It)  for(uint32_t It = (uint32_t)0; (uint32_t)It < Count; It = ((uint32_t)It + 1))
-#define DeferLoop(Begin, End) for(int VOID_NAMECONCAT(_defer_, __LINE__) = ((Begin), 0); !VOID_NAMECONCAT(_defer_, __LINE__); VOID_NAMECONCAT(_defer_, __LINE__)++, (End))
+#define DeferLoop(Begin, End) for(int GUI_NAMECONCAT(_defer_, __LINE__) = ((Begin), 0); !GUI_NAMECONCAT(_defer_, __LINE__); GUI_NAMECONCAT(_defer_, __LINE__)++, (End))
 
 // [Linked List]
 

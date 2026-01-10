@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <stdbool.h>
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -35,10 +34,10 @@ GuiBoundingBoxSignedDistanceField(gui_point Point, gui_bounding_box BoundingBox)
 }
 
 
-static bool
+static gui_bool
 GuiBoundingBoxesIntersect(gui_bounding_box A, gui_bounding_box B)
 {
-    bool Result = A.Left < B.Right && A.Right > B.Left && A.Top < B.Bottom && A.Bottom > B.Top;
+    gui_bool Result = A.Left < B.Right && A.Right > B.Left && A.Top < B.Bottom && A.Bottom > B.Top;
     return Result;
 }
 
@@ -124,7 +123,7 @@ typedef struct gui_layout_tree
 
 static uint64_t KeyMap_Keys[KEYMAP_CAPACITY];
 static uint32_t KeyMap_Values[KEYMAP_CAPACITY];
-static bool KeyMap_Initialized = false;
+static gui_bool KeyMap_Initialized = GUI_FALSE;
 
 static void
 GuiKeyMap_Init(void)
@@ -136,12 +135,12 @@ GuiKeyMap_Init(void)
             KeyMap_Keys[i] = KEYMAP_EMPTY;
             KeyMap_Values[i] = (uint32_t)GuiInvalidIndex;
         }
-        KeyMap_Initialized = true;
+        KeyMap_Initialized = GUI_TRUE;
     }
 }
 
 static uint32_t
-GuiKeyMap_FindOrInsert(uint64_t Key, bool *Inserted)
+GuiKeyMap_FindOrInsert(uint64_t Key, gui_bool *Inserted)
 {
     // Returns value if found, otherwise inserts and returns GuiInvalidIndex
     GuiKeyMap_Init();
@@ -154,7 +153,7 @@ GuiKeyMap_FindOrInsert(uint64_t Key, bool *Inserted)
         uint64_t Stored = KeyMap_Keys[Slot];
         if(Stored == Key)
         {
-            if(Inserted) *Inserted = false;
+            if(Inserted) *Inserted = GUI_FALSE;
             return KeyMap_Values[Slot];
         }
         if(Stored == KEYMAP_EMPTY)
@@ -162,7 +161,7 @@ GuiKeyMap_FindOrInsert(uint64_t Key, bool *Inserted)
             // Insert
             KeyMap_Keys[Slot] = Key;
             KeyMap_Values[Slot] = (uint32_t)GuiInvalidIndex;
-            if(Inserted) *Inserted = true;
+            if(Inserted) *Inserted = GUI_TRUE;
             return KeyMap_Values[Slot];
         }
         Slot = (Slot + 1) & (KEYMAP_CAPACITY - 1);
@@ -216,9 +215,9 @@ GuiKeyMap_Find(uint64_t Key, uint32_t *OutValue)
 // -----------------------------------------------------------------------------
 
 
-static bool GuiIsValidLayoutNode(gui_layout_node *Node)
+static gui_bool GuiIsValidLayoutNode(gui_layout_node *Node)
 {
-    bool Result = Node && (Node->Index != GuiInvalidIndex);
+    gui_bool Result = Node && (Node->Index != GuiInvalidIndex);
     return Result;
 }
 
@@ -307,10 +306,10 @@ GuiAppendLayoutNode(gui_node_buffer NodeBuffer, uint32_t ParentIndex, uint32_t C
 }
 
 
-static bool
+static gui_bool
 GuiIsValidLayoutTree(const gui_layout_tree *Tree)
 {
-    bool Result = (Tree && Tree->NodeBuffer.Nodes && Tree->NodeBuffer.Count <= Tree->NodeBuffer.Capacity);
+    gui_bool Result = (Tree && Tree->NodeBuffer.Nodes && Tree->NodeBuffer.Count <= Tree->NodeBuffer.Capacity);
     return Result;
 }
 
@@ -477,7 +476,7 @@ GuiGetLayoutNodeContentRect(gui_layout_node *Node)
 }
 
 static uint32_t
-GuiCreateNode(uint64_t Key, uint32_t Flags, gui_cached_style *Style, gui_layout_tree *Tree)
+GuiCreateNode(uint64_t Key, uint32_t Flags, gui_layout_tree *Tree)
 {
     uint32_t Result = (uint32_t)GuiInvalidIndex;
 
@@ -563,14 +562,14 @@ GuiFindChild(uint32_t NodeIndex, uint32_t FindIndex, gui_layout_tree *Tree)
     return Result;
 }
 
-static bool
+static gui_bool
 GuiAppendChild(uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *Tree)
 {
-    bool Result = false;
+    gui_bool Result = GUI_FALSE;
     if(GuiIsValidLayoutTree(Tree) && ParentIndex != ChildIndex)
     {
         GuiAppendLayoutNode(Tree->NodeBuffer, ParentIndex, ChildIndex);
-        Result = true;
+        Result = GUI_TRUE;
     }
     return Result;
 }
@@ -700,9 +699,9 @@ GuiGetScrollNodeTranslation(gui_scroll_region *Region)
 // Input Handling
 // -----------------------------------------------------------------------------
 
-static bool GuiIsMouseInsideOuterBox(gui_point Position, gui_layout_node *Node)
+static gui_bool GuiIsMouseInsideOuterBox(gui_point Position, gui_layout_node *Node)
 {
-    bool Result = false;
+    gui_bool Result = GUI_FALSE;
     if(GuiIsValidLayoutNode(Node))
     {
         gui_bounding_box Box = GuiGetLayoutNodeBoundingBox(Node);
@@ -712,9 +711,9 @@ static bool GuiIsMouseInsideOuterBox(gui_point Position, gui_layout_node *Node)
     return Result;
 }
 
-static bool GuiIsPointInsideBorder(gui_point Position, gui_layout_node *Node)
+static gui_bool GuiIsPointInsideBorder(gui_point Position, gui_layout_node *Node)
 {
-    bool Result = false;
+    gui_bool Result = GUI_FALSE;
     if(GuiIsValidLayoutNode(Node))
     {
         gui_bounding_box Box = GuiGetLayoutNodeBoundingBox(Node);
@@ -724,7 +723,7 @@ static bool GuiIsPointInsideBorder(gui_point Position, gui_layout_node *Node)
     return Result;
 }
 
-static bool
+static gui_bool
 GuiHandlePointerClick(gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
     GUI_ASSERT(Position.X >= 0.0f && Position.Y >= 0.0f);
@@ -741,8 +740,8 @@ GuiHandlePointerClick(gui_point Position, uint32_t ClickMask, uint32_t NodeIndex
             {
                 for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
                 {
-                    bool IsHandled = GuiHandlePointerClick(Position, ClickMask, Child->Index, Tree);
-                    if(IsHandled) return true;
+                    gui_bool IsHandled = GuiHandlePointerClick(Position, ClickMask, Child->Index, Tree);
+                    if(IsHandled) return GUI_TRUE;
                 }
 
                 Node->State = (Gui_NodeState)(Node->State | Gui_NodeState_IsClicked);
@@ -750,15 +749,15 @@ GuiHandlePointerClick(gui_point Position, uint32_t ClickMask, uint32_t NodeIndex
                 Node->State = (Gui_NodeState)(Node->State | Gui_NodeState_HasCapturedPointer);
 
                 Tree->CapturedNodeIndex = NodeIndex;
-                return true;
+                return GUI_TRUE;
             }
         }
     }
 
-    return false;
+    return GUI_FALSE;
 }
 
-static bool
+static gui_bool
 GuiHandlePointerRelease(gui_point Position, uint32_t ReleaseMask, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
     GUI_ASSERT(Position.X >= 0.0f && Position.Y >= 0.0f);
@@ -771,21 +770,21 @@ GuiHandlePointerRelease(gui_point Position, uint32_t ReleaseMask, uint32_t NodeI
 
         for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
         {
-            if(GuiHandlePointerRelease(Position, ReleaseMask, Child->Index, Tree)) return true;
+            if(GuiHandlePointerRelease(Position, ReleaseMask, Child->Index, Tree)) return GUI_TRUE;
         }
 
         if((Node->State & Gui_NodeState_HasCapturedPointer) != Gui_NodeState_None)
         {
             Node->State = (Gui_NodeState)(Node->State & ~(Gui_NodeState_HasCapturedPointer | Gui_NodeState_UseFocusedStyle));
             Tree->CapturedNodeIndex = GuiInvalidIndex;
-            return true;
+            return GUI_TRUE;
         }
     }
 
-    return false;
+    return GUI_FALSE;
 }
 
-static bool
+static gui_bool
 GuiHandlePointerHover(gui_point Position, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
     GUI_ASSERT(Position.X >= 0.0f && Position.Y >= 0.0f);
@@ -799,16 +798,16 @@ GuiHandlePointerHover(gui_point Position, uint32_t NodeIndex, gui_layout_tree *T
         {
             for(gui_layout_node *Child = GuiGetLayoutNode(Tree->NodeBuffer, Node->First); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Tree->NodeBuffer, Child->Next))
             {
-                bool IsHandled = GuiHandlePointerHover(Position, Child->Index, Tree);
-                if(IsHandled) return true;
+                gui_bool IsHandled = GuiHandlePointerHover(Position, Child->Index, Tree);
+                if(IsHandled) return GUI_TRUE;
             }
 
             Node->State = Node->State | Gui_NodeState_UseHoveredStyle;
-            return true;
+            return GUI_TRUE;
         }
     }
 
-    return false;
+    return GUI_FALSE;
 }
 
 static void
@@ -895,7 +894,7 @@ GuiComputeNodeSize(gui_sizing Sizing, float ParentSize)
 }
 
 static void
-GuiComputeLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_dimensions ParentBounds, gui_resource_table *ResourceTable, bool *Changed)
+GuiComputeLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_dimensions ParentBounds, gui_resource_table *ResourceTable, gui_bool *Changed)
 {
     GUI_ASSERT(GuiIsValidLayoutNode(Node));
     GUI_ASSERT(GuiIsValidLayoutTree(Tree));
@@ -914,7 +913,7 @@ GuiComputeLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_dimensions Pa
 
     if((Node->OutputSize.Width != LastSize.Width) || (Node->OutputSize.Height != LastSize.Height))
     {
-        if(Changed) *Changed = true;
+        if(Changed) *Changed = GUI_TRUE;
     }
 
     gui_dimensions ContentBounds = (gui_dimensions){ .Width = Node->OutputSize.Width - (Node->Padding.Left + Node->Padding.Right), .Height = Node->OutputSize.Height - (Node->Padding.Top + Node->Padding.Bot) };
@@ -946,7 +945,7 @@ static void
 GuiPlaceLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_resource_table *ResourceTable)
 {
     gui_point Cursor = (gui_point){ .X = Node->OutputPosition.X + Node->Padding.Left, .Y = Node->OutputPosition.Y + Node->Padding.Top };
-    bool IsXMajor = (Node->Direction == Gui_LayoutDirection_Horizontal) ? true : false;
+    gui_bool IsXMajor = (Node->Direction == Gui_LayoutDirection_Horizontal) ? GUI_TRUE : GUI_FALSE;
 
     float MajorSize = IsXMajor ? Node->OutputSize.Width - (Node->Padding.Left + Node->Padding.Right) : Node->OutputSize.Height - (Node->Padding.Top + Node->Padding.Bot);
     float MinorSize = IsXMajor ? Node->OutputSize.Height - (Node->Padding.Top + Node->Padding.Bot) : Node->OutputSize.Width - (Node->Padding.Left + Node->Padding.Right);
@@ -993,9 +992,9 @@ GuiComputeTreeLayout(gui_layout_tree *Tree)
         gui_context     *Context    = GuiGetContext();
         gui_layout_node *ActiveRoot = GuiGetLayoutNode(Tree->NodeBuffer, (uint64_t)Tree->RootIndex);
 
-        while(true)
+        while(GUI_TRUE)
         {
-            bool Changed = false;
+            gui_bool Changed = GUI_FALSE;
             GuiComputeLayout(ActiveRoot, Tree, ActiveRoot->OutputSize, (gui_resource_table *)Context->ResourceTable, &Changed);
             if(!Changed) break;
         }

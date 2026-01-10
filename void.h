@@ -5,9 +5,6 @@
 #define STB_RECT_PACK_IMPLEMENTATION
 #include "third_party/stb_rect_pack.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "third_party/stb_image.h"
-
 #define XXH_NO_STREAM
 #define XXH_STATIC_LINKING_ONLY
 #define XXH_IMPLEMENTATION
@@ -19,7 +16,10 @@
 
 
 #include <stdint.h>
-#include <stdbool.h>
+
+typedef int gui_bool;
+#define GUI_TRUE  1
+#define GUI_FALSE 0
 
 
 typedef struct gui_dimensions
@@ -27,6 +27,20 @@ typedef struct gui_dimensions
     float Width;
     float Height;
 } gui_dimensions;
+
+
+typedef struct gui_point
+{
+    float X;
+    float Y;
+} gui_point;
+
+
+typedef struct gui_translation
+{
+    float X;
+    float Y;
+} gui_translation;
 
 
 static gui_dimensions
@@ -37,13 +51,6 @@ GuiDimensionsAdd(gui_dimensions A, gui_dimensions B)
     Result.Height = A.Height + B.Height;
     return Result;
 }
-
-
-typedef struct gui_point
-{
-    float X;
-    float Y;
-} gui_point;
 
 
 static gui_point
@@ -84,13 +91,6 @@ GuiPointSubDimensions(gui_point P, gui_dimensions D)
     Result.Y = P.Y - D.Height;
     return Result;
 }
-
-
-typedef struct gui_translation
-{
-    float X;
-    float Y;
-} gui_translation;
 
 
 static gui_translation

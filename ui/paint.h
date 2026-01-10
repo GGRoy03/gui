@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <stdbool.h>
 
 // =============================================================================
 // Style Property
@@ -10,50 +9,50 @@
 
 typedef struct gui_style_property_float
 {
-    float Value;
-    bool  IsSet;
+    float    Value;
+    gui_bool IsSet;
 } gui_style_property_float;
 
 
 typedef struct gui_style_property_size
 {
     gui_size Value;
-    bool     IsSet;
+    gui_bool IsSet;
 } gui_style_property_size;
 
 
 typedef struct gui_style_property_color
 {
     gui_color Value;
-    bool      IsSet;
+    gui_bool  IsSet;
 } gui_style_property_color;
 
 
 typedef struct gui_style_property_corner_radius
 {
     gui_corner_radius Value;
-    bool              IsSet;
+    gui_bool          IsSet;
 } gui_style_property_corner_radius;
 
 
 typedef struct gui_style_property_padding
 {
     gui_padding Value;
-    bool        IsSet;
+    gui_bool    IsSet;
 } gui_style_property_padding;
 
 
 typedef struct gui_style_property_alignment
 {
     Gui_Alignment Value;
-    bool          IsSet;
+    gui_bool      IsSet;
 } gui_style_property_alignment;
 
 
 typedef struct gui_style_property_layout_direction
 {
     Gui_LayoutDirection Value;
-    bool                IsSet;
+    gui_bool            IsSet;
 } gui_style_property_layout_direction;
 
 
@@ -214,4 +213,4 @@ typedef struct gui_render_command_list
 
 
 static gui_memory_footprint    GuiGetRenderCommandsFootprint  (gui_layout_tree *Tree);
-static gui_render_command_list GuiComputeRenderCommands       (gui_layout_tree *Tree, void *Memory);
+static gui_render_command_list GuiComputeRenderCommands       (gui_layout_tree *Tree, gui_memory_block Block);

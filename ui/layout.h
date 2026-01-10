@@ -93,8 +93,8 @@ static void                 GuiComputeTreeLayout        (gui_layout_tree *Tree);
 // Node Manipulation
 // =============================================================================
 
-static uint32_t GuiCreateNode   (uint64_t Key, uint32_t Flags, gui_cached_style *Style, gui_layout_tree *Tree);
-static bool     GuiAppendChild  (uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *Tree);
+static uint32_t GuiCreateNode   (uint64_t Key, uint32_t Flags, gui_layout_tree *Tree);
+static gui_bool GuiAppendChild  (uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *Tree);
 static void     GuiPushParent   (uint32_t NodeIndex, gui_layout_tree *Tree, gui_parent_node *Node);
 static void     GuiPopParent    (uint32_t NodeIndex, gui_layout_tree *Tree);
 
@@ -108,17 +108,17 @@ static uint32_t GuiFindChild  (uint32_t ParentIndex, uint32_t ChildIndex, gui_la
 // Tree Queries
 // =============================================================================
 
-static bool GuiHandlePointerClick    (gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree);
-static bool GuiHandlePointerRelease  (gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree);
-static bool GuiHandlePointerHover    (gui_point Position, uint32_t NodeIndex, gui_layout_tree *Tree);
-static void GuiHandlePointerMove     (float DeltaX, float DeltaY, gui_layout_tree *Tree);
+static gui_bool GuiHandlePointerClick    (gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree);
+static gui_bool GuiHandlePointerRelease  (gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree);
+static gui_bool GuiHandlePointerHover    (gui_point Position, uint32_t NodeIndex, gui_layout_tree *Tree);
+static void     GuiHandlePointerMove     (float DeltaX, float DeltaY, gui_layout_tree *Tree);
 
 // =============================================================================
 // Node Properties
 // =============================================================================
 
 static void GuiUpdateInput    (uint32_t NodeIndex, gui_cached_style *Cached, gui_layout_tree *Tree);
-static void GuiSetNodeOffset  (uint32_t NodeIndex, float X, float Y, gui_layout_tree *Tree);
+static void GuiSetNodeOffset  (uint32_t NodeIndex, gui_dimensions Offset, gui_layout_tree *Tree);
 
 // =============================================================================
 // @internal: Layout Resources

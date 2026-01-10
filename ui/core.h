@@ -2,7 +2,6 @@
 
 
 #include <stdint.h>
-#include <stdbool.h>
 #include <immintrin.h>
 
 
@@ -11,11 +10,11 @@
 // =============================================================================
 
 
-struct gui_layout_tree;
-struct gui_parent_node;
-struct gui_cached_style;
-struct gui_font;
-struct gui_resource_table;
+typedef struct gui_layout_tree    gui_layout_tree;
+typedef struct gui_parent_node    gui_parent_node;
+typedef struct gui_cached_style   gui_cached_style;
+typedef struct gui_font           gui_font;
+typedef struct gui_resource_table gui_resource_table;
 
 
 // =============================================================================
@@ -76,7 +75,7 @@ typedef struct gui_byte_string
 
 
 static gui_byte_string GuiByteString(char *String, uint64_t Size);
-static bool            GuiIsValidByteString(gui_byte_string Input);
+static gui_bool            GuiIsValidByteString(gui_byte_string Input);
 static uint64_t        GuiHashByteString(gui_byte_string Input);
 
 
@@ -107,10 +106,10 @@ typedef struct gui_memory_region
 } gui_memory_region;
 
 
-static bool
+static gui_bool
 GuiIsValidMemoryRegion(gui_memory_region *Region)
 {
-    bool Result = Region && Region->Base && Region->Size && Region->At <= Region->Size;
+    gui_bool Result = Region && Region->Base && Region->Size && Region->At <= Region->Size;
     return Result;
 }
 
@@ -251,12 +250,13 @@ typedef struct gui_pointer_event
 } gui_pointer_event;
 
 
-typedef struct gui_pointer_event_node
+typedef struct gui_pointer_event_node gui_pointer_event_node;
+struct gui_pointer_event_node
 {
     gui_pointer_event_node *Prev;
     gui_pointer_event_node *Next;
     gui_pointer_event       Value;
-} gui_pointer_event_node;
+};
 
 
 typedef struct gui_pointer_event_list
@@ -267,10 +267,10 @@ typedef struct gui_pointer_event_list
 } gui_pointer_event_list;
 
 
-static void GuiClearPointerEvents       (gui_pointer_event_list *List);
-static bool GuiPushPointerMoveEvent     (gui_point Position, gui_point LastPosition, gui_pointer_event_node *Node, gui_pointer_event_list *List);
-static bool GuiPushPointerClickEvent    (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
-static bool GuiPushPointerReleaseEvent  (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
+static void     GuiClearPointerEvents       (gui_pointer_event_list *List);
+static gui_bool GuiPushPointerMoveEvent     (gui_point Position, gui_point LastPosition, gui_pointer_event_node *Node, gui_pointer_event_list *List);
+static gui_bool GuiPushPointerClickEvent    (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
+static gui_bool GuiPushPointerReleaseEvent  (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
 
 
 // =============================================================================
@@ -298,11 +298,10 @@ typedef struct gui_context
 static gui_context GlobalVoidContext;
 
 
-static void          GuiBeginFrame         (float Width, float Height, const gui_pointer_event_list *EventList, gui_layout_tree *Tree);
+static void          GuiBeginFrame         (float Width, float Height, gui_pointer_event_list *EventList, gui_layout_tree *Tree);
 static void          GuiEndFrame           (void);
 
 static gui_context * GuiGetContext         (void);
-static void          GuiCreateVoidContext  (void);
 
 
 // =============================================================================
@@ -319,6 +318,6 @@ typedef struct gui_component
 
 static gui_component GuiCreateComponent  (gui_byte_string Name, uint32_t Flags, gui_cached_style *Style, gui_layout_tree *Tree);
 
-static void GuiSetComponentStyle         (gui_component *Component, gui_cached_style *Style);
-static bool GuiPushComponent             (gui_component *Component, gui_parent_node *ParentNode);
-static bool GuiPopComponent              (gui_component *Component);
+static void     GuiSetStyle              (gui_component *Component, gui_cached_style *Style);
+static gui_bool GuiPushComponent         (gui_component *Component, gui_parent_node *ParentNode);
+static gui_bool GuiPopComponent          (gui_component *Component);

@@ -9,7 +9,7 @@
 #include <float.h>
 #include <stdint.h>
 
-#if defined(_MSV_VER)
+#if defined(_MSC_VER)
     #define GUI_MSVC 1
 #elif defined(__clang__)
     #define GUI_CLANG 1

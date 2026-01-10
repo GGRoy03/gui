@@ -11,10 +11,10 @@ GuiByteString(char *String, uint64_t Size)
 }
 
 
-static bool
+static gui_bool
 GuiIsValidByteString(gui_byte_string Input)
 {
-    bool Result = (Input.String) && (Input.Size);
+    gui_bool Result = (Input.String) && (Input.Size);
     return Result;
 }
 
@@ -32,13 +32,14 @@ GuiHashByteString(gui_byte_string Input)
 // =============================================================================
 
 
-struct gui_resource_allocator
+typedef struct gui_resource_allocator
 {
     uint64_t AllocatedCount;
     uint64_t AllocatedBytes;
-};
+} gui_resource_allocator;
 
-struct gui_resource_entry
+
+typedef struct gui_resource_entry
 {
     gui_resource_key Key;
 
@@ -48,9 +49,10 @@ struct gui_resource_entry
 
     Gui_ResourceType ResourceType;
     void            *Memory;
-};
+} gui_resource_entry;
 
-struct gui_resource_table
+
+typedef struct gui_resource_table
 {
     gui_resource_stats     Stats;
     gui_resource_allocator Allocator;
@@ -61,7 +63,8 @@ struct gui_resource_table
 
     uint32_t              *HashTable;
     gui_resource_entry    *Entries;
-};
+} gui_resource_table;
+
 
 static gui_resource_entry *
 GuiGetResourceSentinel(gui_resource_table *Table)
@@ -69,6 +72,7 @@ GuiGetResourceSentinel(gui_resource_table *Table)
     gui_resource_entry *Result = Table->Entries;
     return Result;
 }
+
 
 static uint32_t *
 GuiGetResourceSlotPointer(gui_resource_key Key, gui_resource_table *Table)
@@ -82,6 +86,7 @@ GuiGetResourceSlotPointer(gui_resource_key Key, gui_resource_table *Table)
     return Result;
 }
 
+
 static gui_resource_entry *
 GuiGetResourceEntry(uint32_t Index, gui_resource_table *Table)
 {
@@ -91,14 +96,16 @@ GuiGetResourceEntry(uint32_t Index, gui_resource_table *Table)
     return Result;
 }
 
-static bool
+
+static gui_bool
 GuiResourceKeyAreEqual(gui_resource_key A, gui_resource_key B)
 {
     __m128i Compare = _mm_cmpeq_epi32(A.Value, B.Value);
-    bool     Result  = (_mm_movemask_epi8(Compare) == 0xffff);
+    gui_bool     Result  = (_mm_movemask_epi8(Compare) == 0xffff);
 
     return Result;
 }
+
 
 static uint32_t
 GuiPopFreeResourceEntry(gui_resource_table *Table)
@@ -285,12 +292,9 @@ GuiFindResourceByKey(gui_resource_key Key, Gui_FindResourceFlag Flags, gui_resou
             Sentinel->NextLRU = EntryIndex;
         }
         
-        Result =
-        {
-            .Id           = EntryIndex,
-            .ResourceType = FoundEntry ? FoundEntry->ResourceType : Gui_ResourceType_None,
-            .Resource     = FoundEntry ? FoundEntry->Memory       : 0,
-        };
+        Result.Id           = EntryIndex;
+        Result.ResourceType = FoundEntry ? FoundEntry->ResourceType : Gui_ResourceType_None;
+        Result.Resource     = FoundEntry ? FoundEntry->Memory : 0;
     }
 
     return Result;
@@ -332,7 +336,7 @@ GuiQueryNodeResource(Gui_ResourceType Type, uint32_t NodeIndex, gui_layout_tree 
 // ----------------------------------------------------------------------------------
 // Context Public API Implementation
 
-struct gui_pointer_state
+typedef struct gui_pointer_state
 {
     uint32_t          Id;
     gui_point         Position;
@@ -340,8 +344,8 @@ struct gui_pointer_state
     uint32_t          ButtonMask;
 
     // Targets?
-    bool     IsCaptured; // This might be, uhhh, a state flag with some other states.
-};
+    gui_bool     IsCaptured; // This might be, uhhh, a state flag with some other states.
+} gui_pointer_state;
 
 
 static void
@@ -356,10 +360,10 @@ GuiClearPointerEvents(gui_pointer_event_list *List)
 }
 
 
-static bool
+static gui_bool
 GuiPushPointerEvent(Gui_PointerEvent Type, gui_pointer_event_node *Node, gui_pointer_event_list *List)
 {
-    bool Pushed = false;
+    gui_bool Pushed = GUI_FALSE;
 
     if(List && Node && Type != Gui_PointerEvent_None)
     {
@@ -369,17 +373,17 @@ GuiPushPointerEvent(Gui_PointerEvent Type, gui_pointer_event_node *Node, gui_poi
 
         AppendToDoublyLinkedList(List, Node, List->Count);
 
-        Pushed = true;
+        Pushed = GUI_TRUE;
     }
 
     return Pushed;
 }
 
 
-static bool
+static gui_bool
 GuiPushPointerMoveEvent(gui_point Position, gui_point LastPosition, gui_pointer_event_node *Node, gui_pointer_event_list *List)
 {
-    bool Pushed = false;
+    gui_bool Pushed = GUI_FALSE;
 
     if(Node)
     {
@@ -393,10 +397,10 @@ GuiPushPointerMoveEvent(gui_point Position, gui_point LastPosition, gui_pointer_
 }
 
 
-static bool
+static gui_bool
 GuiPushPointerClickEvent(Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List)
 {
-    bool Pushed = false;
+    gui_bool Pushed = GUI_FALSE;
 
     if(Node)
     {
@@ -410,10 +414,10 @@ GuiPushPointerClickEvent(Gui_PointerButton Button, gui_point Position, gui_point
 }
 
 
-static bool
+static gui_bool
 GuiPushPointerReleaseEvent(Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List)
 {
-    bool Pushed = false;
+    gui_bool Pushed = GUI_FALSE;
 
     if(Node)
     {
@@ -446,11 +450,11 @@ GuiBeginFrame(float Width, float Height, gui_pointer_event_list *EventList, gui_
 
         case Gui_PointerEvent_Move:
         {
-            gui_pointer_state &State = PointerStates[0];
-            State.LastPosition = State.Position;
-            State.Position     = Event.Position;
+            gui_pointer_state *State = &PointerStates[0];
+            State->LastPosition = State->Position;
+            State->Position     = Event.Position;
 
-            if(State.IsCaptured)
+            if(State->IsCaptured)
             {
                 float DeltaX = Event.Delta.X;
                 float DeltaY = Event.Delta.Y;
@@ -460,20 +464,20 @@ GuiBeginFrame(float Width, float Height, gui_pointer_event_list *EventList, gui_
 
         case Gui_PointerEvent_Click:
         {
-            gui_pointer_state &State = PointerStates[0];
-            State.ButtonMask |= Event.ButtonMask;
-            State.IsCaptured  = GuiHandlePointerClick(State.Position, State.ButtonMask, 0, Tree);
+            gui_pointer_state *State = &PointerStates[0];
+            State->ButtonMask |= Event.ButtonMask;
+            State->IsCaptured  = GuiHandlePointerClick(State->Position, State->ButtonMask, 0, Tree);
         } break;
 
         case Gui_PointerEvent_Release:
         {
-            gui_pointer_state &State = PointerStates[0];
-            State.ButtonMask &= ~Event.ButtonMask;
+            gui_pointer_state *State = &PointerStates[0];
+            State->ButtonMask &= ~Event.ButtonMask;
 
-            if(State.IsCaptured)
+            if(State->IsCaptured)
             {
-                GuiHandlePointerRelease(State.Position, State.ButtonMask, 0, Tree);
-                State.IsCaptured = false;
+                GuiHandlePointerRelease(State->Position, State->ButtonMask, 0, Tree);
+                State->IsCaptured = GUI_FALSE;
             }
         } break;
 
@@ -490,7 +494,7 @@ GuiBeginFrame(float Width, float Height, gui_pointer_event_list *EventList, gui_
 
     for(int32_t PointerIdx = 0; PointerIdx < 1; ++PointerIdx)
     {
-        gui_pointer_state &State = PointerStates[PointerIdx];
+        gui_pointer_state State = PointerStates[PointerIdx];
 
         if(State.ButtonMask == Gui_PointerButton_None) 
         {
@@ -548,7 +552,7 @@ GuiCreateComponent(gui_byte_string Name, uint32_t Flags, gui_cached_style *Style
 {
     gui_component Component = 
     {
-        .LayoutIndex = GuiCreateNode(GuiHashByteString(Name), Flags, Style, Tree),
+        .LayoutIndex = GuiCreateNode(GuiHashByteString(Name), Flags, Tree),
         .LayoutTree  = Tree,
     };
 
@@ -565,10 +569,10 @@ GuiSetStyle(gui_component *Component, gui_cached_style *Style)
 }
 
 
-static bool
+static gui_bool
 GuiPushComponent(gui_component *Component, gui_parent_node *Node)
 {
-    bool Result = Component && Node;
+    gui_bool Result = Component && Node;
 
     if(Result)
     {
@@ -579,9 +583,9 @@ GuiPushComponent(gui_component *Component, gui_parent_node *Node)
 }
 
 
-static bool
+static gui_bool
 GuiPopComponent(gui_component *Component)
 {
     GuiPopParent(Component->LayoutIndex, Component->LayoutTree);
-    return true;
+    return GUI_TRUE;
 }

@@ -75,7 +75,7 @@ typedef struct gui_byte_string
 
 
 static gui_byte_string GuiByteString(char *String, uint64_t Size);
-static gui_bool            GuiIsValidByteString(gui_byte_string Input);
+static gui_bool        GuiIsValidByteString(gui_byte_string Input);
 static uint64_t        GuiHashByteString(gui_byte_string Input);
 
 
@@ -106,41 +106,7 @@ typedef struct gui_memory_region
 } gui_memory_region;
 
 
-static gui_bool
-GuiIsValidMemoryRegion(gui_memory_region *Region)
-{
-    gui_bool Result = Region && Region->Base && Region->Size && Region->At <= Region->Size;
-    return Result;
-}
 
-
-static gui_memory_region
-GuiEnterMemoryRegion(gui_memory_block Block)
-{
-    gui_memory_region Region;
-    Region.Base = Block.Base;
-    Region.Size = Block.SizeInBytes;
-    Region.At   = 0;
-    return Region;
-}
-
-
-static void *
-GuiPushMemoryRegion(gui_memory_region *Region, uint64_t Size, uint64_t Alignment)
-{
-    void *Result = 0;
-
-    uint64_t Before = AlignPow2(Region->At, Alignment);
-    uint64_t After  = Before + Size;
-
-    if(After <= Region->Size)
-    {
-        Result = (uint8_t *)Region->Base + Before;
-        Region->At = After;
-    }
-
-    return Result;
-}
 
 
 #define GuiPushArrayNoZeroAligned(Region, Type, Count, Align) ((Type *)GuiPushMemoryRegion((Region), sizeof(Type) * (Count), (Align)))

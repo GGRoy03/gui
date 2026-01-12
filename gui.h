@@ -8,8 +8,8 @@ extern "C" {
 
 //-----------------------------------------------------------------------------
 // TODO-LIST
-// - THINK ABOUT HOW WE WANT TO HANDLE THE RESOURCES.
 // - THINK ABOUT THE RENDERING API
+// - THINK ABOUT AN ITERATOR?
 //-----------------------------------------------------------------------------
 
 
@@ -320,12 +320,15 @@ GUI_API void                 GuiComputeTreeLayout        (gui_layout_tree *Tree)
 // [SECTION] GUI PAINTING API
 // [DESCRIP] ...
 // [HISTORY]
-// : - 2026-01-11 Basic Implementation
+// : - 2026-01-12 Basic Implementation
 //-----------------------------------------------------------------------------
+
 
 typedef enum Gui_RenderCommandType
 {
-    Gui_RenderCommandType_None      = 0,
+    Gui_RenderCommandType_None = 0,
+    Gui_RenderCommandType_End  = 0,
+
     Gui_RenderCommandType_Rectangle = 1,
     Gui_RenderCommandType_Border    = 2,
     Gui_RenderCommandType_Text      = 3,
@@ -344,34 +347,20 @@ typedef struct gui_corner_radius
 } gui_corner_radius;
 
 
-typedef struct gui_paint_properties
+typedef struct gui_paint_style
 {
     gui_color         Color;
-    gui_color         HoveredColor;
-    gui_color         FocusedColor;
-
     gui_color         BorderColor;
-    gui_color         HoveredBorderColor;
-    gui_color         FocusedBorderColor;
-
     float             BorderWidth;
-    float             HoveredBorderWidth;
-    float             FocusedBorderWidth;
-
-    gui_color         TextColor;
-    gui_color         HoveredTextColor;
-    gui_color         FocusedTextColor;
-
-    gui_color         CaretColor;
-    float             CaretWidth;
-
     gui_corner_radius CornerRadius;
-    gui_corner_radius HoveredCornerRadius;
-    gui_corner_radius FocusedCornerRadius;
+} gui_paint_style;
 
-    float             Softness;
-    float             HoveredSoftness;
-    float             FocusedSoftness;
+
+typedef struct gui_paint_properties
+{
+    gui_paint_style Default;
+    gui_paint_style Hovered;
+    gui_paint_style Focused;
 } gui_paint_properties;
 
 
@@ -405,17 +394,18 @@ typedef struct gui_render_command
 } gui_render_command;
 
 
-typedef struct gui_render_command_list
+typedef struct gui_render_command_params
 {
-    gui_render_command *Commands;
-    uint32_t            Count;
-} gui_render_command_list;
-
-GUI_API void GuiUpdateStyle  (gui_node Node, gui_paint_properties *Properties, gui_layout_tree *Tree);
+    uint32_t Count;
+} gui_render_command_params;
 
 
-GUI_API gui_memory_footprint    GuiGetRenderCommandsFootprint  (gui_layout_tree *Tree);
-GUI_API gui_render_command_list GuiComputeRenderCommands       (gui_layout_tree *Tree, gui_memory_block Block);
+GUI_API gui_color              GuiColorFromRGB8               (uint8_t R, uint8_t G, uint8_t B, uint8_t A);
+GUI_API void                   GuiUpdateStyle                 (gui_node Node, gui_paint_properties *Properties, gui_layout_tree *Tree);
+
+GUI_API uint32_t               GuiGetRenderCommandCount       (gui_render_command_params Params, gui_layout_tree *Tree);
+GUI_API gui_memory_footprint   GuiGetRenderCommandsFootprint  (gui_render_command_params Params, gui_layout_tree *Tree);
+GUI_API gui_render_command   * GuiComputeRenderCommands       (gui_render_command_params Params, gui_layout_tree *Tree, gui_memory_block Block);
 
 
 //-----------------------------------------------------------------------------
@@ -1883,41 +1873,125 @@ GuiComputeTreeLayout(gui_layout_tree *Tree)
 
 
 //-----------------------------------------------------------------------------
-// [SECTION] GUI PAINTING API IMPLEMENTATION
+// [SECTION] GUI PAINTING INTERNAL HELPERS
 // [DESCRIP] ...
 // [HISTORY]
-// : - 2026-01-11 Basic Implementation
+// : - 2026-01-12 Basic Implementation
 //-----------------------------------------------------------------------------
 
 
-#define GUI_MAX_COMMAND_PER_NODE 2u
+static uint32_t
+GuiCountCommandForTree(uint32_t NodeIndex, gui_layout_tree *Tree)
+{
+    uint32_t Count = 0;
 
-// TODO: Sloppy code!
+    gui_layout_node *Node = GuiGetLayoutNode(NodeIndex, Tree);
+    GUI_ASSERT(Node);
+
+    gui_paint_style *Style = &Tree->PaintBuffer[Node->Index].Default;
+
+    if (Node->State & Gui_NodeState_UseFocusedStyle)
+    {
+        Style = &Tree->PaintBuffer[Node->Index].Focused;
+    }
+    else if (Node->State & Gui_NodeState_UseHoveredStyle)
+    {
+        Style = &Tree->PaintBuffer[Node->Index].Hovered;
+    }
+
+    gui_color Color        = Style->Color;
+    float     BorderWidth  = Style->BorderWidth;
+
+    if (Color.A > 0.0f)
+    {
+        ++Count;
+    }
+
+    if (BorderWidth > 0.0f)
+    {
+        ++Count;
+    }
+
+    for (uint32_t Child = Node->First; Child != GuiInvalidIndex; Child = GuiGetLayoutNode(Child, Tree)->Next)
+    {
+        Count += GuiCountCommandForTree(Child, Tree);
+    }
+
+    return Count;
+}
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] GUI PAINTING API IMPLEMENTATION
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-12 Basic Implementation
+//-----------------------------------------------------------------------------
+
+
+GUI_API gui_color
+GuiColorFromRGB8(uint8_t R, uint8_t G, uint8_t B, uint8_t A)
+{
+    gui_color Color = 
+    {
+        .R = (float)(R / (255.f)),
+        .G = (float)(G / (255.f)),
+        .B = (float)(B / (255.f)),
+        .A = (float)(A / (255.f)),
+    };
+
+    return Color;
+}
+
 
 GUI_API void
 GuiUpdateStyle(gui_node Node, gui_paint_properties *Properties, gui_layout_tree *Tree)
 {
     if (GuiIsValidLayoutTree(Tree) && Properties)
     {
-        memcpy(&Tree->PaintBuffer[Node.Value], Properties, sizeof(gui_paint_properties));
+        gui_paint_properties *Resolved = &Tree->PaintBuffer[Node.Value];
+
+        Resolved->Default.Color        = Properties->Default.Color;
+        Resolved->Default.BorderColor  = Properties->Default.BorderColor;
+        Resolved->Default.BorderWidth  = Properties->Default.BorderWidth;
+        Resolved->Default.CornerRadius = Properties->Default.CornerRadius;
+
+        Resolved->Hovered.Color        = Properties->Hovered.Color;
+        Resolved->Hovered.BorderColor  = Properties->Hovered.BorderColor;
+        Resolved->Hovered.BorderWidth  = Properties->Hovered.BorderWidth;
+        Resolved->Hovered.CornerRadius = Properties->Hovered.CornerRadius;
+
+        Resolved->Focused.Color        = Properties->Focused.Color;
+        Resolved->Focused.BorderColor  = Properties->Focused.BorderColor;
+        Resolved->Focused.BorderWidth  = Properties->Focused.BorderWidth;
+        Resolved->Focused.CornerRadius = Properties->Focused.CornerRadius;
     }
 }
 
-// TODO: Rework this to a counted model/budget model instead of whatever this is.
+
+GUI_API uint32_t
+GuiGetRenderCommandCount(gui_render_command_params Params, gui_layout_tree *Tree)
+{
+    GUI_UNUSED(Params);
+
+    uint32_t Result = GuiCountCommandForTree(Tree->RootIndex, Tree);
+    return Result;
+}
+
 
 GUI_API gui_memory_footprint
-GuiGetRenderCommandsFootprint(gui_layout_tree *Tree)
+GuiGetRenderCommandsFootprint(gui_render_command_params Params, gui_layout_tree *Tree)
 {
-    gui_memory_footprint Result;
-    Result.SizeInBytes = 0;
-    Result.Alignment   = 0;
+    gui_memory_footprint Result = {0};
 
     if (GuiIsValidLayoutTree(Tree))
     {
-        uint64_t CommandSize = Tree->NodeCount * GUI_MAX_COMMAND_PER_NODE * sizeof(gui_render_command);
-        uint64_t QueueSize   = Tree->NodeCount * sizeof(uint32_t);
+        uint64_t CommandEnd = (Params.Count + 1) * sizeof(gui_render_command);
 
-        Result.SizeInBytes = CommandSize + QueueSize;
+        uint64_t QueueStart = CommandEnd + GUI_ALIGN_POW2(CommandEnd, GUI_ALIGN_OF(uint64_t));
+        uint64_t QueueEnd   = QueueStart + Tree->NodeCount * sizeof(uint32_t);
+
+        Result.SizeInBytes = QueueEnd;
         Result.Alignment   = GUI_ALIGN_OF(gui_render_command);
         Result.Lifetime    = Gui_MemoryAllocation_Transient;
     }
@@ -1926,84 +2000,82 @@ GuiGetRenderCommandsFootprint(gui_layout_tree *Tree)
 }
 
 
-GUI_API gui_render_command_list
-GuiComputeRenderCommands(gui_layout_tree *Tree, gui_memory_block Block)
+GUI_API gui_render_command *
+GuiComputeRenderCommands(gui_render_command_params Params, gui_layout_tree *Tree, gui_memory_block Block)
 {
-    gui_render_command_list Result;
-    Result.Commands = NULL;
-    Result.Count    = 0;
-
-    gui_memory_region Local = GuiEnterMemoryRegion(Block);
+    gui_render_command *Result = 0;
+    gui_memory_region   Local  = GuiEnterMemoryRegion(Block);
 
     if (GuiIsValidLayoutTree(Tree) && GuiIsValidMemoryRegion(&Local))
     {
-        Result.Commands = GuiPushArray(&Local, gui_render_command, Tree->NodeCount * GUI_MAX_COMMAND_PER_NODE);
-        Result.Count    = 0;
+        gui_render_command *Commands  = GuiPushArray(&Local, gui_render_command, Params.Count);
+        uint32_t           *NodeQueue = GuiPushArray(&Local, uint32_t, Tree->NodeCount);
 
-        uint32_t *NodeQueue = GuiPushArray(&Local, uint32_t, Tree->NodeCount);
-        uint32_t  Head      = 0;
-        uint32_t  Tail      = 0;
-
-        NodeQueue[Tail++] = (uint32_t)Tree->RootIndex;
-
-        while (Head < Tail)
+        if(Commands && NodeQueue)
         {
-            uint32_t         NodeIndex = NodeQueue[Head++];
-            gui_layout_node *Node      = GuiGetLayoutNode(NodeIndex, Tree);
-            GUI_ASSERT(Node);
-
-            for (uint32_t Child = Node->First; Child != GuiInvalidIndex; Child = GuiGetLayoutNode(Child, Tree)->Next)
+            uint32_t CommandCount = 0;
+            uint32_t Head         = 0;
+            uint32_t Tail         = 0;
+            
+            NodeQueue[Tail++] = Tree->RootIndex;
+            
+            while (Head < Tail && CommandCount < Params.Count)
             {
-                NodeQueue[Tail++] = Child;
+                uint32_t         NodeIndex = NodeQueue[Head++];
+                gui_layout_node *Node      = GuiGetLayoutNode(NodeIndex, Tree);
+                GUI_ASSERT(Node);
+            
+                for (uint32_t Child = Node->First; Child != GuiInvalidIndex; Child = GuiGetLayoutNode(Child, Tree)->Next)
+                {
+                    NodeQueue[Tail++] = Child;
+                }
+            
+                gui_paint_style *Style = &Tree->PaintBuffer[Node->Index].Default;
+            
+                if (Node->State & Gui_NodeState_UseFocusedStyle)
+                {
+                    Style = &Tree->PaintBuffer[Node->Index].Focused;
+                }
+                else if (Node->State & Gui_NodeState_UseHoveredStyle)
+                {
+                    Style = &Tree->PaintBuffer[Node->Index].Hovered;
+            
+                    Node->State = (Node->State & ~Gui_NodeState_UseHoveredStyle);
+                }
+
+                gui_color         Color        = Style->Color;
+                gui_color         BorderColor  = Style->BorderColor;
+                float             BorderWidth  = Style->BorderWidth;
+                gui_corner_radius CornerRadius = Style->CornerRadius;
+            
+                if (Color.A > 0.0f)
+                {
+                    gui_render_command *Command = &Commands[CommandCount++];
+            
+                    Command->Type = Gui_RenderCommandType_Rectangle;
+                    Command->Box  = GuiGetLayoutNodeBoundingBox(Node);
+            
+                    Command->Rect.Color        = Color;
+                    Command->Rect.CornerRadius = CornerRadius;
+                }
+            
+                if (BorderWidth > 0.0f)
+                {
+                    gui_render_command *Command = &Commands[CommandCount++];
+            
+                    Command->Type = Gui_RenderCommandType_Border;
+                    Command->Box  = GuiGetLayoutNodeBoundingBox(Node);
+            
+                    Command->Border.Color        = BorderColor;
+                    Command->Border.CornerRadius = CornerRadius;
+                    Command->Border.Width        = BorderWidth;
+                }
             }
 
-            gui_paint_properties *Paint = &Tree->PaintBuffer[Node->Index];
-
-            gui_color         Color        = Paint->Color;
-            gui_color         BorderColor  = Paint->BorderColor;
-            float             BorderWidth  = Paint->BorderWidth;
-            gui_corner_radius CornerRadius = Paint->CornerRadius;
-
-            if (Node->State & Gui_NodeState_UseFocusedStyle)
-            {
-                Color        = Paint->FocusedColor;
-                BorderColor  = Paint->FocusedBorderColor;
-                BorderWidth  = Paint->FocusedBorderWidth;
-                CornerRadius = Paint->FocusedCornerRadius;
-            }
-            else if (Node->State & Gui_NodeState_UseHoveredStyle)
-            {
-                Color        = Paint->HoveredColor;
-                BorderColor  = Paint->HoveredBorderColor;
-                BorderWidth  = Paint->HoveredBorderWidth;
-                CornerRadius = Paint->HoveredCornerRadius;
-
-                Node->State = (Node->State & ~Gui_NodeState_UseHoveredStyle);
-            }
-
-            if (Color.A > 0.0f)
-            {
-                gui_render_command *Command = &Result.Commands[Result.Count++];
-
-                Command->Type = Gui_RenderCommandType_Rectangle;
-                Command->Box  = GuiGetLayoutNodeBoundingBox(Node);
-
-                Command->Rect.Color        = Color;
-                Command->Rect.CornerRadius = CornerRadius;
-            }
-
-            if (BorderWidth > 0.0f)
-            {
-                gui_render_command *Command = &Result.Commands[Result.Count++];
-
-                Command->Type = Gui_RenderCommandType_Border;
-                Command->Box  = GuiGetLayoutNodeBoundingBox(Node);
-
-                Command->Border.Color        = BorderColor;
-                Command->Border.CornerRadius = CornerRadius;
-                Command->Border.Width        = BorderWidth;
-            }
+            Commands[CommandCount] = (gui_render_command){.Type = Gui_RenderCommandType_End};
         }
+
+        Result = Commands;
     }
 
     return Result;

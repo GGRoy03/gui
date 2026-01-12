@@ -14,13 +14,12 @@ extern "C" {
 #endif
 
 
-// =================================================
-// @PUBLIC API
-//
-// <Basic Primitives>
-//
-// Small types intended for public use.
-// =================================================
+//-----------------------------------------------------------------------------
+// [SECTION] GUI BASIC PRIMITIVES
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 typedef uint32_t gui_bool;
@@ -60,23 +59,41 @@ typedef struct gui_string
 #define GuiStringComp(String)  ((gui_byte_string){ (char *)(String), sizeof(String) - 1 })
 
 
+/*-----------------------------------------------------------------------------
+// [SECTION] FORWARD DECLARATION MESS
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------*/
+
 typedef struct gui_resource_table gui_resource_table;
 typedef struct gui_pointer_event_node gui_pointer_event_node;
 typedef struct gui_pointer_event_list gui_pointer_event_list;
 typedef struct gui_layout_tree        gui_layout_tree;
 
-// =================================================
-// @PUBLIC API
-//
-// <Memory Management>
-//
-// Memory management...
-// =================================================
+
+//-----------------------------------------------------------------------------
+// [SECTION] GUI MEMORY API
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
+
+
+typedef enum
+{
+    Gui_MemoryAllocation_None = 0,
+
+    Gui_MemoryAllocation_Persistent = 1,
+    Gui_MemoryAllocation_Transient  = 2,
+} Gui_MemoryAllocation_Lifetime;
+
 
 typedef struct gui_memory_footprint
 {
-    uint64_t SizeInBytes;
-    uint64_t Alignment;
+    uint64_t                      SizeInBytes;
+    uint64_t                      Alignment;
+    Gui_MemoryAllocation_Lifetime Lifetime;
 } gui_memory_footprint;
 
 
@@ -86,13 +103,13 @@ typedef struct gui_memory_block
     void    *Base;
 } gui_memory_block;
 
-// =================================================
-// @PUBLIC API
-//
-// <Inputs>
-//
-// Inputs are...
-// =================================================
+
+//-----------------------------------------------------------------------------
+// [SECTION] GUI INPUT API
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 typedef enum Gui_PointerSource
@@ -127,13 +144,12 @@ GUI_API gui_bool GuiPushPointerClickEvent    (Gui_PointerButton Button, gui_poin
 GUI_API gui_bool GuiPushPointerReleaseEvent  (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
 
 
-// =================================================
-// @PUBLIC API
-//
-// <Resources>
-//
-// Resources are...
-// =================================================
+//-----------------------------------------------------------------------------
+// [SECTION] GUI RESOURCE API
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 typedef struct gui_resource_table_params
@@ -147,14 +163,12 @@ GUI_API gui_memory_footprint   GuiGetResourceTableFootprint   (gui_resource_tabl
 GUI_API gui_resource_table   * GuiPlaceResourceTableInMemory  (gui_resource_table_params Params, gui_memory_block Block);
 
 
-// =================================================
-// @PUBLIC API
-//
-// <Layout>
-//
-// Layout is...
-// =================================================
-
+//-----------------------------------------------------------------------------
+// [SECTION] GUI LAYOUT API
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 typedef struct gui_cached_style gui_cached_style;
 
@@ -240,32 +254,30 @@ struct gui_parent_node
 };
 
 
-GUI_API gui_memory_footprint GuiGetLayoutTreeFootprint   (uint64_t NodeCount);
-GUI_API gui_layout_tree    * GuiPlaceLayoutTreeInMemory  (uint64_t NodeCount, gui_memory_block Block);
+GUI_API gui_memory_footprint GuiGetLayoutTreeFootprint   (uint32_t NodeCount);
+GUI_API gui_layout_tree    * GuiPlaceLayoutTreeInMemory  (uint32_t NodeCount, gui_memory_block Block);
 
 
-GUI_API uint32_t GuiCreateNode   (uint64_t Key, uint32_t Flags, gui_layout_tree *Tree);
-GUI_API void     GuiUpdateLayout (uint32_t NodeIndex, gui_layout_properties *Properties, gui_layout_tree *Tree);
+GUI_API uint32_t             GuiCreateNode               (uint64_t Key, uint32_t Flags, gui_layout_tree *Tree);
+GUI_API void                 GuiUpdateLayout             (uint32_t NodeIndex, gui_layout_properties *Properties, gui_layout_tree *Tree);
 
 
-GUI_API gui_bool GuiEnterParent  (uint32_t NodeIndex, gui_layout_tree *Tree, gui_parent_node *Node);
-GUI_API void     GuiLeaveParent  (uint32_t NodeIndex, gui_layout_tree *Tree);
+GUI_API gui_bool             GuiEnterParent              (uint32_t NodeIndex, gui_layout_tree *Tree, gui_parent_node *Node);
+GUI_API void                 GuiLeaveParent              (uint32_t NodeIndex, gui_layout_tree *Tree);
 
 
-GUI_API gui_bool GuiAppendChild  (uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *Tree);
-GUI_API uint32_t GuiFindChild    (uint32_t NodeIndex, uint32_t FindIndex, gui_layout_tree *Tree);
+GUI_API gui_bool             GuiAppendChild              (uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *Tree);
+GUI_API uint32_t             GuiFindChild                (uint32_t NodeIndex, uint32_t FindIndex, gui_layout_tree *Tree);
 
-GUI_API void     GuiComputeTreeLayout  (gui_layout_tree *Tree);
+GUI_API void                 GuiComputeTreeLayout        (gui_layout_tree *Tree);
 
 
-// =================================================
-// @PUBLIC API
-//
-// <Painting>
-//
-// Painting is...
-// =================================================
-
+//-----------------------------------------------------------------------------
+// [SECTION] GUI PAINTING API
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 typedef enum Gui_RenderCommandType
 {
@@ -362,27 +374,27 @@ GUI_API gui_memory_footprint    GuiGetRenderCommandsFootprint  (gui_layout_tree 
 GUI_API gui_render_command_list GuiComputeRenderCommands       (gui_layout_tree *Tree, gui_memory_block Block);
 
 
-// =================================================
-// @PUBLIC API
-//
-// <Context>
-//
-// Context is...
-// =================================================
-
+//-----------------------------------------------------------------------------
+// [SECTION] GUI CONTEXT API
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 GUI_API void GuiBeginFrame  (gui_pointer_event_list *EventList, gui_layout_tree *Tree);
 GUI_API void GuiEndFrame    (void);
 
+
+// #define GUI_IMPLEMENTATION
 #ifdef GUI_IMPLEMENTATION
 
 
-// =================================================
-// @PRIVATE IMPLEMENTATION
-//
-// <Basic Helpers Functions/Macros>
-// =================================================
-
+//-----------------------------------------------------------------------------
+// [SECTION] BASE MACROS/HELPERS INTERNAL IMPLEMENTATION
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 #if defined(_MSC_VER)
     #define GUI_MSVC 1
@@ -398,7 +410,7 @@ GUI_API void GuiEndFrame    (void);
 #if GUI_MSVC || GUI_CLANG
     #define GUI_ALIGN_OF(T) __alignof(T)
 #elif GUI_GCC
-    #define AlignOf(T) __alignof__(T)
+    #define GUI_ALIGN_OF(T) __alignof__(T)
 #endif
 
 #if GUI_MSVC
@@ -407,8 +419,13 @@ GUI_API void GuiEndFrame    (void);
     #define GUI_FIND_FIRST_BIT(Mask) __builtin_ctz(Mask)
 #endif
 
+#if defined(GUI_MSVC)
+    #define GUI_DEBUGBREAK() __debugbreak()
+#elif defined(GUI_CLANG) || defined(GUI_GCC)
+    #define GUI_DEBUGBREAK() __builtin_trap()
+#endif
 
-#define GUI_ASSERT(Cond)        do { if (!(Cond)) __debugbreak(); } while (0)
+#define GUI_ASSERT(Cond)        do { if (!(Cond))  GUI_DEBUGBREAK(); } while (0)
 #define GUI_UNUSED(X)           (void)(X)
 
 
@@ -417,15 +434,15 @@ GUI_API void GuiEndFrame    (void);
 #define GUI_GIGABYTE(n)         (((uint64_t)(n)) << 30)
 
 #define GUI_ARRAYCOUNT(A)       (sizeof(A) / sizeof(A[0]))
-#define GUI_ISPOWEROFTWO(Value) (((Value) & ((Value) - 1)) == 0)
+#define GUI_ISPOWEROFTWO(Value) ((Value) != 0 && (((Value) & ((Value) - 1)) == 0))
 #define GUI_ALIGN_POW2(x,b)     (((x) + (b) - 1)&(~((b) - 1)))
 
-
-// =================================================
-// @PRIVATE IMPLEMENTATION
-//
-// <Memory Management>
-// =================================================
+//-----------------------------------------------------------------------------
+// [SECTION] MEMORY MANAGEMENT INTERNAL TYPES
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 typedef struct gui_memory_region
@@ -435,6 +452,13 @@ typedef struct gui_memory_region
     uint64_t At;
 } gui_memory_region;
 
+
+//-----------------------------------------------------------------------------
+// [SECTION] MEMORY MANAGEMENT INTERNAL IMPLEMENTATION
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 static gui_bool
 GuiIsValidMemoryRegion(gui_memory_region *Region)
@@ -478,12 +502,12 @@ GuiPushMemoryRegion(gui_memory_region *Region, uint64_t Size, uint64_t Alignment
 #define GuiPushStruct(Region, Type)                                    GuiPushArray((Region), Type, 1)
 
 
-// =================================================
-// @PRIVATE IMPLEMENTATION
-//
-// <Inputs>
-// =================================================
-
+//-----------------------------------------------------------------------------
+// [SECTION] INPUTS INTERNAL TYPES
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 typedef enum Gui_PointerEvent
 {
@@ -514,12 +538,20 @@ struct gui_pointer_event_node
 
 typedef struct gui_pointer_state
 {
-    uint32_t          Id;
-    gui_point         Position;
-    gui_point         LastPosition;
-    uint32_t          ButtonMask;
-    gui_bool          IsCaptured;
+    uint32_t  Id;
+    gui_point Position;
+    gui_point LastPosition;
+    uint32_t  ButtonMask;
+    gui_bool  IsCaptured;
 } gui_pointer_state;
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] INPUTS MISC HELPERS
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 static gui_bool
@@ -545,11 +577,21 @@ GuiPushPointerEvent(Gui_PointerEvent Type, gui_pointer_event_node *Node, gui_poi
             List->Last       = Node;
         }
 
+        ++List->Count;
+
         Pushed = GUI_TRUE;
     }
 
     return Pushed;
 }
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] INPUTS PUBLIC API IMPLEMENTATION
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 GUI_API void
@@ -614,11 +656,13 @@ GuiPushPointerReleaseEvent(Gui_PointerButton Button, gui_point Position, gui_poi
     return Pushed;
 }
 
-// =================================================
-// @PRIVATE IMPLEMENTATION
-//
-// <Resources>
-// =================================================
+//-----------------------------------------------------------------------------
+// [SECTION] RESOURCES INTERNAL TYPES
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
+
 
 #include "immintrin.h"
 
@@ -694,6 +738,14 @@ typedef struct gui_resource_table
     uint32_t              *HashTable;
     gui_resource_entry    *Entries;
 } gui_resource_table;
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] RESOURCES INTERNAL IMPLEMENTATION
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 static gui_resource_entry *
@@ -789,6 +841,7 @@ GuiGetResourceTableFootprint(gui_resource_table_params Params)
     {
         .SizeInBytes = sizeof(gui_resource_table) + HashTableSize + EntryArraySize,
         .Alignment   = GUI_ALIGN_OF(gui_resource_entry),
+        .Lifetime    = Gui_MemoryAllocation_Persistent,
     };
 
     return Result;
@@ -817,6 +870,11 @@ GuiPlaceResourceTableInMemory(gui_resource_table_params Params, gui_memory_block
             Table->EntryCount    = Params.EntryCount;
             Table->HashSlotCount = Params.HashSlotCount;
             Table->HashMask      = Params.HashSlotCount - 1;
+
+            for(uint32_t Idx = 0; Idx < Params.HashSlotCount; ++Idx)
+            {
+                Table->HashTable[Idx] = 0;
+            }
 
             for(uint32_t Idx = 0; Idx < Params.EntryCount; ++Idx)
             {
@@ -944,6 +1002,7 @@ GuiUpdateResourceTable(uint32_t Id, gui_resource_key Key, void *Memory, gui_reso
     if(Entry->Memory && Entry->Memory != Memory)
     {
         GUI_ASSERT(!"...");
+
         // OSRelease(Entry->Memory);
     }
 
@@ -966,11 +1025,14 @@ GuiQueryNodeResource(Gui_ResourceType Type, uint32_t NodeIndex, gui_layout_tree 
 }
 
 
-// =================================================
-// @PRIVATE IMPLEMENTATION
-//
-// <Layout>
-// =================================================
+//-----------------------------------------------------------------------------
+// [SECTION] LAYOUT INTERNAL TYPES
+// [DESCRIP] All types used as part of the layout code that are useless to
+//           the user.
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
+
 
 #include <math.h>
 
@@ -1022,90 +1084,39 @@ typedef struct gui_layout_node
 
 typedef struct gui_layout_tree
 {
+    // Persistent State
 
-    gui_layout_node      *Nodes;
-    uint64_t              NodeCount;
-    uint64_t              NodeCapacity;
-    gui_paint_properties *PaintBuffer;
-    uint64_t              RootIndex;
-    uint64_t              CapturedNodeIndex;
-    gui_parent_node      *Parent;
+    gui_layout_node        *Nodes;
+    uint32_t                NodeCount;
+    uint32_t                NodeCapacity;
+    gui_paint_properties   *PaintBuffer;
+
+    // Reference Map
+
+    uint64_t                RefHashMask;
+    uint64_t               *RefKeys;
+    uint32_t               *RefValues;
+
+    // Transient State
+
+    uint32_t                RootIndex;
+    uint32_t                CapturedNodeIndex;
+    gui_parent_node        *Parent;
 } gui_layout_tree;
 
 
-static float
-GuiBoundingBoxSignedDistanceField(gui_point Point, gui_bounding_box BoundingBox)
-{
-    gui_dimensions Size   = (gui_dimensions){.Width = BoundingBox.Right - BoundingBox.Left, .Height = BoundingBox.Bottom - BoundingBox.Top};
-    gui_dimensions Half   = (gui_dimensions){.Width = Size.Width * 0.5f, .Height = Size.Height * 0.5f};
-    gui_point      Start  = (gui_point){.X = BoundingBox.Left, .Y = BoundingBox.Top};
-    gui_point      Center = (gui_point){.X = Start.X + Half.Width, .Y = Start.Y + Half.Height};
-    gui_point      Local  = (gui_point){.X = Point.X - Center.X, .Y = Point.Y - Center.Y};
-
-    gui_point FirstQuadrant = (gui_point){ .X = fabsf(Local.X) - Half.Width, .Y = fabsf(Local.Y) - Half.Height };
-
-    float OuterX        = (FirstQuadrant.X > 0.0f) ? FirstQuadrant.X : 0.0f;
-    float OuterY        = (FirstQuadrant.Y > 0.0f) ? FirstQuadrant.Y : 0.0f;
-    float OuterDistance = sqrtf(OuterX * OuterX + OuterY * OuterY);
-    float InnerDistance = fminf(fmaxf(FirstQuadrant.X, FirstQuadrant.Y), 0.0f);
-
-    float Result = OuterDistance + InnerDistance;
-    return Result;
-}
-
-
-static gui_bool
-GuiBoundingBoxesIntersect(gui_bounding_box A, gui_bounding_box B)
-{
-    gui_bool Result = A.Left < B.Right && A.Right > B.Left && A.Top < B.Bottom && A.Bottom > B.Top;
-    return Result;
-}
+//-----------------------------------------------------------------------------
+// [SECTION] MISC LAYOUT HELPERS
+// [DESCRIP] Various Node/Tree helpers
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 static gui_bool
 GuiIsValidLayoutNode(gui_layout_node *Node)
 {
     gui_bool Result = Node && (Node->Index != GuiInvalidIndex);
-    return Result;
-}
-
-
-static gui_bounding_box
-GuiGetLayoutNodeBoundingBox(gui_layout_node *Node)
-{
-    gui_bounding_box Result = { .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 };
-    if(GuiIsValidLayoutNode(Node))
-    {
-        gui_point Screen = {.X = Node->OutputPosition.X + Node->ScrollOffset.Width, .Y = Node->OutputPosition.Y + Node->ScrollOffset.Height};
-        Result = (gui_bounding_box){.Left = Screen.X, .Top = Screen.Y, .Right = Screen.X + Node->OutputSize.Width, .Bottom = Screen.Y + Node->OutputSize.Height};
-    }
-    return Result;
-}
-
-
-static gui_bounding_box
-GuiGetLayoutNodeInnerBoundingBox(gui_layout_node *Node)
-{
-    // For now identical to outer bounding box; placeholder for padding clipping
-    gui_bounding_box Result = { .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 };
-    if(GuiIsValidLayoutNode(Node))
-    {
-        gui_point Screen = {.X = Node->OutputPosition.X + Node->ScrollOffset.Width, .Y = Node->OutputPosition.Y + Node->ScrollOffset.Height};
-        Result = (gui_bounding_box){ .Left = Screen.X, .Top = Screen.Y, .Right = Screen.X + Node->OutputSize.Width, .Bottom = Screen.Y + Node->OutputSize.Height };
-    }
-    return Result;
-}
-
-static gui_bounding_box
-GuiGetLayoutNodeContentRect(gui_layout_node *Node)
-{
-    // Also placeholder for content rect computation
-    gui_bounding_box Result = { .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 };
-    if(GuiIsValidLayoutNode(Node))
-    {
-        gui_point Screen = {.X = Node->OutputPosition.X + Node->ScrollOffset.Width, .Y = Node->OutputPosition.Y + Node->ScrollOffset.Height};
-        Result = (gui_bounding_box){.Left = Screen.X, .Top = Screen.Y, .Right = Screen.X + Node->OutputSize.Width, .Bottom = Screen.Y + Node->OutputSize.Height};
-    }
     return Result;
 }
 
@@ -1129,7 +1140,7 @@ GuiGetSentinelNode(gui_layout_tree *Tree)
 
 
 static gui_layout_node *
-GuiGetLayoutNode(uint64_t Index, gui_layout_tree *Tree)
+GuiGetLayoutNode(uint32_t Index, gui_layout_tree *Tree)
 {
     GUI_ASSERT(GuiIsValidLayoutTree(Tree));
 
@@ -1212,112 +1223,115 @@ GuiAppendLayoutNode(uint32_t ParentIndex, uint32_t ChildIndex, gui_layout_tree *
 }
 
 
-// TODO: Cleanup this mess.
+//-----------------------------------------------------------------------------
+// [SECTION] NODE REFERENCES
+// [DESCRIP] Functions to insert/retrieve nodes across frames.
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
-#define XXH_STATIC_LINKING_ONLY
-#define XXH_NO_STREAM
-#define XXH_IMPLEMENTATION
-
-#if GUI_MSVC
-    #include <intrin.h>
-#endif
-#include "third_party/xxhash.h"
-
-#define KEYMAP_CAPACITY 8192u
-#define KEYMAP_EMPTY ((uint64_t)0xFFFFFFFFFFFFFFFFULL)
-
-static uint64_t KeyMap_Keys[KEYMAP_CAPACITY];
-static uint32_t KeyMap_Values[KEYMAP_CAPACITY];
-static gui_bool KeyMap_Initialized = GUI_FALSE;
 
 static void
-GuiKeyMap_Init(void)
+GuiInsertNodeReference(uint64_t Key, uint32_t Value, gui_layout_tree *Tree)
 {
-    if(!KeyMap_Initialized)
+    uint64_t Slot = Key & Tree->RefHashMask;
+
+    for(;;)
     {
-        for(uint32_t i = 0; i < KEYMAP_CAPACITY; ++i)
+        uint64_t Stored = Tree->RefKeys[Slot];
+
+        if(Stored == Key)
         {
-            KeyMap_Keys[i] = KEYMAP_EMPTY;
-            KeyMap_Values[i] = (uint32_t)GuiInvalidIndex;
+            break;
         }
-        KeyMap_Initialized = GUI_TRUE;
+
+        // Should be some EmptyMarker.
+        if(Stored == GuiInvalidIndex)
+        {
+            Tree->RefKeys[Slot]   = Key;
+            Tree->RefValues[Slot] = Value;
+
+            break;
+        }
+
+        Slot = (Slot + 1) & Tree->RefHashMask;
     }
 }
+
 
 static uint32_t
-GuiKeyMap_FindOrInsert(uint64_t Key, gui_bool *Inserted)
+GuiFindNodeReference(uint64_t Key, gui_layout_tree *Tree)
 {
-    // Returns value if found, otherwise inserts and returns GuiInvalidIndex
-    GuiKeyMap_Init();
-
-    uint32_t Hash = (uint32_t)(XXH3_64bits(&Key, sizeof(Key)) & (KEYMAP_CAPACITY - 1));
-    uint32_t Slot = Hash;
+    uint32_t Result = GuiInvalidIndex;
+    uint64_t Slot   = Key & Tree->RefHashMask;
 
     for(;;)
     {
-        uint64_t Stored = KeyMap_Keys[Slot];
+        uint64_t Stored = Tree->RefKeys[Slot];
+        
+        // Should be some EmptyMarker.
+        if(Stored == GuiInvalidIndex)
+        {
+            break;
+        }
+
         if(Stored == Key)
         {
-            if(Inserted) *Inserted = GUI_FALSE;
-            return KeyMap_Values[Slot];
+            Result = Tree->RefValues[Slot];
+            break;
         }
-        if(Stored == KEYMAP_EMPTY)
-        {
-            // Insert
-            KeyMap_Keys[Slot] = Key;
-            KeyMap_Values[Slot] = (uint32_t)GuiInvalidIndex;
-            if(Inserted) *Inserted = GUI_TRUE;
-            return KeyMap_Values[Slot];
-        }
-        Slot = (Slot + 1) & (KEYMAP_CAPACITY - 1);
+
+        Slot = (Slot + 1) & Tree->RefHashMask;
     }
+
+    return Result;
 }
 
-static void
-GuiKeyMap_Insert(uint64_t Key, uint32_t Value)
+
+//-----------------------------------------------------------------------------
+// [SECTION] LAYOUT GEOMETRY
+// [DESCRIP] Basic layout geometry helpers.
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
+
+
+static gui_bounding_box
+GuiGetLayoutNodeBoundingBox(gui_layout_node *Node)
 {
-    GuiKeyMap_Init();
-
-    uint32_t Hash = (uint32_t)(XXH3_64bits(&Key, sizeof(Key)) & (KEYMAP_CAPACITY - 1));
-    uint32_t Slot = Hash;
-
-    for(;;)
+    gui_bounding_box Result = { .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 };
+    if(GuiIsValidLayoutNode(Node))
     {
-        uint64_t Stored = KeyMap_Keys[Slot];
-        if(Stored == Key || Stored == KEYMAP_EMPTY)
-        {
-            KeyMap_Keys[Slot] = Key;
-            KeyMap_Values[Slot] = Value;
-            return;
-        }
-        Slot = (Slot + 1) & (KEYMAP_CAPACITY - 1);
+        gui_point Screen = {.X = Node->OutputPosition.X + Node->ScrollOffset.Width, .Y = Node->OutputPosition.Y + Node->ScrollOffset.Height};
+        Result = (gui_bounding_box){.Left = Screen.X, .Top = Screen.Y, .Right = Screen.X + Node->OutputSize.Width, .Bottom = Screen.Y + Node->OutputSize.Height};
     }
+    return Result;
 }
 
-static int
-GuiKeyMap_Find(uint64_t Key, uint32_t *OutValue)
+
+static float
+GuiBoundingBoxSignedDistanceField(gui_point Point, gui_bounding_box BoundingBox)
 {
-    GuiKeyMap_Init();
+    gui_dimensions Size   = (gui_dimensions){.Width = BoundingBox.Right - BoundingBox.Left, .Height = BoundingBox.Bottom - BoundingBox.Top};
+    gui_dimensions Half   = (gui_dimensions){.Width = Size.Width * 0.5f, .Height = Size.Height * 0.5f};
+    gui_point      Start  = (gui_point){.X = BoundingBox.Left, .Y = BoundingBox.Top};
+    gui_point      Center = (gui_point){.X = Start.X + Half.Width, .Y = Start.Y + Half.Height};
+    gui_point      Local  = (gui_point){.X = Point.X - Center.X, .Y = Point.Y - Center.Y};
 
-    uint32_t Hash = (uint32_t)(XXH3_64bits(&Key, sizeof(Key)) & (KEYMAP_CAPACITY - 1));
-    uint32_t Slot = Hash;
+    gui_point FirstQuadrant = (gui_point){ .X = fabsf(Local.X) - Half.Width, .Y = fabsf(Local.Y) - Half.Height };
 
-    for(;;)
-    {
-        uint64_t Stored = KeyMap_Keys[Slot];
-        if(Stored == KEYMAP_EMPTY) return 0;
-        if(Stored == Key)
-        {
-            if(OutValue) *OutValue = KeyMap_Values[Slot];
-            return 1;
-        }
-        Slot = (Slot + 1) & (KEYMAP_CAPACITY - 1);
-    }
+    float OuterX        = (FirstQuadrant.X > 0.0f) ? FirstQuadrant.X : 0.0f;
+    float OuterY        = (FirstQuadrant.Y > 0.0f) ? FirstQuadrant.Y : 0.0f;
+    float OuterDistance = sqrtf(OuterX * OuterX + OuterY * OuterY);
+    float InnerDistance = fminf(fmaxf(FirstQuadrant.X, FirstQuadrant.Y), 0.0f);
+
+    float Result = OuterDistance + InnerDistance;
+    return Result;
 }
 
 
 static gui_bool
-GuiIsMouseInsideOuterBox(gui_point Position, gui_layout_node *Node)
+GuiIsPointInsideOuterBox(gui_point Position, gui_layout_node *Node)
 {
     gui_bool Result = GUI_FALSE;
     if(GuiIsValidLayoutNode(Node))
@@ -1328,6 +1342,7 @@ GuiIsMouseInsideOuterBox(gui_point Position, gui_layout_node *Node)
     }
     return Result;
 }
+
 
 static gui_bool
 GuiIsPointInsideBorder(gui_point Position, gui_layout_node *Node)
@@ -1345,6 +1360,16 @@ GuiIsPointInsideBorder(gui_point Position, gui_layout_node *Node)
     return Result;
 }
 
+
+//-----------------------------------------------------------------------------
+// [SECTION] LAYOUT RESPONSIVENESS INPUT HANDLING
+// [DESCRIP] When the user calls GuiBeginFrame we fire events at _some_ layout
+//           tree. These functions are responsible for handling those events.
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
+
+
 static gui_bool
 GuiHandlePointerClick(gui_point Position, uint32_t ClickMask, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
@@ -1358,7 +1383,7 @@ GuiHandlePointerClick(gui_point Position, uint32_t ClickMask, uint32_t NodeIndex
 
         if(GuiIsValidLayoutNode(Node))
         {
-            if(GuiIsMouseInsideOuterBox(Position, Node))
+            if(GuiIsPointInsideOuterBox(Position, Node))
             {
                 for(gui_layout_node *Child = GuiGetLayoutNode(Node->First, Tree); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Child->Next, Tree))
                 {
@@ -1369,9 +1394,9 @@ GuiHandlePointerClick(gui_point Position, uint32_t ClickMask, uint32_t NodeIndex
                     }
                 }
 
-                Node->State = (Node->State | Gui_NodeState_IsClicked);
-                Node->State = (Node->State | Gui_NodeState_UseFocusedStyle);
-                Node->State = (Node->State | Gui_NodeState_HasCapturedPointer);
+                Node->State = Node->State | Gui_NodeState_IsClicked;
+                Node->State = Node->State | Gui_NodeState_UseFocusedStyle;
+                Node->State = Node->State | Gui_NodeState_HasCapturedPointer;
 
                 Tree->CapturedNodeIndex = NodeIndex;
 
@@ -1382,6 +1407,7 @@ GuiHandlePointerClick(gui_point Position, uint32_t ClickMask, uint32_t NodeIndex
 
     return GUI_FALSE;
 }
+
 
 static gui_bool
 GuiHandlePointerRelease(gui_point Position, uint32_t ReleaseMask, uint32_t NodeIndex, gui_layout_tree *Tree)
@@ -1415,6 +1441,7 @@ GuiHandlePointerRelease(gui_point Position, uint32_t ReleaseMask, uint32_t NodeI
     return GUI_FALSE;
 }
 
+
 static gui_bool
 GuiHandlePointerHover(gui_point Position, uint32_t NodeIndex, gui_layout_tree *Tree)
 {
@@ -1425,7 +1452,7 @@ GuiHandlePointerHover(gui_point Position, uint32_t NodeIndex, gui_layout_tree *T
         gui_layout_node *Node = GuiGetLayoutNode(NodeIndex, Tree);
         GUI_ASSERT(GuiIsValidLayoutNode(Node));
 
-        if(GuiIsMouseInsideOuterBox(Position, Node))
+        if(GuiIsPointInsideOuterBox(Position, Node))
         {
             for(gui_layout_node *Child = GuiGetLayoutNode(Node->First, Tree); GuiIsValidLayoutNode(Child); Child = GuiGetLayoutNode(Child->Next, Tree))
             {
@@ -1445,6 +1472,7 @@ GuiHandlePointerHover(gui_point Position, uint32_t NodeIndex, gui_layout_tree *T
     return GUI_FALSE;
 }
 
+
 static void
 GuiHandlePointerMove(float DeltaX, float DeltaY, gui_layout_tree *Tree)
 {
@@ -1463,6 +1491,14 @@ GuiHandlePointerMove(float DeltaX, float DeltaY, gui_layout_tree *Tree)
         }
     }
 }
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] LAYOUT COMPUTATION CORE
+// [DESCRIP] Convergence based layout algorithm implementation & helpers
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 static float
@@ -1508,7 +1544,6 @@ GuiComputeNodeSize(gui_sizing Sizing, float ParentSize)
 
     case Gui_LayoutSizing_None:
     {
-        Result = 0.0f;
     } break;
 
     case Gui_LayoutSizing_Fixed:
@@ -1525,7 +1560,6 @@ GuiComputeNodeSize(gui_sizing Sizing, float ParentSize)
     case Gui_LayoutSizing_Fit:
     {
         // TODO: implement fit
-        Result = 0.0f;
     } break;
 
     }
@@ -1543,10 +1577,10 @@ GuiComputeLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_dimensions Pa
     Node->OutputChildSize = (gui_dimensions){ .Width = 0.0f, .Height = 0.0f };
     gui_dimensions LastSize = Node->OutputSize;
 
-    float Width     = GuiComputeNodeSize(Node->Size.Width, ParentBounds.Width);
-    float MinWidth  = GuiComputeNodeSize(Node->MinSize.Width, ParentBounds.Width);
-    float MaxWidth  = GuiComputeNodeSize(Node->MaxSize.Width, ParentBounds.Width);
-    float Height    = GuiComputeNodeSize(Node->Size.Height, ParentBounds.Height);
+    float Width     = GuiComputeNodeSize(Node->Size.Width    , ParentBounds.Width);
+    float MinWidth  = GuiComputeNodeSize(Node->MinSize.Width , ParentBounds.Width);
+    float MaxWidth  = GuiComputeNodeSize(Node->MaxSize.Width , ParentBounds.Width);
+    float Height    = GuiComputeNodeSize(Node->Size.Height   , ParentBounds.Height);
     float MinHeight = GuiComputeNodeSize(Node->MinSize.Height, ParentBounds.Height);
     float MaxHeight = GuiComputeNodeSize(Node->MaxSize.Height, ParentBounds.Height);
 
@@ -1587,8 +1621,8 @@ GuiComputeLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_dimensions Pa
 static void
 GuiPlaceLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_resource_table *ResourceTable)
 {
-    gui_point Cursor = (gui_point){ .X = Node->OutputPosition.X + Node->Padding.Left, .Y = Node->OutputPosition.Y + Node->Padding.Top };
-    gui_bool IsXMajor = (Node->Direction == Gui_LayoutDirection_Horizontal) ? GUI_TRUE : GUI_FALSE;
+    gui_point Cursor   = (gui_point){ .X = Node->OutputPosition.X + Node->Padding.Left, .Y = Node->OutputPosition.Y + Node->Padding.Top };
+    gui_bool  IsXMajor = (Node->Direction == Gui_LayoutDirection_Horizontal);
 
     float MajorSize = IsXMajor ? Node->OutputSize.Width - (Node->Padding.Left + Node->Padding.Right) : Node->OutputSize.Height - (Node->Padding.Top + Node->Padding.Bottom);
     float MinorSize = IsXMajor ? Node->OutputSize.Height - (Node->Padding.Top + Node->Padding.Bottom) : Node->OutputSize.Width - (Node->Padding.Left + Node->Padding.Right);
@@ -1627,23 +1661,44 @@ GuiPlaceLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_resource_table 
     }
 }
 
+//-----------------------------------------------------------------------------
+// [SECTION] PUBLIC LAYOUT API
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
+
 
 GUI_API gui_memory_footprint
-GuiGetLayoutTreeFootprint(uint64_t NodeCount)
+GuiGetLayoutTreeFootprint(uint32_t NodeCount)
 {
-    uint64_t TreeEnd    = sizeof(gui_layout_tree);
-    uint64_t NodesStart = GUI_ALIGN_POW2(TreeEnd, GUI_ALIGN_OF(gui_layout_node));
-    uint64_t NodesEnd   = NodesStart + ((NodeCount + 1) * sizeof(gui_layout_node));
-    uint64_t PaintStart = GUI_ALIGN_POW2(NodesEnd, GUI_ALIGN_OF(gui_paint_properties));
-    uint64_t PaintEnd   = PaintStart + (NodeCount * sizeof(gui_paint_properties));
+    uint64_t TreeEnd       = sizeof(gui_layout_tree);
 
-    gui_memory_footprint Result = {.SizeInBytes = PaintEnd, .Alignment = GUI_ALIGN_OF(gui_layout_tree)};
+    uint64_t NodesStart    = GUI_ALIGN_POW2(TreeEnd, GUI_ALIGN_OF(gui_layout_node));
+    uint64_t NodesEnd      = NodesStart + ((NodeCount + 1) * sizeof(gui_layout_node));
+
+    uint64_t PaintStart    = GUI_ALIGN_POW2(NodesEnd, GUI_ALIGN_OF(gui_paint_properties));
+    uint64_t PaintEnd      = PaintStart + (NodeCount * sizeof(gui_paint_properties));
+
+    uint64_t RefKeyStart   = GUI_ALIGN_POW2(PaintEnd, GUI_ALIGN_OF(uint64_t));
+    uint64_t RefKeyEnd     = RefKeyStart + (NodeCount * sizeof(uint64_t));
+
+    uint64_t RefValueStart = GUI_ALIGN_POW2(RefKeyEnd, GUI_ALIGN_OF(uint32_t));
+    uint64_t RefValueEnd   = RefValueStart + (NodeCount * sizeof(uint32_t));
+
+    gui_memory_footprint Result =
+    {
+        .SizeInBytes = RefValueEnd,
+        .Alignment   = GUI_ALIGN_OF(gui_layout_tree),
+        .Lifetime    = Gui_MemoryAllocation_Persistent,
+    };
+
     return Result;
 }
 
 
 GUI_API gui_layout_tree *
-GuiPlaceLayoutTreeInMemory(uint64_t NodeCount, gui_memory_block Block)
+GuiPlaceLayoutTreeInMemory(uint32_t NodeCount, gui_memory_block Block)
 {
     gui_layout_tree  *Result = 0;
     gui_memory_region Local  = GuiEnterMemoryRegion(Block);
@@ -1651,21 +1706,32 @@ GuiPlaceLayoutTreeInMemory(uint64_t NodeCount, gui_memory_block Block)
     if(GuiIsValidMemoryRegion(&Local))
     {
         // ORDER IS IMPORTANT!
-        gui_layout_tree      *Tree  = GuiPushStruct(&Local, gui_layout_tree);
-        gui_layout_node      *Nodes = GuiPushArray(&Local, gui_layout_node, NodeCount + 1);
-        gui_paint_properties *Paint = GuiPushArray(&Local, gui_paint_properties, NodeCount);
+        gui_layout_tree      *Tree      = GuiPushStruct(&Local, gui_layout_tree);
+        gui_layout_node      *Nodes     = GuiPushArray(&Local, gui_layout_node, NodeCount + 1);
+        gui_paint_properties *Paint     = GuiPushArray(&Local, gui_paint_properties, NodeCount);
+        uint64_t             *RefKeys   = GuiPushArray(&Local, uint64_t, NodeCount);
+        uint32_t             *RefValues = GuiPushArray(&Local, uint32_t, NodeCount);
 
-        if(Nodes && Paint && Tree)
+        if(Nodes && Paint && Tree && RefKeys && RefValues)
         {
             Tree->Nodes             = Nodes;
             Tree->NodeCount         = 0;
             Tree->NodeCapacity      = NodeCount;
             Tree->PaintBuffer       = Paint;
+            Tree->RefKeys           = RefKeys;
+            Tree->RefValues         = RefValues;
             Tree->RootIndex         = 0;
             Tree->CapturedNodeIndex = GuiInvalidIndex;
             Tree->Parent            = 0;
+            Tree->RefHashMask       = NodeCount - 1;
 
-            for(uint64_t Idx = 0; Idx < Tree->NodeCapacity; ++Idx)
+            for(uint32_t Idx = 0; Idx < NodeCount; ++Idx)
+            {
+                Tree->RefKeys[Idx]   = GuiInvalidIndex;
+                Tree->RefValues[Idx] = GuiInvalidIndex;
+            }
+
+            for(uint32_t Idx = 0; Idx < Tree->NodeCapacity; ++Idx)
             {
                 gui_layout_node *Node = GuiGetLayoutNode(Idx, Tree);
                 GUI_ASSERT(Node);
@@ -1698,17 +1764,14 @@ GuiCreateNode(uint64_t Key, uint32_t Flags, gui_layout_tree *Tree)
 
     if(GuiIsValidLayoutTree(Tree))
     {
-        uint32_t FoundIndex = (uint32_t)GuiInvalidIndex;
-        if(GuiKeyMap_Find(Key, &FoundIndex))
-        {
-            // existing
-        }
-        else
+        uint32_t FoundIndex = GuiFindNodeReference(Key, Tree);
+        if(FoundIndex == GuiInvalidIndex)
         {
             gui_layout_node *Node = GuiGetFreeLayoutNode(Tree);
             if(Node)
             {
-                GuiKeyMap_Insert(Key, Node->Index);
+                GuiInsertNodeReference(Key, Node->Index, Tree);
+
                 FoundIndex = Node->Index;
             }
         }
@@ -1851,14 +1914,18 @@ GuiComputeTreeLayout(gui_layout_tree *Tree)
     }
 }
 
-// =================================================
-// @PRIVATE IMPLEMENTATION
-//
-// <Painting>
-// =================================================
+
+//-----------------------------------------------------------------------------
+// [SECTION] GUI PAINTING API IMPLEMENTATION
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
+
 
 #define GUI_MAX_COMMAND_PER_NODE 2u
 
+// TODO: Sloppy code!
 
 GUI_API void
 GuiUpdateStyle(uint32_t NodeIndex, gui_paint_properties *Properties, gui_layout_tree *Tree)
@@ -1869,6 +1936,7 @@ GuiUpdateStyle(uint32_t NodeIndex, gui_paint_properties *Properties, gui_layout_
     }
 }
 
+// TODO: Rework this to a counted model/budget model instead of whatever this is.
 
 GUI_API gui_memory_footprint
 GuiGetRenderCommandsFootprint(gui_layout_tree *Tree)
@@ -1884,6 +1952,7 @@ GuiGetRenderCommandsFootprint(gui_layout_tree *Tree)
 
         Result.SizeInBytes = CommandSize + QueueSize;
         Result.Alignment   = GUI_ALIGN_OF(gui_render_command);
+        Result.Lifetime    = Gui_MemoryAllocation_Transient,
     }
 
     return Result;
@@ -1973,11 +2042,13 @@ GuiComputeRenderCommands(gui_layout_tree *Tree, gui_memory_block Block)
     return Result;
 }
 
-// =================================================
-// @PRIVATE IMPLEMENTATION
-//
-// <Context>
-// =================================================
+
+//-----------------------------------------------------------------------------
+// [SECTION] GUI CONTEXT API IMPLEMENTATION
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 GUI_API void

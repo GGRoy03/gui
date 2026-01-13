@@ -8,8 +8,6 @@ extern "C" {
 
 //-----------------------------------------------------------------------------
 // TODO-LIST
-// - THINK ABOUT THE RENDERING API
-// - THINK ABOUT AN ITERATOR?
 //-----------------------------------------------------------------------------
 
 
@@ -142,6 +140,33 @@ typedef enum Gui_PointerButton
 } Gui_PointerButton;
 
 
+typedef enum Gui_PointerEvent
+{
+    Gui_PointerEvent_None    = 0,
+    Gui_PointerEvent_Move    = 1,
+    Gui_PointerEvent_Click   = 2,
+    Gui_PointerEvent_Release = 3,
+} Gui_PointerEvent;
+
+
+typedef struct gui_pointer_event
+{
+    Gui_PointerEvent  Type;
+    uint32_t          PointerId;
+    gui_point         Position;
+    gui_dimensions    Delta;
+    Gui_PointerButton ButtonMask;
+} gui_pointer_event;
+
+
+typedef struct gui_pointer_event_node gui_pointer_event_node;
+struct gui_pointer_event_node
+{
+    gui_pointer_event_node *Next;
+    gui_pointer_event       Value;
+};
+
+
 typedef struct gui_pointer_event_list
 {
     gui_pointer_event_node *First;
@@ -150,7 +175,6 @@ typedef struct gui_pointer_event_list
 } gui_pointer_event_list;
 
 
-GUI_API void     GuiClearPointerEvents       (gui_pointer_event_list *List);
 GUI_API gui_bool GuiPushPointerMoveEvent     (gui_point Position, gui_point LastPosition, gui_pointer_event_node *Node, gui_pointer_event_list *List);
 GUI_API gui_bool GuiPushPointerClickEvent    (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
 GUI_API gui_bool GuiPushPointerReleaseEvent  (Gui_PointerButton Button, gui_point Position, gui_pointer_event_node *Node, gui_pointer_event_list *List);
@@ -547,33 +571,6 @@ GuiPushMemoryRegion(gui_memory_region *Region, uint64_t Size, uint64_t Alignment
 //-----------------------------------------------------------------------------
 
 
-typedef enum Gui_PointerEvent
-{
-    Gui_PointerEvent_None    = 0,
-    Gui_PointerEvent_Move    = 1,
-    Gui_PointerEvent_Click   = 2,
-    Gui_PointerEvent_Release = 3,
-} Gui_PointerEvent;
-
-
-typedef struct gui_pointer_event
-{
-    Gui_PointerEvent  Type;
-    uint32_t          PointerId;
-    gui_point         Position;
-    gui_dimensions    Delta;
-    Gui_PointerButton ButtonMask;
-} gui_pointer_event;
-
-
-typedef struct gui_pointer_event_node gui_pointer_event_node;
-struct gui_pointer_event_node
-{
-    gui_pointer_event_node *Next;
-    gui_pointer_event       Value;
-};
-
-
 typedef struct gui_pointer_state
 {
     uint32_t  Id;
@@ -624,15 +621,7 @@ GuiPushPointerEvent(Gui_PointerEvent Type, gui_pointer_event_node *Node, gui_poi
 }
 
 
-//-----------------------------------------------------------------------------
-// [SECTION] INPUTS PUBLIC API IMPLEMENTATION
-// [DESCRIP] ...
-// [HISTORY]
-// : - 2026-01-11 Basic Implementation
-//-----------------------------------------------------------------------------
-
-
-GUI_API void
+static void
 GuiClearPointerEvents(gui_pointer_event_list *List)
 {
     if(List)
@@ -642,6 +631,14 @@ GuiClearPointerEvents(gui_pointer_event_list *List)
         List->Count = 0;
     }
 }
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] INPUTS PUBLIC API IMPLEMENTATION
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-11 Basic Implementation
+//-----------------------------------------------------------------------------
 
 
 GUI_API gui_bool
@@ -1677,7 +1674,7 @@ GuiPlaceLayoutTreeInMemory(uint32_t NodeCount, gui_memory_block Block)
             Tree->PaintBuffer       = Paint;
             Tree->RefKeys           = RefKeys;
             Tree->RefValues         = RefValues;
-            Tree->RootIndex         = 0;
+            Tree->RootIndex         = GuiInvalidIndex;
             Tree->CapturedNodeIndex = GuiInvalidIndex;
             Tree->Parent            = 0;
             Tree->RefHashMask       = NodeCount - 1;
@@ -1743,6 +1740,11 @@ GuiCreateNode(uint64_t Key, uint32_t Flags, gui_layout_tree *Tree)
             GuiAppendLayoutNode(ParentIndex, Node->Index, Tree);
 
             Result.Value = Node->Index;
+
+            if (Tree->NodeCount == 1)
+            {
+                Tree->RootIndex = Node->Index;
+            }
         }
     }
 
@@ -1899,8 +1901,8 @@ GuiCountCommandForTree(uint32_t NodeIndex, gui_layout_tree *Tree)
         Style = &Tree->PaintBuffer[Node->Index].Hovered;
     }
 
-    gui_color Color        = Style->Color;
-    float     BorderWidth  = Style->BorderWidth;
+    gui_color Color       = Style->Color;
+    float     BorderWidth = Style->BorderWidth;
 
     if (Color.A > 0.0f)
     {
@@ -2039,8 +2041,6 @@ GuiComputeRenderCommands(gui_render_command_params Params, gui_layout_tree *Tree
                 else if (Node->State & Gui_NodeState_UseHoveredStyle)
                 {
                     Style = &Tree->PaintBuffer[Node->Index].Hovered;
-            
-                    Node->State = (Node->State & ~Gui_NodeState_UseHoveredStyle);
                 }
 
                 gui_color         Color        = Style->Color;
@@ -2093,6 +2093,21 @@ GuiComputeRenderCommands(gui_render_command_params Params, gui_layout_tree *Tree
 GUI_API void
 GuiBeginFrame(gui_pointer_event_list *EventList, gui_layout_tree *Tree)
 {
+    // Temporary barrier
+    if (!GuiIsValidLayoutTree(Tree) || Tree->RootIndex == GuiInvalidIndex)
+    {
+        return;
+    }
+
+    for (uint32_t NodeIdx = 0; NodeIdx < Tree->NodeCapacity; ++NodeIdx)
+    {
+        gui_layout_node *Node = GuiGetLayoutNode(NodeIdx, Tree);
+        GUI_ASSERT(Node);
+
+        // This might be dangerous, maybe do not clear all of the state, but as much as we can.
+        Node->State = 0;
+    }
+
     // Obviously this is temporary. Unsure how I want to structure this yet.
     static gui_pointer_state PointerStates[1];
 
@@ -2153,9 +2168,11 @@ GuiBeginFrame(gui_pointer_event_list *EventList, gui_layout_tree *Tree)
 
         if(State.ButtonMask == Gui_PointerButton_None) 
         {
-            GuiHandlePointerHover(State.Position, 0, Tree);
+            GuiHandlePointerHover(State.Position, Tree->RootIndex, Tree);
         }
     }
+
+    GuiClearPointerEvents(EventList);
 }
 
 

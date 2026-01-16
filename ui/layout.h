@@ -18,7 +18,6 @@ typedef struct gui_scroll_region gui_scroll_region;
 // =============================================================================
 
 
-static const uint32_t GuiInvalidIndex = 0xFFFFFFFFu; // TODO: HIDE
 
 
 // =============================================================================

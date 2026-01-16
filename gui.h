@@ -8,6 +8,12 @@ extern "C" {
 
 //-----------------------------------------------------------------------------
 // TODO-LIST
+// - Scroll Regions & Clipping
+// - Gamepad Handling (Should be good, just need to test)
+// - Text & Text Layout (Once we have a proper rasterizer in the engine)
+// - Animations!
+// - Better Options for layout computation/rendering command computation
+// - Storing the gui_tree on the node for simpler APIs.
 //-----------------------------------------------------------------------------
 
 
@@ -19,10 +25,22 @@ extern "C" {
 #endif
 
 
+/*-----------------------------------------------------------------------------
+// [SECTION] FORWARD DECLARATION MESS
+// [DESCRIP] ...
+//-----------------------------------------------------------------------------*/
+
+
+typedef struct gui_resource_table gui_resource_table;
+typedef struct gui_pointer_event_list gui_pointer_event_list;
+typedef struct gui_layout_tree        gui_layout_tree;
+
+
 //-----------------------------------------------------------------------------
 // [SECTION] GUI BASIC PRIMITIVES
 // [DESCRIP] ...
 // [HISTORY]
+// : - 2026-01-16 Added the tree on the node to simplify the APIs
 // : - 2026-01-11 Basic Implementation
 //-----------------------------------------------------------------------------
 
@@ -34,7 +52,8 @@ typedef uint32_t gui_bool;
 
 typedef struct gui_node
 {
-    uint32_t Value;
+    uint32_t         Value;
+    gui_layout_tree *Tree;
 } gui_node;
 
 
@@ -57,31 +76,6 @@ typedef struct gui_bounding_box
     float Right;
     float Bottom;
 } gui_bounding_box;
-
-
-typedef struct gui_string
-{
-    uint8_t *String;
-    uint64_t Size;
-} gui_string;
-
-
-#define GuiStringLit(String)   GuiByteString((char *)(String), sizeof(String) - 1)
-#define GuiStringComp(String)  ((gui_byte_string){ (char *)(String), sizeof(String) - 1 })
-
-
-/*-----------------------------------------------------------------------------
-// [SECTION] FORWARD DECLARATION MESS
-// [DESCRIP] ...
-// [HISTORY]
-// : - 2026-01-11 Basic Implementation
-//-----------------------------------------------------------------------------*/
-
-
-typedef struct gui_resource_table gui_resource_table;
-typedef struct gui_pointer_event_node gui_pointer_event_node;
-typedef struct gui_pointer_event_list gui_pointer_event_list;
-typedef struct gui_layout_tree        gui_layout_tree;
 
 
 //-----------------------------------------------------------------------------
@@ -120,16 +114,8 @@ typedef struct gui_memory_block
 // [SECTION] GUI INPUT API
 // [DESCRIP] ...
 // [HISTORY]
-// : - 2026-01-11 Basic Implementation
+// : - 2026-01-12 Basic Implementation
 //-----------------------------------------------------------------------------
-
-
-typedef enum Gui_PointerSource
-{
-    Gui_PointerSource_None = 0,
-
-    Gui_PointerSource_Mouse = 1,
-} Gui_PointerSource;
 
 
 typedef enum Gui_PointerButton
@@ -338,6 +324,60 @@ GUI_API gui_bool             GuiAppendChild              (uint32_t ParentIndex, 
 GUI_API uint32_t             GuiFindChild                (gui_node Node, uint32_t FindIndex, gui_layout_tree *Tree);
 
 GUI_API void                 GuiComputeTreeLayout        (gui_layout_tree *Tree);
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] GUI ANIMATION API
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-15 Basic Implementation
+//-----------------------------------------------------------------------------
+
+
+typedef enum Gui_Easing_Type
+{
+    Gui_Easing_None = 0,
+
+    Gui_Easing_Linear       = 1,
+    Gui_Easing_OutQuadratic = 2,
+    Gui_Easing_InOutCubic   = 3,
+} Gui_Easing_Type;
+
+
+typedef struct gui_direction
+{
+    float X;
+    float Y;
+} gui_direction;
+
+// These two types should probably not be exposed, but it's fine for prototyping purposes.
+
+typedef enum Gui_Animation_State
+{
+    Gui_Animation_None = 0,
+
+    Gui_Animation_Idle     = 1,
+    Gui_Animation_Forward  = 2,
+    Gui_Animation_Backward = 3,
+} Gui_Animation_State;
+
+
+// Could be generalized...
+typedef struct gui_position_animation
+{
+    gui_direction       TargetOffset;
+    gui_direction       CurrentOffset;
+    float               Elapsed;
+    float               Duration;
+    float               Progress;
+    Gui_Easing_Type     Easing;
+    Gui_Animation_State State;
+    uint32_t            NodeTarget;
+    uint32_t            NodeSlot;
+} gui_position_animation;
+
+GUI_API void
+GuiAnimatePosition(gui_node Node, uint32_t Slot, gui_direction Offset, float Duration, Gui_Easing_Type Easing, gui_bool Activated);
 
 
 //-----------------------------------------------------------------------------
@@ -1025,9 +1065,7 @@ typedef struct gui_layout_node
     gui_padding         Padding;
     float               Spacing;
 
-    gui_dimensions      VisualOffset;
-    gui_dimensions      DragOffset;
-    gui_dimensions      ScrollOffset;
+    gui_direction       AnimatedOffset;
 
     uint32_t            State;
     uint32_t            Flags;
@@ -1054,6 +1092,11 @@ typedef struct gui_layout_tree
     uint32_t                RootIndex;
     uint32_t                CapturedNodeIndex;
     gui_parent_node        *Parent;
+
+    // Experimental (How should we store knowing we don't want to expose the types)
+    
+    gui_position_animation  Animations[64];
+    uint32_t                AnimationCount;
 } gui_layout_tree;
 
 
@@ -1256,7 +1299,7 @@ GuiGetLayoutNodeBoundingBox(gui_layout_node *Node)
     gui_bounding_box Result = { .Left = 0, .Top = 0, .Right = 0, .Bottom = 0 };
     if(GuiIsValidLayoutNode(Node))
     {
-        gui_point Screen = {.X = Node->OutputPosition.X + Node->ScrollOffset.Width, .Y = Node->OutputPosition.Y + Node->ScrollOffset.Height};
+        gui_point Screen = {.X = Node->OutputPosition.X, .Y = Node->OutputPosition.Y};
         Result = (gui_bounding_box){.Left = Screen.X, .Top = Screen.Y, .Right = Screen.X + Node->OutputSize.Width, .Bottom = Screen.Y + Node->OutputSize.Height};
     }
     return Result;
@@ -1602,14 +1645,17 @@ GuiPlaceLayout(gui_layout_node *Node, gui_layout_tree *Tree, gui_resource_table 
 
         if(IsXMajor)
         {
-            Child->OutputPosition.Y += MinorOffset + Child->VisualOffset.Height;
+            Child->OutputPosition.Y += MinorOffset;
             Cursor.X                += Child->OutputSize.Width + Node->Spacing;
         }
         else
         {
-            Child->OutputPosition.X += MinorOffset + Child->VisualOffset.Width;
+            Child->OutputPosition.X += MinorOffset;
             Cursor.Y                += Child->OutputSize.Height + Node->Spacing;
         }
+
+        Child->OutputPosition.X += Child->AnimatedOffset.X;
+        Child->OutputPosition.Y += Child->AnimatedOffset.Y;
 
         GuiPlaceLayout(Child, Tree, ResourceTable);
     }
@@ -1740,6 +1786,7 @@ GuiCreateNode(uint64_t Key, uint32_t Flags, gui_layout_tree *Tree)
             GuiAppendLayoutNode(ParentIndex, Node->Index, Tree);
 
             Result.Value = Node->Index;
+            Result.Tree  = Tree;
 
             if (Tree->NodeCount == 1)
             {
@@ -1870,6 +1917,194 @@ GuiComputeTreeLayout(gui_layout_tree *Tree)
         }
 
         GuiPlaceLayout(ActiveRoot, Tree, 0);
+    }
+}
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] Animation Misc Helpers
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-15 Basic Implementation
+//-----------------------------------------------------------------------------
+
+
+static float
+GuiEasingFunctionOutQuadratic(float T)
+{
+    float Result = 1.f - (1.f - T) * (1.f - T);
+    return Result;
+}
+
+
+static float
+GuiEasingFunctionInOutCubic(float T)
+{
+    float Result = 0.f;
+
+    if(T < 0.5f)
+    {
+        Result = 4.f * T * T * T;
+    }
+    else
+    {
+        Result = 1.f - powf(-2.f * T + 2.f, 3.f) / 2.f;
+    }
+
+    return Result;
+}
+
+
+static gui_direction
+GuiScaleDirection(gui_direction Direction, float Scalar)
+{
+    gui_direction Result =
+    {
+        .X = Direction.X * Scalar,
+        .Y = Direction.Y * Scalar,
+    };
+
+    return Result;
+}
+
+
+static void
+GuiSetAnimationActive(gui_position_animation *Animation, gui_bool IsTriggerActive)
+{
+    if(IsTriggerActive)
+    {
+        if(Animation->State == Gui_Animation_Idle && Animation->Elapsed < Animation->Duration)
+        {
+            Animation->State   = Gui_Animation_Forward;
+            Animation->Elapsed = 0.f;
+        }
+        else if(Animation->State == Gui_Animation_Backward)
+        {
+            Animation->State = Gui_Animation_Forward;
+        }
+    }
+    else
+    {
+        if(Animation->State == Gui_Animation_Idle)
+        {
+            Animation->State   = Gui_Animation_Backward;
+            Animation->Elapsed = Animation->Duration;
+        }
+        else if(Animation->State == Gui_Animation_Forward)
+        {
+            Animation->State = Gui_Animation_Backward;
+        }
+    }
+}
+
+
+// Probably inline this, and just loop it.
+static void
+GuiUpdateAnimation(gui_position_animation *Animation, float Delta)
+{
+    if(Animation->State != Gui_Animation_Idle)
+    {
+        if(Animation->State == Gui_Animation_Forward)
+        {
+            Animation->Elapsed += Delta;
+        }
+        else if (Animation->State == Gui_Animation_Backward)
+        {
+            Animation->Elapsed -= Delta;
+        }
+
+        if(Animation->Elapsed > Animation->Duration)
+        {
+            Animation->Elapsed = Animation->Duration;
+            Animation->State   = Gui_Animation_Idle;
+        }
+        else if(Animation->Elapsed < 0.f)
+        {
+            Animation->Elapsed = 0.f;
+            Animation->State   = Gui_Animation_Idle;
+        }
+
+        float Progress = Animation->Elapsed / Animation->Duration;
+        float Eased    = Progress;
+
+        switch(Animation->Easing)
+        {
+
+        case Gui_Easing_None:
+        case Gui_Easing_Linear:
+        {
+        } break;
+
+        case Gui_Easing_OutQuadratic:
+        {
+            Eased = GuiEasingFunctionOutQuadratic(Progress);
+        } break;
+
+        case Gui_Easing_InOutCubic:
+        {
+            Eased = GuiEasingFunctionInOutCubic(Progress);
+        } break;
+
+        }
+
+        Animation->CurrentOffset = GuiScaleDirection(Animation->TargetOffset, Eased);
+    }
+}
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] Animation Public API Implementation
+// [DESCRIP] ...
+// [HISTORY]
+// : - 2026-01-15 Basic Implementation
+//-----------------------------------------------------------------------------
+
+
+GUI_API void
+GuiAnimatePosition(gui_node Node, uint32_t Slot, gui_direction Offset, float Duration, Gui_Easing_Type Easing, gui_bool Activated)
+{
+    gui_layout_tree *Tree      = Node.Tree;
+    uint32_t         NodeIndex = Node.Value;
+
+    if(GuiIsValidLayoutTree(Tree))
+    {
+        // Let's do some linear search on the existing allocations
+        // Animation order doesn't matter, so we can assume that they are always
+        // packed in the first N slot of the animation buffer.
+
+        gui_position_animation *Animation = 0;
+
+        for(uint32_t Idx = 0; Idx < Tree->AnimationCount; ++Idx)
+        {
+            gui_position_animation *Existing = &Tree->Animations[Idx];
+
+            if(Existing->NodeTarget == Node.Value && Existing->NodeSlot == Slot)
+            {
+                Animation = Existing;
+                Animation->TargetOffset = Offset;
+                Animation->Duration     = Duration;
+                Animation->Easing       = Easing;
+
+                break;
+            }
+        }
+
+        // Hardcoded!!!
+        if(!Animation && Tree->AnimationCount < 64)
+        {
+            Animation = &Tree->Animations[Tree->AnimationCount++];
+            Animation->TargetOffset  = Offset;
+            Animation->CurrentOffset = (gui_direction){0.f, 0.f};
+            Animation->Duration      = Duration;
+            Animation->Progress      = 0.f;
+            Animation->Elapsed       = 0.f;
+            Animation->Easing        = Easing;
+            Animation->State         = Gui_Animation_Idle;
+            Animation->NodeTarget    = Node.Value;
+            Animation->NodeSlot      = Slot;
+        }
+
+        GuiSetAnimationActive(Animation, Activated);
     }
 }
 
@@ -2089,6 +2324,7 @@ GuiComputeRenderCommands(gui_render_command_params Params, gui_layout_tree *Tree
 // : - 2026-01-11 Basic Implementation
 //-----------------------------------------------------------------------------
 
+// TODO: Super messy function.
 
 GUI_API void
 GuiBeginFrame(gui_pointer_event_list *EventList, gui_layout_tree *Tree)
@@ -2096,6 +2332,7 @@ GuiBeginFrame(gui_pointer_event_list *EventList, gui_layout_tree *Tree)
     // Temporary barrier
     if (!GuiIsValidLayoutTree(Tree) || Tree->RootIndex == GuiInvalidIndex)
     {
+        GuiClearPointerEvents(EventList);
         return;
     }
 
@@ -2105,10 +2342,12 @@ GuiBeginFrame(gui_pointer_event_list *EventList, gui_layout_tree *Tree)
         GUI_ASSERT(Node);
 
         // This might be dangerous, maybe do not clear all of the state, but as much as we can.
-        Node->State = 0;
+        // Maybe even separate state into two groups -> Transient and Persistent
+        Node->State          = 0;
+        Node->AnimatedOffset = (gui_direction){0.f, 0.f};
     }
 
-    // Obviously this is temporary. Unsure how I want to structure this yet.
+    // Obviously this is temporary. Unsure how I want to structure this yet. Who should own this?
     static gui_pointer_state PointerStates[1];
 
     for(gui_pointer_event_node *EventNode = EventList->First; EventNode != 0; EventNode = EventNode->Next)
@@ -2169,6 +2408,24 @@ GuiBeginFrame(gui_pointer_event_list *EventList, gui_layout_tree *Tree)
         if(State.ButtonMask == Gui_PointerButton_None) 
         {
             GuiHandlePointerHover(State.Position, Tree->RootIndex, Tree);
+        }
+    }
+
+    // TODO: Figure out how we want to handle this.
+    float DeltaTime = 0.016f;
+
+    for(uint32_t AnimationIdx = 0; AnimationIdx < Tree->AnimationCount; ++AnimationIdx)
+    {
+        gui_position_animation *Animation = &Tree->Animations[AnimationIdx];
+
+        // TODO: Inline this.
+        GuiUpdateAnimation(Animation, DeltaTime);
+
+        gui_layout_node *Node = GuiGetLayoutNode(Animation->NodeTarget, Tree);
+        if(Node)
+        {
+            Node->AnimatedOffset.X += Animation->CurrentOffset.X;
+            Node->AnimatedOffset.Y += Animation->CurrentOffset.Y;
         }
     }
 
